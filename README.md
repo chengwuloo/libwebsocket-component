@@ -1,4 +1,4 @@
-	# libwebsocket-component websocket协议栈实现(遵循RFC6455规范)：
+# libwebsocket-component websocket协议栈实现(遵循RFC6455规范)：
 		* 采用组件化开发，接口实现简单好用，隐藏底层实现细节
 		* 模块化设计实现，高内聚低耦合，协议独立，不依赖第三方网络库
 		* 可以方便接入第三方网络库
@@ -9,7 +9,7 @@
 
 
 
-	# 因为公司用的是陈硕的muduo网络库，所以本套协议实现也是为了无缝对接muduo库，步骤如下：
+## 因为公司用的是陈硕的muduo网络库，所以本套协议实现也是为了无缝对接muduo库，步骤如下：
 		* 先编译 libwebsocket 库
 
 		* 网上下载陈硕的muduo网络库
