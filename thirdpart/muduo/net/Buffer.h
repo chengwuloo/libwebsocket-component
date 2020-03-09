@@ -24,7 +24,8 @@
 #include <string.h>
 //#include <unistd.h>  // ssize_t
 
-#include "websocket/IBytesBuffer.h"
+#include <libwebsocket/IBytesBuffer.h>
+#include <libwebsocket/ssl.h>
 
 namespace muduo
 {

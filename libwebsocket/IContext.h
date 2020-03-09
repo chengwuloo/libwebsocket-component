@@ -17,10 +17,10 @@
 #include <assert.h>
 #include <map>
 
-#include <websocket/base.h>
-#include <websocket/IBytesBuffer.h>
-#include <websocket/ICallback.h>
-#include <websocket/IHttpContext.h>
+#include <libwebsocket/base.h>
+#include <libwebsocket/IBytesBuffer.h>
+#include <libwebsocket/ICallback.h>
+#include <libwebsocket/IHttpContext.h>
 #include <memory>
 
 namespace muduo {

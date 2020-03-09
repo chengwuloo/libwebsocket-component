@@ -11,10 +11,10 @@
 
 #include "muduo/net/SocketsOps.h"
 
-#include "websocket/IBytesBuffer.h"
-
 #include <errno.h>
 #include <sys/uio.h>
+
+#include <libwebsocket/ssl.h>
 
 using namespace muduo;
 using namespace muduo::net;

@@ -19,7 +19,7 @@
 #include "muduo/net/InetAddress.h"
 #include "muduo/net/http/HttpContext.h"
 
-#include "websocket/IContext.h"
+#include "libwebsocket/IContext.h"
 
 #include <memory>
 
@@ -149,12 +149,13 @@ class TcpConnection : noncopyable,
   void connectEstablished();   // should be called only once
   // called when TcpServer has removed me from its map
   void connectDestroyed();  // should be called only once
-
-  bool initWebsocketContext(bool enable);
   
+  bool initWebsocketContext(bool enable);
+
   websocket::WeakIContextPtr getWebsocketContext() {
       return websocket_ctx_;
   }
+
 private:
   SSL* ssl_;
   SSL_CTX* ssl_ctx_;

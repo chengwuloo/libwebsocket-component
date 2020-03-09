@@ -15,7 +15,7 @@
 #include "muduo/base/Timestamp.h"
 #include "muduo/base/Types.h"
 
-#include "websocket/IHttpContext.h"
+#include "libwebsocket/IHttpContext.h"
 
 #include <map>
 #include <assert.h>

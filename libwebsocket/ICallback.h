@@ -18,9 +18,9 @@
 #include <map>
 #include <memory>
 
-#include <websocket/base.h>
-#include <websocket/ITimestamp.h>
-#include <websocket/IBytesBuffer.h>
+#include <libwebsocket/base.h>
+#include <libwebsocket/ITimestamp.h>
+#include <libwebsocket/IBytesBuffer.h>
 
 namespace muduo {
 	namespace net {

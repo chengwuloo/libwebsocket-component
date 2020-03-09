@@ -1,7 +1,6 @@
-#include "websocket/demo/echo.h"
+#include "demo/echo.h"
 #include "muduo/base/Logging.h"
-
-#include <websocket/websocket.h>
+#include <libwebsocket/websocket.h>
 
 using std::placeholders::_1;
 using std::placeholders::_2;

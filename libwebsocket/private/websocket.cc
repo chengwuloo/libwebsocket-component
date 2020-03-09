@@ -136,10 +136,10 @@ buf[0] = 0x78  - 低地址 = 低位
 #include <boost/thread.hpp>
 #include <boost/property_tree/json_parser.hpp>
 
-#include <websocket/private/base64.h>
-#include <websocket/IHttpContext.h>
-#include <websocket/websocket.h>
-#include <websocket/private/Endian.h>
+#include <libwebsocket/private/base64.h>
+#include <libwebsocket/IHttpContext.h>
+#include <libwebsocket/websocket.h>
+#include <libwebsocket/private/Endian.h>
 
 #include <memory>
 #include <assert.h>
@@ -4218,7 +4218,7 @@ namespace muduo {
 				ITimestamp* receiveTime) {
 				websocket::IContextPtr ctx(weakContext.lock());
 				if (ctx) {
-					//assert(context_ && dynamic_cast<websocket::Context*>(ctx.get());
+					//assert(context_ && dynamic_cast<libwebsocket::Context*>(ctx.get());
 					websocket::Context* pctx = reinterpret_cast<websocket::Context*>(ctx.get());
 					websocket::Context& context = *pctx;
 					int saveErrno = 0;

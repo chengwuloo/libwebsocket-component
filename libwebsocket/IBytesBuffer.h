@@ -14,8 +14,7 @@
 #include <string.h>
 #include <unistd.h>  // ssize_t
 #include <sys/types.h>
-#include <openssl/ssl.h>
-#include <websocket/base.h>
+#include <libwebsocket/base.h>
 #include <memory>
 
 namespace muduo {
@@ -80,15 +79,8 @@ namespace muduo {
 			virtual ssize_t readFd(int fd, int* savedErrno) = 0;
 		};
 		
-		namespace ssl {
-			//SSL_read
-			/*extern*/ ssize_t SSL_read(SSL* ssl, IBytesBuffer* buf, int* savedErrno);
-			//SSL_write
-			/*extern*/ ssize_t SSL_write(SSL* ssl, void const* data, size_t len, int* savedErrno);
-		} //namespace ssl
-		
 		typedef std::shared_ptr<IBytesBuffer> IBytesBufferPtr;
-		typedef std::weak_ptr<IBytesBuffer> WeakBytesBufferPtr;
+		typedef std::weak_ptr<IBytesBuffer> WeakIBytesBufferPtr;
 
 	}  // namespace net
 }  // namespace muduo
