@@ -7,7 +7,43 @@
 		* 支持WSS(SSL认证的加密websocket)
 		* 打印日志信息详细，方便学习调试
 
+	IContextPtr context_new(
+				WeakICallbackPtr handler,        //callback handler
+				http::IContextPtr context,       //"http Context"
+				IBytesBufferPtr dataBuffer,
+				IBytesBufferPtr controlBuffer);
 
+	//context_free free websocket::IContextPtr
+	//@param IContextPtr& "websocket context"
+	void context_free(IContextPtr& context);
+
+	//parse_message_frame
+	//@param WeakIContextPtr const& "websocket context"
+	/*extern*/ int parse_message_frame(
+		WeakIContextPtr const& weakContext,
+		IBytesBuffer /*const*/* buf,
+		ITimestamp* receiveTime);
+
+	//pack_unmask_data_frame S2C
+	/*extern*/ void pack_unmask_data_frame(
+		IBytesBuffer* buf,
+		char const* data, size_t len,
+		MessageT messageType = MessageT::TyTextMessage, bool chunk = false);
+
+	//pack_unmask_close_frame S2C
+	/*extern*/ void pack_unmask_close_frame(
+		IBytesBuffer* buf,
+		char const* data, size_t len);
+
+	//pack_unmask_ping_frame S2C
+	/*extern*/ void pack_unmask_ping_frame(
+		IBytesBuffer* buf,
+		char const* data, size_t len);
+
+	//pack_unmask_pong_frame S2C
+	/*extern*/ void pack_unmask_pong_frame(
+		IBytesBuffer* buf,
+		char const* data, size_t len);
 
 ## 因为公司用的是陈硕的muduo网络库，所以本套协议实现也是为了无缝对接muduo库，步骤如下：
 		
