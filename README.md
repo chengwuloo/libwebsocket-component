@@ -55,3 +55,4 @@
 		* 打开测试网站 http://www.websocket.org/echo.html
 		* 将测试地址换成 ws://192.168.2.93:10000 或SSL认证支持的 wss://192.168.2.93:10000 
 
+# QPAlgorithm
