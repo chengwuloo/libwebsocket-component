@@ -26,7 +26,7 @@ namespace muduo {
 	namespace net {
 		namespace websocket {
 			
-			//@@ ICallback ÈÃ TcpSession/TcpConnection Á¬½Ó»á»°Àà¼Ì³Ğ£¬»á»°Á¬½Ó´¦Àí»Øµ÷
+			//@@ ICallback è®© TcpSession/TcpConnection è¿æ¥ä¼šè¯ç±»ç»§æ‰¿ï¼Œä¼šè¯è¿æ¥å¤„ç†å›è°ƒ
 			class ICallback /*: public std::enable_shared_from_this<ICallback>*/ {
 			public:
 				//@overide

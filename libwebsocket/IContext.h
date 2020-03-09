@@ -37,9 +37,9 @@ namespace muduo {
 			typedef IContextPtr IWebsocketContextPtr;
 			typedef WeakIContextPtr WeakIWebsocketContextPtr;
 
-			//@@ IContext ×÷Îª TcpSession/TcpConnection Á¬½Ó»á»°Àà³ÉÔ±±äÁ¿
-			//@bref           TcpSession/TcpConnection Á¬½Ó»á»°Àà¹¹Ôìºó context_new() ´´½¨
-			//@bref           TcpSession/TcpConnection Á¬½Ó»á»°ÀàÎö¹¹Ê± context_free() Ïú»Ù
+			//@@ IContext ä½œä¸º TcpSession/TcpConnection è¿æ¥ä¼šè¯ç±»æˆå‘˜å˜é‡
+			//@bref           TcpSession/TcpConnection è¿æ¥ä¼šè¯ç±»æ„é€ å context_new() åˆ›å»º
+			//@bref           TcpSession/TcpConnection è¿æ¥ä¼šè¯ç±»ææ„æ—¶ context_free() é”€æ¯
 			class IContext : public std::enable_shared_from_this<IContext> {
 			public:
 				friend IContextPtr context_new(
@@ -48,27 +48,27 @@ namespace muduo {
 					IBytesBufferPtr dataBuffer,
 					IBytesBufferPtr controlBuffer);
 			protected:
-				//setDataBuffer ÍêÕûÊı¾İÖ¡ÏûÏ¢Ìå(body)
+				//setDataBuffer å®Œæ•´æ•°æ®å¸§æ¶ˆæ¯ä½“(body)
 				//@return IBytesBufferPtr
 				virtual void setDataBuffer(IBytesBufferPtr buf) = 0;
 
-				//setControlBuffer ÍêÕû¿ØÖÆÖ¡ÏûÏ¢Ìå(body)
+				//setControlBuffer å®Œæ•´æ§åˆ¶å¸§æ¶ˆæ¯ä½“(body)
 				//@return IBytesBufferPtr
 				virtual void setControlBuffer(IBytesBufferPtr buf) = 0;
 
-				//setCallbackHandler ´úÀí»Øµ÷½Ó¿Ú
+				//setCallbackHandler ä»£ç†å›è°ƒæ¥å£
 				//@param WeakICallbackPtr
 				virtual void setCallbackHandler(WeakICallbackPtr handler) = 0;
 
-				//getCallbackHandler ´úÀí»Øµ÷½Ó¿Ú
+				//getCallbackHandler ä»£ç†å›è°ƒæ¥å£
 				//@return WeakICallbackPtr
 				//virtual WeakICallbackPtr getCallbackHandler() = 0;
 
-				//setHttpContext HTTP ContextÉÏÏÂÎÄ
+				//setHttpContext HTTP Contextä¸Šä¸‹æ–‡
 				//@param http::IContextPtr
 				virtual void setHttpContext(http::IContextPtr context) = 0;
 
-				//getHttpContext HTTP ContextÉÏÏÂÎÄ
+				//getHttpContext HTTP Contextä¸Šä¸‹æ–‡
 				//@return http::WeakIContextPtr
 				virtual http::WeakIContextPtr getHttpContext() = 0;
 			};

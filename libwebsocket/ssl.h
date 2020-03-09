@@ -50,16 +50,16 @@ namespace muduo {
 #ifdef __cplusplus
 extern "C" {
 #endif
-			//SSL_read SSL读
+			//SSL_read
 			/*extern*/ ssize_t SSL_read(SSL* ssl, IBytesBuffer* buf, int* savedErrno);
 
-			//SSL_write SSL写
+			//SSL_write
 			/*extern*/ ssize_t SSL_write(SSL* ssl, void const* data, size_t len, int* savedErrno);
 
-			//SSL_free 释放SSL
+			//SSL_free
 			/*inline*/ void SSL_free(SSL*& ssl);
 
-			//SSL_handshake SSL握手建链
+			//SSL_handshake
 			/*inline*/ bool SSL_handshake(SSL_CTX* ctx, SSL*& ssl, int sockfd, int& saveErrno);
 
 #ifdef __cplusplus

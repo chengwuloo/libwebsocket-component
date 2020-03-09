@@ -52,7 +52,7 @@ namespace muduo {
 			/// 0      <=      readerIndex   <=   writerIndex    <=     size
 			/// @endcode
 			///
-			//SSL_read SSL¶Á
+			//SSL_read
 			ssize_t SSL_read(SSL* ssl, IBytesBuffer* buf, int* savedErrno) {
 				assert(buf->writableBytes() >= 0);
 				//make sure that writable > 0
@@ -139,7 +139,7 @@ namespace muduo {
 				return n;
 			}//SSL_read
 
-			//SSL_write SSLÐ´
+			//SSL_write
 			ssize_t SSL_write(SSL* ssl, void const* data, size_t len, int* savedErrno) {
 				ssize_t left = (ssize_t)len;
 				ssize_t n = 0;

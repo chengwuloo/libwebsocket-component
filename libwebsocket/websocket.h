@@ -1,7 +1,7 @@
 
-/* websocket ±ê×¼Ğ­ÒéÍ·(RFC6455¹æ·¶)£¬Õ¼4×Ö½Ú(32bit)
+/* websocket æ ‡å‡†åè®®å¤´(RFC6455è§„èŒƒ)ï¼Œå 4å­—èŠ‚(32bit)
 *
-  ¸ß            µÍ¸ß             µÍ
+  é«˜            ä½é«˜             ä½
   H             L H             L
  +---------------------------------------------------------------+
  |0                   1                   2                   3  |
@@ -23,61 +23,61 @@
  |                     Payload Data continued ...                |
  +---------------------------------------------------------------+
 
-FIN                 1bit Ö¡½áÊø±êÖ¾Î»(0/1)£¬Èç¹ûÉèÎª1£¬±êÊ¶ÏûÏ¢µÄ×îºóÒ»Ö¡(Î²Ö¡/½áÊøÖ¡)£¬µÚÒ»Ö¡(Í·Ö¡/Ê×Ö¡/ÆğÊ¼Ö¡)Ò²¿ÉÄÜÊÇ×îºóÒ»Ö¡
-RSV1/RSV2/RSV3      3bit ±ØĞëÉèÖÃÎª0£¬±¸ÓÃÔ¤Áô£¬Ä¬ÈÏ¶¼Îª0
-opcode              4bit ²Ù×÷Âë£¬±êÊ¶ÏûÏ¢Ö¡ÀàĞÍ£¬Ïê¼ûÈçÏÂËµÃ÷
-MASK                1bit ÑÚÂë±êÖ¾Î»(0/1)£¬ÊÇ·ñ¼ÓÃÜÊı¾İ£¬Èç¹ûÉèÎª1£¬ÄÇÃ´Masking-Key×Ö¶Î´æÔÚ£¬C2S-1 S2C-0 DISCONN-1
-Payload len         7bit,7+16bit,7+64bit ¸ºÔØÊı¾İ³¤¶È(À©Õ¹Êı¾İ³¤¶È + Ó¦ÓÃÊı¾İ³¤¶È)£¬È¡Öµ·¶Î§0~127(2^7-1)£¬
-						 Èç¹ûÖµÎª0~125£¬ÄÇÃ´±íÊ¾¸ºÔØÊı¾İ³¤¶È£¬
-						 Èç¹ûÖµÎª  126£¬ÄÇÃ´ºóĞø2×Ö½Ú(16bit)±íÊ¾¸ºÔØÊı¾İ³¤¶È£¬
-						 Èç¹ûÖµÎª  127£¬ÄÇÃ´ºóĞø8×Ö½Ú(64bit)±íÊ¾¸ºÔØÊı¾İ³¤¶È£¬×î¸ßÎ»Îª0
-Masking-key         0 or 4 bytes Èç¹ûMASK±êÖ¾Î»ÉèÎª1£¬ÄÇÃ´¸Ã×Ö¶Î´æÔÚ£¬·ñÔòÈç¹ûMASK±êÖ¾Î»ÉèÎª0£¬ÄÇÃ´¸Ã×Ö¶ÎÈ±Ê§
-Payload data        (x + y) bytes ¸ºÔØÊı¾İ = À©Õ¹Êı¾İ + Ó¦ÓÃÊı¾İ
-						 µ±MASK±êÖ¾Î»Îª1Ê±£¬frame-payload-data = frame-masked-extension-data + frame-masked-application-data
-						 µ±MASK±êÖ¾Î»Îª0Ê±£¬frame-payload-data = frame-unmasked-extension-data + frame-unmasked-application-data
+FIN                 1bit å¸§ç»“æŸæ ‡å¿—ä½(0/1)ï¼Œå¦‚æœè®¾ä¸º1ï¼Œæ ‡è¯†æ¶ˆæ¯çš„æœ€åä¸€å¸§(å°¾å¸§/ç»“æŸå¸§)ï¼Œç¬¬ä¸€å¸§(å¤´å¸§/é¦–å¸§/èµ·å§‹å¸§)ä¹Ÿå¯èƒ½æ˜¯æœ€åä¸€å¸§
+RSV1/RSV2/RSV3      3bit å¿…é¡»è®¾ç½®ä¸º0ï¼Œå¤‡ç”¨é¢„ç•™ï¼Œé»˜è®¤éƒ½ä¸º0
+opcode              4bit æ“ä½œç ï¼Œæ ‡è¯†æ¶ˆæ¯å¸§ç±»å‹ï¼Œè¯¦è§å¦‚ä¸‹è¯´æ˜
+MASK                1bit æ©ç æ ‡å¿—ä½(0/1)ï¼Œæ˜¯å¦åŠ å¯†æ•°æ®ï¼Œå¦‚æœè®¾ä¸º1ï¼Œé‚£ä¹ˆMasking-Keyå­—æ®µå­˜åœ¨ï¼ŒC2S-1 S2C-0 DISCONN-1
+Payload len         7bit,7+16bit,7+64bit è´Ÿè½½æ•°æ®é•¿åº¦(æ‰©å±•æ•°æ®é•¿åº¦ + åº”ç”¨æ•°æ®é•¿åº¦)ï¼Œå–å€¼èŒƒå›´0~127(2^7-1)ï¼Œ
+						 å¦‚æœå€¼ä¸º0~125ï¼Œé‚£ä¹ˆè¡¨ç¤ºè´Ÿè½½æ•°æ®é•¿åº¦ï¼Œ
+						 å¦‚æœå€¼ä¸º  126ï¼Œé‚£ä¹ˆåç»­2å­—èŠ‚(16bit)è¡¨ç¤ºè´Ÿè½½æ•°æ®é•¿åº¦ï¼Œ
+						 å¦‚æœå€¼ä¸º  127ï¼Œé‚£ä¹ˆåç»­8å­—èŠ‚(64bit)è¡¨ç¤ºè´Ÿè½½æ•°æ®é•¿åº¦ï¼Œæœ€é«˜ä½ä¸º0
+Masking-key         0 or 4 bytes å¦‚æœMASKæ ‡å¿—ä½è®¾ä¸º1ï¼Œé‚£ä¹ˆè¯¥å­—æ®µå­˜åœ¨ï¼Œå¦åˆ™å¦‚æœMASKæ ‡å¿—ä½è®¾ä¸º0ï¼Œé‚£ä¹ˆè¯¥å­—æ®µç¼ºå¤±
+Payload data        (x + y) bytes è´Ÿè½½æ•°æ® = æ‰©å±•æ•°æ® + åº”ç”¨æ•°æ®
+						 å½“MASKæ ‡å¿—ä½ä¸º1æ—¶ï¼Œframe-payload-data = frame-masked-extension-data + frame-masked-application-data
+						 å½“MASKæ ‡å¿—ä½ä¸º0æ—¶ï¼Œframe-payload-data = frame-unmasked-extension-data + frame-unmasked-application-data
 						 frame-masked-extension-data 0x00-0xFF N*8(N>0) frame-masked-application-data 0x00-0xFF N*8(N>0)
 						 frame-unmasked-extension-data 0x00-0xFF N*8(N>0) frame-unmasked-application-data 0x00-0xFF N*8(N>0)
-Extension data      x bytes  À©Õ¹Êı¾İ£¬³ı·ÇĞ­ÉÌ¹ıÀ©Õ¹£¬·ñÔòÀ©Õ¹Êı¾İ³¤¶ÈÎª0bytes
-Application data    y bytes  Ó¦ÓÃÊı¾İ
+Extension data      x bytes  æ‰©å±•æ•°æ®ï¼Œé™¤éåå•†è¿‡æ‰©å±•ï¼Œå¦åˆ™æ‰©å±•æ•°æ®é•¿åº¦ä¸º0bytes
+Application data    y bytes  åº”ç”¨æ•°æ®
 
 -+--------+-------------------------------------+-----------|-----------------------------------------------+
  |Opcode  | Meaning                             | Reference |                                               |
 -+--------+-------------------------------------+-----------|-----------------------------------------------+
- |  0x0   | Continuation Frame                  | RFC 6455  |  ±êÊ¶Ò»¸öSEGMENT·ÖÆ¬Á¬ĞøÖ¡                       |
+ |  0x0   | Continuation Frame                  | RFC 6455  |  æ ‡è¯†ä¸€ä¸ªSEGMENTåˆ†ç‰‡è¿ç»­å¸§                       |
 -+--------+-------------------------------------+-----------|-----------------------------------------------+
- |  0x1   | Text Frame                          | RFC 6455  |  ±êÊ¶Ò»¸öTEXTÀàĞÍÎÄ±¾Ö¡
+ |  0x1   | Text Frame                          | RFC 6455  |  æ ‡è¯†ä¸€ä¸ªTEXTç±»å‹æ–‡æœ¬å¸§
 -+--------+-------------------------------------+-----------|-----------------------------------------------+
- |  0x2   | Binary Frame                        | RFC 6455  |  ±êÊ¶Ò»¸öBINARYÀàĞÍ¶ş½øÖÆÖ¡
+ |  0x2   | Binary Frame                        | RFC 6455  |  æ ‡è¯†ä¸€ä¸ªBINARYç±»å‹äºŒè¿›åˆ¶å¸§
 -+--------+-------------------------------------+-----------|-----------------------------------------------+
- |  0x8   | Connection Close Frame              | RFC 6455  |  ±êÊ¶Ò»¸öDISCONNÁ¬½Ó¹Ø±ÕÖ¡
+ |  0x8   | Connection Close Frame              | RFC 6455  |  æ ‡è¯†ä¸€ä¸ªDISCONNè¿æ¥å…³é—­å¸§
 -+--------+-------------------------------------+-----------|-----------------------------------------------+
- |  0x9   | Ping Frame                          | RFC 6455  |  ±êÊ¶Ò»¸öPINGÍøÂç×´Ì¬Ì½²âÖ¡keep-alive/heart-beats
+ |  0x9   | Ping Frame                          | RFC 6455  |  æ ‡è¯†ä¸€ä¸ªPINGç½‘ç»œçŠ¶æ€æ¢æµ‹å¸§keep-alive/heart-beats
 -+--------+-------------------------------------+-----------|-----------------------------------------------+
- |  0xA   | Pong Frame                          | RFC 6455  |  ±êÊ¶Ò»¸öPONGÍøÂç×´Ì¬Ì½²âÖ¡keep-alive/heart-beats
+ |  0xA   | Pong Frame                          | RFC 6455  |  æ ‡è¯†ä¸€ä¸ªPONGç½‘ç»œçŠ¶æ€æ¢æµ‹å¸§keep-alive/heart-beats
 -+--------+-------------------------------------+-----------|-----------------------------------------------+
 
-Ò»¸öÎ´·ÖÆ¬µÄÏûÏ¢
+ä¸€ä¸ªæœªåˆ†ç‰‡çš„æ¶ˆæ¯
 	FIN = FrameFinished opcode = TextMessage|BinaryMessage|CloseMessage|PingMessage|PongMessage
-Ò»¸ö·ÖÆ¬µÄÏûÏ¢
+ä¸€ä¸ªåˆ†ç‰‡çš„æ¶ˆæ¯
 	FIN = FrameContinue opcode = TextMessage|BinaryMessage|CloseMessage|PingMessage|PongMessage
 	FIN = FrameContinue opcode = SegmentMessage
 	...
 	...
 	FIN = FrameFinished opcode = SegmentMessage (n >= 0)
 
-´ó¶ËÄ£Ê½(BigEndian) µÍµØÖ·´æ¸ßÎ» buf[4] = 0x12345678
+å¤§ç«¯æ¨¡å¼(BigEndian) ä½åœ°å€å­˜é«˜ä½ buf[4] = 0x12345678
 ---------------------------------------------------
-buf[3] = 0x78  - ¸ßµØÖ· = µÍÎ»
+buf[3] = 0x78  - é«˜åœ°å€ = ä½ä½
 buf[2] = 0x56
 buf[1] = 0x34
-buf[0] = 0x12  - µÍµØÖ· = ¸ßÎ»
+buf[0] = 0x12  - ä½åœ°å€ = é«˜ä½
 
-Ğ¡¶ËÄ£Ê½(LittleEndian) µÍµØÖ·´æµÍÎ» buf[4] = 0x12345678
+å°ç«¯æ¨¡å¼(LittleEndian) ä½åœ°å€å­˜ä½ä½ buf[4] = 0x12345678
 ---------------------------------------------------
-buf[3] = 0x12  - ¸ßµØÖ· = ¸ßÎ»
+buf[3] = 0x12  - é«˜åœ°å€ = é«˜ä½
 buf[2] = 0x34
 buf[1] = 0x56
-buf[0] = 0x78  - µÍµØÖ· = µÍÎ»
+buf[0] = 0x78  - ä½åœ°å€ = ä½ä½
 
 *
 */
@@ -99,14 +99,14 @@ buf[0] = 0x78  - µÍµØÖ· = µÍÎ»
 #include <libwebsocket/ITimestamp.h>
 #include <libwebsocket/IContext.h>
 
-//websocketĞ­Òé£¬×ñÑ­RFC6455¹æ·¶ ///
+//websocketåè®®ï¼Œéµå¾ªRFC6455è§„èŒƒ ///
 namespace muduo {
 	namespace net {
         namespace websocket {
 			
 			enum MessageT {
-				TyTextMessage = 0, //ÎÄ±¾ÏûÏ¢
-				TyBinaryMessage = 1, //¶ş½øÖÆÏûÏ¢
+				TyTextMessage = 0, //æ–‡æœ¬æ¶ˆæ¯
+				TyBinaryMessage = 1, //äºŒè¿›åˆ¶æ¶ˆæ¯
 			};
 			
 			//
