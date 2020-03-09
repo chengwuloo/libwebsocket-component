@@ -37,7 +37,7 @@ class EchoServer
 	  muduo::net::Buffer* buf, int msgType,
 	  muduo::Timestamp receiveTime);
   
-  //websocket onWebSocketClosed
+  //onWebSocketClosed websocket
   void onWebSocketClosed(
       const muduo::net::TcpConnectionPtr& conn,
       muduo::net::Buffer* buf, muduo::Timestamp receiveTime);

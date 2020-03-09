@@ -106,7 +106,7 @@ void EchoServer::onWebSocketMessage(
 	std::string str = "pack_unmask_data_frame:  ";
 	std::string result(buf->peek(), buf->readableBytes());
 	std::string suffix("[wss://192.168.2.93:10000]");
-	str += result;
+	//str += result;
 	str += suffix;
 	//////////////////////////////////////////////////////////////////////////
 	//pack_unmask_data_frame
@@ -119,7 +119,7 @@ void EchoServer::onWebSocketMessage(
 	conn->send(&rspbuf);
 }
 
-//websocket onWebSocketClosed
+//onWebSocketClosed websocket
 void EchoServer::onWebSocketClosed(
 	const muduo::net::TcpConnectionPtr& conn,
 	muduo::net::Buffer* buf, muduo::Timestamp receiveTime) {
