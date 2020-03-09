@@ -47,7 +47,6 @@ inline uint16_t networkToHost16(uint16_t net16)
   return be16toh(net16);
 }
 
-
 //be16BigEndian
 inline uint16_t be16BigEndian(uint8_t const ch[2]) {
 	char const c0 = ch[0];
@@ -107,7 +106,6 @@ inline uint64_t be64LittleEndian(uint8_t const ch[8]) {
 	char const c7 = ch[7];
 	return (uint64_t)((c7 << 56) | (c6 << 48) | (c5 << 40) | (c4 << 32) | (c3 << 24) | (c2 << 16) | (c1 << 8) | c0);
 }
-
 
 #pragma GCC diagnostic pop
 
