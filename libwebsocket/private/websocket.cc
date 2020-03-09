@@ -83,7 +83,7 @@ buf[0] = 0x78  - 低地址 = 低位
 */
 
 /************************************************************************/
-/*    @author create by Yangzhi                                         */
+/*    @author create by andy_ro@qq.com/Qwuloo@qq.com                    */
 /*    @Date		   03.03.2020                                           */
 /************************************************************************/
 
@@ -279,7 +279,7 @@ static std::string varname##_to_string(int varname);
 #define MY_MAP_MESSAGEFRAME(XX) \
 			XX(UnknownFrame,"未知") \
 			XX(HeadFrame, "头帧") \
-			XX(MiddleFrame, "中间帧") \
+			XX(MiddleFrame, "连续帧") \
 			XX(TailFrame, "尾帧") \
 			XX(HeadTailFrame, "头尾帧")
 
@@ -411,6 +411,25 @@ namespace muduo {
 			//格式化字符串 消息帧类型
 			FUNCTON_DECLARE_MESSAGEFRAME_TO_STRING(MessageFrame);
 
+#ifdef _NETTOHOST_BIGENDIAN_
+			//BigEndian
+			//header_t websocket
+			//         L                       H
+			//buf[0] = FIN|RSV1|RSV2|RSV3|opcode
+			//         L              H
+			//buf[1] = MASK|Payload len
+			//
+			//@@ header_t 基础协议头(RFC6455规范) uint16_t(16bit) ///
+			struct header_t {
+				uint16_t FIN        : 1; //1bit 帧结束标志位(0/1)
+				uint16_t RSV1       : 1; //1bit RSV1/RSV2/RSV3 必须设置为0，备用预留，默认都为0
+				uint16_t RSV2       : 1; //1bit RSV1/RSV2/RSV3 必须设置为0，备用预留，默认都为0
+				uint16_t RSV3       : 1; //1bit RSV1/RSV2/RSV3 必须设置为0，备用预留，默认都为0
+				uint16_t opcode     : 4; //4bit 操作码，标识消息帧类型
+				uint16_t MASK       : 1; //1bit 掩码标志位(0/1)
+				uint16_t Payloadlen : 7; //7bit 负载数据长度(扩展数据长度 + 应用数据长度)，取值范围0~127(2^7-1)
+			};
+#else		//LittleEndian
 			//header_t websocket
 			//         L                       H
 			//buf[0] = opcode|RSV3|RSV2|RSV1|FIN
@@ -427,7 +446,7 @@ namespace muduo {
 				uint16_t Payloadlen : 7; //7bit 负载数据长度(扩展数据长度 + 应用数据长度)，取值范围0~127(2^7-1)
 				uint16_t MASK       : 1; //1bit 掩码标志位(0/1)
 			};
-
+#endif
 			//基础协议头大小
 			static const size_t kHeaderLen = sizeof(header_t);
 			static const size_t kMaskingkeyLen = 4;

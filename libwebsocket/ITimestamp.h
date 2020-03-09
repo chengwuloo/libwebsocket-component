@@ -1,7 +1,8 @@
 /************************************************************************/
-/*    @author create by Yangzhi                                         */
+/*    @author create by andy_ro@qq.com/Qwuloo@qq.com                    */
 /*    @Date		   03.03.2020                                           */
 /************************************************************************/
+
 #ifndef _MUDUO_ITIMESTAMP_H_
 #define _MUDUO_ITIMESTAMP_H_
 
