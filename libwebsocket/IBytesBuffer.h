@@ -88,7 +88,7 @@ namespace muduo {
 		} //namespace ssl
 		
 		typedef std::shared_ptr<IBytesBuffer> IBytesBufferPtr;
-		typedef std::weak_ptr<IBytesBuffer> WeakBytesBufferPtr;
+		typedef std::weak_ptr<IBytesBuffer> WeakIBytesBufferPtr;
 
 	}  // namespace net
 }  // namespace muduo
