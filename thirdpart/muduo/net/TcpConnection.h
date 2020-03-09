@@ -150,17 +150,11 @@ class TcpConnection : noncopyable,
   // called when TcpServer has removed me from its map
   void connectDestroyed();  // should be called only once
 
-public:
-  enum WebSocketStatus { kWebSocketInit, kWebSocketClosed, kWebSocketConnected  };
-  void setWebSocketStatus(WebSocketStatus webSocketStatus) {  m_WebSocketStatus = webSocketStatus; }
-  bool isWebSocketConnected()   { return m_WebSocketStatus == kWebSocketConnected; }
-
   bool initWebsocketContext(bool enable);
-
+  
   websocket::WeakIContextPtr getWebsocketContext() {
       return websocket_ctx_;
   }
-
 private:
   SSL* ssl_;
   SSL_CTX* ssl_ctx_;
