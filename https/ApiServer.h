@@ -104,7 +104,7 @@ static void setFailedResponse(muduo::net::HttpResponse& rsp,
 	std::string const& msg = "") {
 	rsp.setStatusCode(code);
 	rsp.setStatusMessage("OK");
-	rsp.addHeader("Server", "TXQP");
+	rsp.addHeader("Server", "MUDUO");
 #if 0
 	rsp.setContentType("text/html;charset=utf-8");
 	rsp.setBody("<html><body>" + msg + "</body></html>");
