@@ -21,9 +21,9 @@
 //https://github.com/yedf/handy-ssl
 //https://www.cnblogs.com/dongfuye/p/4121066.html
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+// #ifdef __cplusplus
+// extern "C" {
+// #endif
 
 #include <openssl/ssl.h>
 #include <openssl/err.h>
@@ -31,9 +31,9 @@ extern "C" {
 #include <openssl/md5.h>
 #include <openssl/x509v3.h>
 
-#ifdef __cplusplus
-}
-#endif
+// #ifdef __cplusplus
+// }
+// #endif
 
 #include <assert.h>
 #include <mutex>
@@ -47,9 +47,9 @@ namespace muduo {
 	namespace net {
 		namespace ssl {
 			
-#ifdef __cplusplus
-extern "C" {
-#endif
+// #ifdef __cplusplus
+// extern "C" {
+// #endif
 			//SSL_read
 			/*extern*/ ssize_t SSL_read(SSL* ssl, IBytesBuffer* buf, int* savedErrno);
 
@@ -62,9 +62,9 @@ extern "C" {
 			//SSL_handshake
 			/*inline*/ bool SSL_handshake(SSL_CTX* ctx, SSL*& ssl, int sockfd, int& saveErrno);
 
-#ifdef __cplusplus
-}
-#endif
+// #ifdef __cplusplus
+// }
+// #endif
 			//@@ SSL_CTX_Init
 			class SSL_CTX_Init {
 			public:
