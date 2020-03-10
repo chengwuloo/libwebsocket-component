@@ -62,8 +62,7 @@
 #include <sys/timeb.h>
 #include <fstream>
 #include <ios>
-
-
+#include "globalMacro.h"
 
 extern int g_bisDebug;
 
@@ -74,7 +73,6 @@ extern int g_bisDebug;
 #include "mymd5.h"
 #include "base64.h"
 #include "htmlcodec.h"
-#include "crypto.h"
 #include "aes.h"
 #include "urlcodec.h"
 

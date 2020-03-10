@@ -14,7 +14,7 @@
 #include "muduo/net/EventLoop.h"
 #include "muduo/net/Socket.h"
 #include "muduo/net/SocketsOps.h"
-#include "muduo/net/ssl/ssl.h"
+#include <libwebsocket/ssl.h>
 
 #include <errno.h>
 
