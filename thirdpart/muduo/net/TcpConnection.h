@@ -181,7 +181,6 @@ private:
   EventLoop* loop_;
   const string name_;
   StateE state_;  // FIXME: use atomic variable
-  WebSocketStatus m_WebSocketStatus;
   bool reading_;
   // we don't expose those classes to client.
   std::unique_ptr<Socket> socket_;
