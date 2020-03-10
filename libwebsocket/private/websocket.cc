@@ -841,6 +841,7 @@ namespace muduo {
 					: messageHeader_(messageType)
 					, messageBuffer_(messageBuffer)
 					/*, header_({ 0 })*/
+					, unMask_c_(0)
 					, segmentOffset_(0) {
 					//assert must not be NULL
 					assert(messageBuffer_);
@@ -850,6 +851,7 @@ namespace muduo {
 					if (messageBuffer_) {
 						messageBuffer_->retrieveAll();
 						segmentOffset_ = 0;
+						unMask_c_ = 0;
 						messageBuffer_.reset();
 					}
 				}
@@ -925,6 +927,7 @@ namespace muduo {
 					if (messageBuffer_) {
 						messageBuffer_->retrieveAll();
 						segmentOffset_ = 0;
+						unMask_c_ = 0;
 						//断开连接析构时候调用释放 ///
 						//messageBuffer_.reset();
 					}
@@ -942,6 +945,9 @@ namespace muduo {
 						for (ssize_t i = segmentOffset_; i < buf->readableBytes(); ++i) {
 							*((char*)buf->peek() + i) = *(buf->peek() + i) ^ *(Masking_key + i % kMaskingkeyLen);
 						}
+						if (unMask_c_++ == 0) {
+							assert(segmentOffset_ == 0);
+						}
 						segmentOffset_ = buf->readableBytes();
 						return true;
 					}
@@ -952,8 +958,8 @@ namespace muduo {
 				message_header_t messageHeader_;
 				//完整websocket消息体(body)，存放接收数据解析之后的buffer
 				IBytesBufferPtr messageBuffer_;
-				//消息分片数据UnMask Masking-key操作段偏移
-				size_t segmentOffset_;
+				//消息分片数据UnMask Masking-key操作段偏移，UnMask操作次数
+				size_t segmentOffset_, unMask_c_;
 			};
 
 			//@@ Context
@@ -3064,6 +3070,9 @@ namespace muduo {
 						break;
 					}
 					case OpcodeE::TextMessage: {//文本消息帧
+						//开始解析消息体，解析buffer务必已置空
+						assert(dataMessage.getMessageBuffer());
+						assert(dataMessage.getMessageBuffer()->readableBytes() == 0);
 						//数据帧消息类型
 						dataMessage.setMessageType(websocket::OpcodeE::TextMessage);
 						//初始数据帧头
@@ -3136,6 +3145,9 @@ namespace muduo {
 						break;
 					}
 					case OpcodeE::BinaryMessage: {//二进制消息帧
+						//开始解析消息体，解析buffer务必已置空
+						assert(dataMessage.getMessageBuffer());
+						assert(dataMessage.getMessageBuffer()->readableBytes() == 0);
 						//数据帧消息类型
 						dataMessage.setMessageType(websocket::OpcodeE::BinaryMessage);
 						//初始数据帧头
@@ -3208,6 +3220,9 @@ namespace muduo {
 						break;
 					}
 					case OpcodeE::CloseMessage: {//连接关闭帧
+						//开始解析消息体，解析buffer务必已置空
+						assert(controlMessage.getMessageBuffer());
+						assert(controlMessage.getMessageBuffer()->readableBytes() == 0);
 						//控制帧消息类型
 						controlMessage.setMessageType(websocket::OpcodeE::CloseMessage);
 						//初始控制帧头
@@ -3300,6 +3315,9 @@ namespace muduo {
 						break;
 					}
 					case OpcodeE::PingMessage: {//心跳PING探测帧
+						//开始解析消息体，解析buffer务必已置空
+						assert(controlMessage.getMessageBuffer());
+						assert(controlMessage.getMessageBuffer()->readableBytes() == 0);
 						//控制帧消息类型
 						controlMessage.setMessageType(websocket::OpcodeE::PingMessage);
 						//初始控制帧头
@@ -3368,6 +3386,9 @@ namespace muduo {
 						break;
 					}
 					case OpcodeE::PongMessage: {//心跳PONG探测帧
+						//开始解析消息体，解析buffer务必已置空
+						assert(controlMessage.getMessageBuffer());
+						assert(controlMessage.getMessageBuffer()->readableBytes() == 0);
 						//控制帧消息类型
 						controlMessage.setMessageType(websocket::OpcodeE::PongMessage);
 						//初始控制帧头
@@ -4005,7 +4026,7 @@ namespace muduo {
 				bool enough = true;
 				//先解析包头(header)，再解析包体(body)
 				int i = 0;
-				while (enough) {
+				while (enough && buf->readableBytes() > 0) {
 					printf("websocket::parse_frame loop(%d) readableBytes(%d)\n", ++i, buf->readableBytes());
 					//消息流解包步骤 ///
 					websocket::StepE step = context.getWebsocketStep();
