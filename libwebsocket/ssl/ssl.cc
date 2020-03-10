@@ -432,7 +432,7 @@ namespace muduo {
 					std::string sid_ctx = "134123322131##@adxd!";
 					assert(sid_ctx.length() <= SSL_MAX_SSL_SESSION_ID_LENGTH);
 					::SSL_CTX_set_session_id_context(ssl_ctx_,
-						(unsigned char const*)sid_ctx.c_str(),
+						(uint8_t const*)sid_ctx.c_str(),
 						std::min<size_t>(SSL_MAX_SSL_SESSION_ID_LENGTH, sid_ctx.length()));
 #endif
 				}

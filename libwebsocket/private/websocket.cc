@@ -106,14 +106,14 @@ buf[0] = 0x78  - 低地址 = 低位
 //header_.Payloadlen 0~125，Payloadlen表示负载数据长度
 //header_.Payloadlen = 126 后续2字节(16bit)表示负载数据长度
 //header_.Payloadlen = 127 后续8字节(64bit)表示负载数据长度，最高位为0
-//unsigned char Extended_Payloadlen_[8];
+//uint8_t Extended_Payloadlen_[8];
 
 //3.Masking-key 0 or 4 bytes ///
 //如果MASK标志位设为1，那么该字段存在，否则，如果MASK标志位设为0，那么该字段缺失
-//unsigned char Masking_key_[4];
+//uint8_t Masking_key_[4];
 
 //4.Payload Data (x + y) bytes 负载数据 = 扩展数据 + 应用数据 ///
-//unsigned char Payload_data_[4096];
+//uint8_t Payload_data_[4096];
 
 #include <boost/filesystem.hpp>
 #include <boost/property_tree/ptree.hpp>
@@ -287,7 +287,7 @@ static std::string varname##_to_string(int varname);
 			MY_DESC_TABLE_DECLARE(table_##varname##s_, MY_MAP_MESSAGEFRAME); \
 			STATIC_FUNCTON_DECLARE_TO_STRING(varname);
 
-typedef unsigned char rsv123_t;
+typedef uint8_t rsv123_t;
 
 //websocket协议，遵循RFC6455规范 ///
 namespace muduo {
@@ -1578,13 +1578,13 @@ namespace muduo {
 				char const* data, size_t len,
 				websocket::OpcodeE opcode, websocket::FinE fin);
 
-			static unsigned char get_frame_FIN(websocket::header_t const& header);
+			static uint8_t get_frame_FIN(websocket::header_t const& header);
 			static rsv123_t get_frame_RSV123(websocket::header_t const& header);
-			static unsigned char get_frame_RSV1(websocket::header_t const& header);
-			static unsigned char get_frame_RSV2(websocket::header_t const& header);
-			static unsigned char get_frame_RSV3(websocket::header_t const& header);
-			static unsigned char get_frame_opcode(websocket::header_t const& header);
-			static unsigned char get_frame_MASK(websocket::header_t const& header);
+			static uint8_t get_frame_RSV1(websocket::header_t const& header);
+			static uint8_t get_frame_RSV2(websocket::header_t const& header);
+			static uint8_t get_frame_RSV3(websocket::header_t const& header);
+			static uint8_t get_frame_opcode(websocket::header_t const& header);
+			static uint8_t get_frame_MASK(websocket::header_t const& header);
 			static unsigned short get_frame_Payload_len(websocket::header_t const& header);
 
 			//FrameControlE MessageFrameE use MAKEWORD best
@@ -1620,12 +1620,12 @@ namespace muduo {
 #else
 				//         L                       H
 				//buf[0] = opcode|RSV3|RSV2|RSV1|FIN
-				unsigned char c1 = *buf->peek();
+				uint8_t c1 = *buf->peek();
 				header.opcode = c1 & 0x0F;
 				header.FIN = (c1 >> 7) & 0xFF;
 				//         L              H
 				//buf[1] = Payload len|MASK
-				unsigned char c2 = *(buf->peek() + 1);
+				uint8_t c2 = *(buf->peek() + 1);
 				header.Payloadlen = c2 & 0x7F;
 				header.MASK = (c2 >> 7) & 0xFF;
 				buf->retrieve(websocket::kHeaderLen);
@@ -1698,7 +1698,7 @@ namespace muduo {
 				//websocket::header_t int16_t ///
 				websocket::header_t header = { 0 };
 				//Masking_key ///
-				unsigned char Masking_key[kMaskingkeyLen] = { 0 };
+				uint8_t Masking_key[kMaskingkeyLen] = { 0 };
 				size_t Payloadlen = 0;
 				uint16_t ExtendedPayloadlen16 = 0;
 				int64_t ExtendedPayloadlen64 = 0;
@@ -1739,7 +1739,7 @@ namespace muduo {
 				//websocket::header_t int16_t ///
 				websocket::header_t header = { 0 };
 				//Masking_key ///
-				unsigned char Masking_key[kMaskingkeyLen] = { 0 };
+				uint8_t Masking_key[kMaskingkeyLen] = { 0 };
 				size_t Payloadlen = 0;
 				uint16_t ExtendedPayloadlen16 = 0;
 				int64_t ExtendedPayloadlen64 = 0;
@@ -2079,25 +2079,25 @@ namespace muduo {
 				printf("+-----------------------------------------------------------------------------------------------------------------+\n\n");
 			}
 
-			static unsigned char get_frame_FIN(websocket::header_t const& header) {
+			static uint8_t get_frame_FIN(websocket::header_t const& header) {
 				return header.FIN;
 			}
 			static rsv123_t get_frame_RSV123(websocket::header_t const& header) {
 				return (header.RSV1 << 2) | (header.RSV2 << 1) | (header.RSV3);
 			}
-			static unsigned char get_frame_RSV1(websocket::header_t const& header) {
+			static uint8_t get_frame_RSV1(websocket::header_t const& header) {
 				return header.RSV1;
 			}
-			static unsigned char get_frame_RSV2(websocket::header_t const& header) {
+			static uint8_t get_frame_RSV2(websocket::header_t const& header) {
 				return header.RSV2;
 			}
-			static unsigned char get_frame_RSV3(websocket::header_t const& header) {
+			static uint8_t get_frame_RSV3(websocket::header_t const& header) {
 				return header.RSV3;
 			}
-			static unsigned char get_frame_opcode(websocket::header_t const& header) {
+			static uint8_t get_frame_opcode(websocket::header_t const& header) {
 				return header.opcode;
 			}
-			static unsigned char get_frame_MASK(websocket::header_t const& header) {
+			static uint8_t get_frame_MASK(websocket::header_t const& header) {
 				return header.MASK;
 			}
 			static unsigned short get_frame_Payload_len(websocket::header_t const& header) {
@@ -2107,9 +2107,9 @@ namespace muduo {
 			//dump websocket协议头信息
 			static void dump_header_info(websocket::header_t const& header) {
 				rsv123_t RSV123 = get_frame_RSV123(header);
-				unsigned char RSV1 = get_frame_RSV1(header);
-				unsigned char RSV2 = get_frame_RSV2(header);
-				unsigned char RSV3 = get_frame_RSV3(header);
+				uint8_t RSV1 = get_frame_RSV1(header);
+				uint8_t RSV2 = get_frame_RSV2(header);
+				uint8_t RSV3 = get_frame_RSV3(header);
 				//show hex to the left
 				printf("--- *** dump_header_info\n" \
 					"+---------------------------------------------------------------+\n" \
@@ -2132,9 +2132,9 @@ namespace muduo {
 			//dump websocket带扩展协议头信息
 			static void dump_extended_header_info(websocket::extended_header_t const& header) {
 				rsv123_t RSV123 = get_frame_RSV123(header.get_header());
-				unsigned char RSV1 = get_frame_RSV1(header.get_header());
-				unsigned char RSV2 = get_frame_RSV2(header.get_header());
-				unsigned char RSV3 = get_frame_RSV3(header.get_header());
+				uint8_t RSV1 = get_frame_RSV1(header.get_header());
+				uint8_t RSV2 = get_frame_RSV2(header.get_header());
+				uint8_t RSV3 = get_frame_RSV3(header.get_header());
 				if (header.existExtendedPayloadlen()) {
 					if (header.existMaskingkey()) {
 						//Extended payload length & Masking-key
