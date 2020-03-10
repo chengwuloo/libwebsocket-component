@@ -52,7 +52,7 @@
 		* 用thirdpart/muduo修改过的文件替换新下载的muduo库对应文件
 		* 重新编译muduo库，需要链接libwebsocket库
 		* 创建测试demo工程demo/下，然后编译运行(需要链接libwebsocket库)
-		* 打开测试网站 http://www.websocket.org/echo.html
+		* 打开测试网站 http://www.websocket.org/echo.html 或者 http://www.websocket-test.com/
 		* 将测试地址换成 ws://192.168.2.93:10000 或SSL认证支持的 wss://192.168.2.93:10000 
 
 # QPAlgorithm
