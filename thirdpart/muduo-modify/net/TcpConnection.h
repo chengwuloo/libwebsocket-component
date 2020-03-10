@@ -149,12 +149,7 @@ class TcpConnection : noncopyable,
   void connectEstablished();   // should be called only once
   // called when TcpServer has removed me from its map
   void connectDestroyed();  // should be called only once
-
-public:
-  enum WebSocketStatus { kWebSocketInit, kWebSocketClosed, kWebSocketConnected  };
-  void setWebSocketStatus(WebSocketStatus webSocketStatus) {  m_WebSocketStatus = webSocketStatus; }
-  bool isWebSocketConnected()   { return m_WebSocketStatus == kWebSocketConnected; }
-
+  
   bool initWebsocketContext(bool enable);
 
   websocket::WeakIContextPtr getWebsocketContext() {
@@ -186,7 +181,6 @@ private:
   EventLoop* loop_;
   const string name_;
   StateE state_;  // FIXME: use atomic variable
-  WebSocketStatus m_WebSocketStatus;
   bool reading_;
   // we don't expose those classes to client.
   std::unique_ptr<Socket> socket_;

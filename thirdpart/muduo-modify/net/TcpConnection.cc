@@ -77,7 +77,7 @@ TcpConnection::~TcpConnection()
     //openSSL support ///
     ssl::SSL_free(ssl_);
     //////////////////////////////////////////////////////////////////////////
-    //释放conn连接对象sockfd资源流程 ///
+    //閲婃斁conn杩炴帴瀵硅薄sockfd璧勬簮娴佺▼ ///
     //TcpServer::removeConnection ->
     //TcpServer::removeConnectionInLoop ->
     //TcpConnection::dtor ->
@@ -460,7 +460,7 @@ void TcpConnection::handleRead(Timestamp receiveTime)
   loop_->assertInLoopThread();
   if (ssl_ctx_ && !sslConnected_) {
       int saveErrno = 0;
-      //SSL握手连接 ///
+      //SSL鎻℃墜杩炴帴 ///
       sslConnected_ = ssl::SSL_handshake(ssl_ctx_, ssl_, socket_->fd(), saveErrno);
 	  switch (saveErrno)
 	  {
