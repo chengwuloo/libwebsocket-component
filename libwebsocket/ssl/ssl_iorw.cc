@@ -74,6 +74,7 @@ namespace muduo {
 						assert(::SSL_get_error(ssl, rc) == 0);
 					}
 					//returns the number of bytes which are available inside ssl for immediate read
+					//make sure: call it after SSL_read is called
 					size_t left = (size_t)::SSL_pending(ssl);
 					//printf("IBytesBuffer::SSL_read rc = %d left = %lld err = %d\n",
 					//    rc, left, SSL_get_error(ssl, rc));
