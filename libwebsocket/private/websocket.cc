@@ -601,7 +601,8 @@ namespace muduo {
 					switch (header.MASK)
 					{
 					case 1:
-						assert(Masking_key[0] != '\0');
+						//BUG???
+						//assert(Masking_key[0] != '\0');
 						return true;
 					case 0:
 						assert(Masking_key[0] == '\0');
