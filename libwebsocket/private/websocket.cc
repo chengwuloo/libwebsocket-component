@@ -2316,56 +2316,6 @@ namespace muduo {
 								//buf没有粘包/半包情况 ///
 								assert(buf->readableBytes() == 0);
 #endif
-// 								switch (header.FIN) {
-// 								case FinE::FrameContinue: {
-// 									{
-// 										//帧已结束(分片消息)，非完整消息包，继续从帧头开始解析 //////
-// 										//分片消息连续帧
-// 										//FIN = FrameContinue opcode = TextMessage|BinaryMessage|CloseMessage|PingMessage|PongMessage
-// 										//FIN = FrameContinue opcode = SegmentMessage
-// 									}
-// 									//继续从帧头开始解析 ///
-// 									{
-// 										//正处于解析当中的帧头(当前帧头)
-// 										context.resetExtendedHeader();
-// 										//////////////////////////////////////////////////////////////////////////
-// 										//StepE::ReadFrameHeader
-// 										//////////////////////////////////////////////////////////////////////////
-// 										context.setWebsocketStep(websocket::StepE::ReadFrameHeader);
-// 									}
-// 									break;
-// 								}
-// 								case FinE::FrameFinished: {
-// 									{
-// 										//帧已结束(未分片/分片消息)，完整消息包，执行消息回调，继续从帧头开始解析 //////
-// 										//未分片消息结束帧 FIN = FrameFinished opcode = TextMessage|BinaryMessage|CloseMessage|PingMessage|PongMessage
-// 										//分片消息结束帧 FIN = FrameFinished opcode = SegmentMessage
-// 										//打印数据帧全部帧头信息
-// 										dataMessage.dumpFrameHeaders("websocket::parse_uncontrol_frame_body");
-// 										if (handler) {
-// 											handler->onMessageCallback(messageBuffer, dataMessage.getMessageType(), receiveTime);
-// 										}
-// 										//重置数据帧消息
-// 										dataMessage.resetMessage();
-// 									}
-// 									if (messageBuffer->readableBytes() == header.Payloadlen) {
-// 										//messageBuffer没有分片情况 ///
-// 									}
-// 									else {
-// 										//messageBuffer必是分片消息 ///
-// 									}
-// 									//继续从帧头开始解析 ///
-// 									{
-// 										//正处于解析当中的帧头(当前帧头)
-// 										context.resetExtendedHeader();
-// 										//////////////////////////////////////////////////////////////////////////
-// 										//StepE::ReadFrameHeader
-// 										//////////////////////////////////////////////////////////////////////////
-// 										context.setWebsocketStep(websocket::StepE::ReadFrameHeader);
-// 									}
-// 									break;
-// 								}
-// 								}
 							}
 						}
 					}
@@ -2433,56 +2383,6 @@ namespace muduo {
 								//buf没有粘包/半包情况 ///
 								assert(buf->readableBytes() == 0);
 #endif
-// 								switch (header.FIN) {
-// 								case FinE::FrameContinue: {
-// 									{
-// 										//帧已结束(分片消息)，非完整消息包，继续从帧头开始解析 //////
-// 										//分片消息连续帧
-// 										//FIN = FrameContinue opcode = TextMessage|BinaryMessage|CloseMessage|PingMessage|PongMessage
-// 										//FIN = FrameContinue opcode = SegmentMessage
-// 									}
-// 									//继续从帧头开始解析 ///
-// 									{
-// 										//正处于解析当中的帧头(当前帧头)
-// 										context.resetExtendedHeader();
-// 										//////////////////////////////////////////////////////////////////////////
-// 										//StepE::ReadFrameHeader
-// 										//////////////////////////////////////////////////////////////////////////
-// 										context.setWebsocketStep(websocket::StepE::ReadFrameHeader);
-// 									}
-// 									break;
-// 								}
-// 								case FinE::FrameFinished: {
-// 									{
-// 										//帧已结束(未分片/分片消息)，完整消息包，执行消息回调，继续从帧头开始解析 //////
-// 										//未分片消息结束帧 FIN = FrameFinished opcode = TextMessage|BinaryMessage|CloseMessage|PingMessage|PongMessage
-// 										//分片消息结束帧 FIN = FrameFinished opcode = SegmentMessage
-// 										//打印数据帧全部帧头信息
-// 										dataMessage.dumpFrameHeaders("websocket::parse_uncontrol_frame_body");
-// 										if (handler) {
-// 											handler->onMessageCallback(messageBuffer, dataMessage.getMessageType(), receiveTime);
-// 										}
-// 										//重置数据帧消息
-// 										dataMessage.resetMessage();
-// 									}
-// 									if (messageBuffer->readableBytes() == extended_header.getExtendedPayloadlenU16()) {
-// 										//messageBuffer没有分片情况 ///
-// 									}
-// 									else {
-// 										//messageBuffer必是分片消息 ///
-// 									}
-// 									//继续从帧头开始解析 ///
-// 									{
-// 										//正处于解析当中的帧头(当前帧头)
-// 										context.resetExtendedHeader();
-// 										//////////////////////////////////////////////////////////////////////////
-// 										//StepE::ReadFrameHeader
-// 										//////////////////////////////////////////////////////////////////////////
-// 										context.setWebsocketStep(websocket::StepE::ReadFrameHeader);
-// 									}
-// 									break;
-// 								}
-// 								}
 							}
 						}
 					}
@@ -2551,56 +2451,6 @@ namespace muduo {
 								//buf没有粘包/半包情况 ///
 								//assert(buf->readableBytes() == 0);
 #endif
-// 								switch (header.FIN) {
-// 								case FinE::FrameContinue: {
-// 									{
-// 										//帧已结束(分片消息)，非完整消息包，继续从帧头开始解析 //////
-// 										//分片消息连续帧
-// 										//FIN = FrameContinue opcode = TextMessage|BinaryMessage|CloseMessage|PingMessage|PongMessage
-// 										//FIN = FrameContinue opcode = SegmentMessage
-// 									}
-// 									//继续从帧头开始解析 ///
-// 									{
-// 										//正处于解析当中的帧头(当前帧头)
-// 										context.resetExtendedHeader();
-// 										//////////////////////////////////////////////////////////////////////////
-// 										//StepE::ReadFrameHeader
-// 										//////////////////////////////////////////////////////////////////////////
-// 										context.setWebsocketStep(websocket::StepE::ReadFrameHeader);
-// 									}
-// 									break;
-// 								}
-// 								case FinE::FrameFinished: {
-// 									{
-// 										//帧已结束(未分片/分片消息)，完整消息包，执行消息回调，继续从帧头开始解析 //////
-// 										//未分片消息结束帧 FIN = FrameFinished opcode = TextMessage|BinaryMessage|CloseMessage|PingMessage|PongMessage
-// 										//分片消息结束帧 FIN = FrameFinished opcode = SegmentMessage
-// 										//打印数据帧全部帧头信息
-// 										dataMessage.dumpFrameHeaders("websocket::parse_uncontrol_frame_body");
-// 										if (handler) {
-// 											handler->onMessageCallback(messageBuffer, dataMessage.getMessageType(), receiveTime);
-// 										}
-// 										//重置数据帧消息
-// 										dataMessage.resetMessage();
-// 									}
-// 									if (messageBuffer->readableBytes() == extended_header.getExtendedPayloadlenI64()) {
-// 										//messageBuffer没有分片情况 ///
-// 									}
-// 									else {
-// 										//messageBuffer必是分片消息 ///
-// 									}
-// 									//继续从帧头开始解析 ///
-// 									{
-// 										//正处于解析当中的帧头(当前帧头)
-// 										context.resetExtendedHeader();
-// 										//////////////////////////////////////////////////////////////////////////
-// 										//StepE::ReadFrameHeader
-// 										//////////////////////////////////////////////////////////////////////////
-// 										context.setWebsocketStep(websocket::StepE::ReadFrameHeader);
-// 									}
-// 									break;
-// 								}
-// 								}
 							}
 						}
 					}
@@ -2686,49 +2536,6 @@ namespace muduo {
 								//buf没有粘包/半包情况 ///
 								assert(buf->readableBytes() == 0);
 #endif
-// 								switch (header.FIN) {
-// 								case FinE::FrameContinue: {
-// 									{
-// 										//帧已结束(分片消息)，非完整消息包，继续从帧头开始解析 //////
-// 										//分片消息连续帧
-// 										//FIN = FrameContinue opcode = TextMessage|BinaryMessage|CloseMessage|PingMessage|PongMessage
-// 										//FIN = FrameContinue opcode = SegmentMessage
-// 									}
-// 									//继续从帧头开始解析 ///
-// 									{
-// 										//正处于解析当中的帧头(当前帧头)
-// 										context.resetExtendedHeader();
-// 										//////////////////////////////////////////////////////////////////////////
-// 										//StepE::ReadFrameHeader
-// 										//////////////////////////////////////////////////////////////////////////
-// 										context.setWebsocketStep(websocket::StepE::ReadFrameHeader);
-// 									}
-// 									break;
-// 								}
-// 								case FinE::FrameFinished: {
-// 									{
-// 										//帧已结束(未分片/分片消息)，完整消息包，执行消息回调，继续从帧头开始解析 //////
-// 										//未分片消息结束帧 FIN = FrameFinished opcode = TextMessage|BinaryMessage|CloseMessage|PingMessage|PongMessage
-// 										//分片消息结束帧 FIN = FrameFinished opcode = SegmentMessage
-// 									}
-// 									if (controlBuffer->readableBytes() == header.Payloadlen) {
-// 										//controlBuffer没有分片情况 ///
-// 									}
-// 									else {
-// 										//controlBuffer必是分片消息 ///
-// 									}
-// 									//继续从帧头开始解析 ///
-// 									{
-// 										//正处于解析当中的帧头(当前帧头)
-// 										context.resetExtendedHeader();
-// 										//////////////////////////////////////////////////////////////////////////
-// 										//StepE::ReadFrameHeader
-// 										//////////////////////////////////////////////////////////////////////////
-// 										context.setWebsocketStep(websocket::StepE::ReadFrameHeader);
-// 									}
-// 									break;
-// 								}
-// 								}
 							}
 						}
 					}
@@ -2796,49 +2603,6 @@ namespace muduo {
 								//buf没有粘包/半包情况 ///
 								assert(buf->readableBytes() == 0);
 #endif
-// 								switch (header.FIN) {
-// 								case FinE::FrameContinue: {
-// 									{
-// 										//帧已结束(分片消息)，非完整消息包，继续从帧头开始解析 //////
-// 										//分片消息连续帧
-// 										//FIN = FrameContinue opcode = TextMessage|BinaryMessage|CloseMessage|PingMessage|PongMessage
-// 										//FIN = FrameContinue opcode = SegmentMessage
-// 									}
-// 									//继续从帧头开始解析 ///
-// 									{
-// 										//正处于解析当中的帧头(当前帧头)
-// 										context.resetExtendedHeader();
-// 										//////////////////////////////////////////////////////////////////////////
-// 										//StepE::ReadFrameHeader
-// 										//////////////////////////////////////////////////////////////////////////
-// 										context.setWebsocketStep(websocket::StepE::ReadFrameHeader);
-// 									}
-// 									break;
-// 								}
-// 								case FinE::FrameFinished: {
-// 									{
-// 										//帧已结束(未分片/分片消息)，完整消息包，执行消息回调，继续从帧头开始解析 //////
-// 										//未分片消息结束帧 FIN = FrameFinished opcode = TextMessage|BinaryMessage|CloseMessage|PingMessage|PongMessage
-// 										//分片消息结束帧 FIN = FrameFinished opcode = SegmentMessage
-// 									}
-// 									if (controlBuffer->readableBytes() == extended_header.getExtendedPayloadlenU16()) {
-// 										//controlBuffer没有分片情况 ///
-// 									}
-// 									else {
-// 										//controlBuffer必是分片消息 ///
-// 									}
-// 									//继续从帧头开始解析 ///
-// 									{
-// 										//正处于解析当中的帧头(当前帧头)
-// 										context.resetExtendedHeader();
-// 										//////////////////////////////////////////////////////////////////////////
-// 										//StepE::ReadFrameHeader
-// 										//////////////////////////////////////////////////////////////////////////
-// 										context.setWebsocketStep(websocket::StepE::ReadFrameHeader);
-// 									}
-// 									break;
-// 								}
-// 								}
 							}
 						}
 					}
@@ -2906,49 +2670,6 @@ namespace muduo {
 							//buf没有粘包/半包情况 ///
 							//assert(buf->readableBytes() == 0);
 #endif
-// 							switch (header.FIN) {
-// 							case FinE::FrameContinue: {
-// 								{
-// 									//帧已结束(分片消息)，非完整消息包，继续从帧头开始解析 //////
-// 									//分片消息连续帧
-// 									//FIN = FrameContinue opcode = TextMessage|BinaryMessage|CloseMessage|PingMessage|PongMessage
-// 									//FIN = FrameContinue opcode = SegmentMessage
-// 								}
-// 								//继续从帧头开始解析 ///
-// 								{
-// 									//正处于解析当中的帧头(当前帧头)
-// 									context.resetExtendedHeader();
-// 									//////////////////////////////////////////////////////////////////////////
-// 									//StepE::ReadFrameHeader
-// 									//////////////////////////////////////////////////////////////////////////
-// 									context.setWebsocketStep(websocket::StepE::ReadFrameHeader);
-// 								}
-// 								break;
-// 							}
-// 							case FinE::FrameFinished: {
-// 								{
-// 									//帧已结束(未分片/分片消息)，完整消息包，执行消息回调，继续从帧头开始解析 //////
-// 									//未分片消息结束帧 FIN = FrameFinished opcode = TextMessage|BinaryMessage|CloseMessage|PingMessage|PongMessage
-// 									//分片消息结束帧 FIN = FrameFinished opcode = SegmentMessage
-// 								}
-// 								if (controlBuffer->readableBytes() == extended_header.getExtendedPayloadlenI64()) {
-// 									//controlBuffer没有分片情况 ///
-// 								}
-// 								else {
-// 									//controlBuffer必是分片消息 ///
-// 								}
-// 								//继续从帧头开始解析 ///
-// 								{
-// 									//正处于解析当中的帧头(当前帧头)
-// 									context.resetExtendedHeader();
-// 									//////////////////////////////////////////////////////////////////////////
-// 									//StepE::ReadFrameHeader
-// 									//////////////////////////////////////////////////////////////////////////
-// 									context.setWebsocketStep(websocket::StepE::ReadFrameHeader);
-// 								}
-// 								break;
-// 							}
-// 							}
 						}
 					}
 					}
@@ -2994,7 +2715,7 @@ namespace muduo {
 					}
 					//解析websocket基础协议头/帧头 ///
 					parse_frame_header(header, buf);
-					dump_header_info(header);
+					//dump_header_info(header);
 					//消息帧类型
 					switch (header.opcode)
 					{
@@ -3013,7 +2734,7 @@ namespace muduo {
 						//Maybe include Masking-key
 						//Must include Payload data
 						if (!parse_uncontrol_frame_body(context, buf, receiveTime, savedErrno)) {
-							printf("websocket::parse_uncontrol_frame_body error: no enough readableBytes(%d)\n", buf->readableBytes());
+							//printf("websocket::parse_uncontrol_frame_body error: no enough readableBytes(%d)\n", buf->readableBytes());
 							enough = false;
 							break;
 						}
@@ -3085,7 +2806,7 @@ namespace muduo {
 						//Maybe include Masking-key
 						//Must include Payload data
 						if (!parse_uncontrol_frame_body(context, buf, receiveTime, savedErrno)) {
-							printf("websocket::parse_uncontrol_frame_body error: no enough readableBytes(%d)\n", buf->readableBytes());
+							//printf("websocket::parse_uncontrol_frame_body error: no enough readableBytes(%d)\n", buf->readableBytes());
 							enough = false;
 							break;
 						}
@@ -3160,7 +2881,7 @@ namespace muduo {
 						//Maybe include Masking-key
 						//Must include Payload data
 						if (!parse_uncontrol_frame_body(context, buf, receiveTime, savedErrno)) {
-							printf("websocket::parse_uncontrol_frame_body error: no enough readableBytes(%d)\n", buf->readableBytes());
+							//printf("websocket::parse_uncontrol_frame_body error: no enough readableBytes(%d)\n", buf->readableBytes());
 							enough = false;
 							break;
 						}
@@ -3236,7 +2957,7 @@ namespace muduo {
 						//Maybe include Masking-key
 						//Maybe include Payload data
 						if (!parse_control_frame_body(context, buf, receiveTime, savedErrno)) {
-							printf("websocket::parse_control_frame_body error: no enough readableBytes(%d)\n", buf->readableBytes());
+							//printf("websocket::parse_control_frame_body error: no enough readableBytes(%d)\n", buf->readableBytes());
 							enough = false;
 							break;
 						}
@@ -3331,7 +3052,7 @@ namespace muduo {
 						//Maybe include Masking-key
 						//Maybe include Payload data
 						if (!parse_control_frame_body(context, buf, receiveTime, savedErrno)) {
-							printf("websocket::parse_control_frame_body error: no enough readableBytes(%d)\n", buf->readableBytes());
+							//printf("websocket::parse_control_frame_body error: no enough readableBytes(%d)\n", buf->readableBytes());
 							enough = false;
 							break;
 						}
@@ -3399,7 +3120,7 @@ namespace muduo {
 						//Maybe include Masking-key
 						//Maybe include Payload data
 						if (!parse_control_frame_body(context, buf, receiveTime, savedErrno)) {
-							printf("websocket::parse_control_frame_body error: no enough readableBytes(%d)\n", buf->readableBytes());
+							//printf("websocket::parse_control_frame_body error: no enough readableBytes(%d)\n", buf->readableBytes());
 							enough = false;
 							break;
 						}
@@ -3997,6 +3718,131 @@ namespace muduo {
 				return enough;
 			}
 
+			//parse_frame_ReadExtendedPayloadlen2Byte
+			//@param websocket::Context& 组件内部私有接口
+			static int parse_frame_ReadExtendedPayloadlen2Byte(
+				websocket::Context& context,//上下文信息
+				IBytesBuffer /*const*/* buf,
+				ITimestamp* receiveTime, int* savedErrno) {
+				//websocket::extended_header_t 正处于解析当中的帧头(当前帧头)
+				websocket::extended_header_t& extended_header = context.getExtendedHeader();
+				//websocket::header_t，uint16_t
+				websocket::header_t& header = extended_header.get_header();
+				bool enough = false;
+				do {
+					//判断 Payloadlen = 126，读取后续2字节
+					assert(header.Payloadlen == 126);
+					//////////////////////////////////////////////////////////////////////////
+					//StepE::ReadExtendedPayloadlen2Byte
+					//////////////////////////////////////////////////////////////////////////
+					assert(context.getWebsocketStep() == websocket::StepE::ReadExtendedPayloadlen2Byte);
+					if (buf->readableBytes() < 2) {
+						//读取后续2字节，不够
+						printf("websocket::parse_frame_ReadExtendedPayloadlen2Byte[bad][%d]: %s(%d) readableBytes(%d)\n",
+							header.Payloadlen,
+							websocket::Step_to_string(context.getWebsocketStep()).c_str(), 2, buf->readableBytes());
+						enough = false;
+						break;
+					}
+					//读取后续2字节 Extended payload length real Payload Data length
+					extended_header.setExtendedPayloadlen(Endian::networkToHost16(buf->readInt16()));
+					//判断 MASK = 1，读取Masking_key ///
+					if (header.MASK == 1) {
+						//////////////////////////////////////////////////////////////////////////
+						//StepE::ReadMaskingkey
+						//////////////////////////////////////////////////////////////////////////
+						context.setWebsocketStep(websocket::StepE::ReadMaskingkey);
+						break;
+					}
+					//////////////////////////////////////////////////////////////////////////
+					//StepE::ReadPayloadData
+					//////////////////////////////////////////////////////////////////////////
+					context.setWebsocketStep(websocket::StepE::ReadPayloadData);
+				} while (0);
+				return enough;
+			}
+			
+			//parse_frame_ReadExtendedPayloadlen8Byte
+			//@param websocket::Context& 组件内部私有接口
+			static int parse_frame_ReadExtendedPayloadlen8Byte(
+				websocket::Context& context,//上下文信息
+				IBytesBuffer /*const*/* buf,
+				ITimestamp* receiveTime, int* savedErrno) {
+				//websocket::extended_header_t 正处于解析当中的帧头(当前帧头)
+				websocket::extended_header_t& extended_header = context.getExtendedHeader();
+				//websocket::header_t，uint16_t
+				websocket::header_t& header = extended_header.get_header();
+				bool enough = false;
+				do {
+					//判断 Payloadlen = 127，读取后续8字节
+					assert(header.Payloadlen == 127);
+					//////////////////////////////////////////////////////////////////////////
+					//StepE::ReadExtendedPayloadlen8Byte
+					//////////////////////////////////////////////////////////////////////////
+					assert(context.getWebsocketStep() == websocket::StepE::ReadExtendedPayloadlen8Byte);
+					if (buf->readableBytes() < 8) {
+						//读取后续8字节，不够
+						printf("websocket::parse_frame_ReadExtendedPayloadlen8Byte[bad][%d]: %s(%d) readableBytes(%d)\n",
+							header.Payloadlen,
+							websocket::Step_to_string(context.getWebsocketStep()).c_str(), 8, buf->readableBytes());
+						enough = false;
+						break;
+					}
+					//读取后续8字节 Extended payload length real Payload Data length
+					extended_header.setExtendedPayloadlen((int64_t)Endian::networkToHost64(buf->readInt64()));
+					//判断 MASK = 1，读取Masking_key ///
+					if (header.MASK == 1) {
+						//////////////////////////////////////////////////////////////////////////
+						//StepE::ReadMaskingkey
+						//////////////////////////////////////////////////////////////////////////
+						context.setWebsocketStep(websocket::StepE::ReadMaskingkey);
+						break;
+					}
+					//////////////////////////////////////////////////////////////////////////
+					//StepE::ReadPayloadData
+					//////////////////////////////////////////////////////////////////////////
+					context.setWebsocketStep(websocket::StepE::ReadPayloadData);
+				} while (0);
+				return enough;
+			}
+
+			//parse_frame_ReadMaskingkey
+			//@param websocket::Context& 组件内部私有接口
+			static int parse_frame_ReadMaskingkey(
+				websocket::Context& context,//上下文信息
+				IBytesBuffer /*const*/* buf,
+				ITimestamp* receiveTime, int* savedErrno) {
+				//websocket::extended_header_t 正处于解析当中的帧头(当前帧头)
+				websocket::extended_header_t& extended_header = context.getExtendedHeader();
+				//websocket::header_t，uint16_t
+				websocket::header_t& header = extended_header.get_header();
+				bool enough = false;
+				do {
+					//判断 MASK = 1，读取Masking_key
+					assert(header.MASK == 1);
+					//////////////////////////////////////////////////////////////////////////
+					//StepE::ReadMaskingkey
+					//////////////////////////////////////////////////////////////////////////
+					assert(context.getWebsocketStep() == websocket::StepE::ReadMaskingkey);
+					if (buf->readableBytes() < kMaskingkeyLen) {
+						//读取不够
+						printf("websocket::parse_frame_ReadMaskingkey[bad][%d]: %s(%d) readableBytes(%d)\n",
+							header.Payloadlen,
+							websocket::Step_to_string(context.getWebsocketStep()).c_str(), kMaskingkeyLen, buf->readableBytes());
+						enough = false;
+						break;
+					}
+					//读取Masking_key
+					extended_header.setMaskingkey((uint8_t const*)buf->peek(), kMaskingkeyLen);
+					buf->retrieve(kMaskingkeyLen);
+					//////////////////////////////////////////////////////////////////////////
+					//StepE::ReadPayloadData
+					//////////////////////////////////////////////////////////////////////////
+					context.setWebsocketStep(websocket::StepE::ReadPayloadData);
+				} while (0);
+				return enough;
+			}
+
 			//parse_frame
 			//@param websocket::Context& 组件内部私有接口
 			static int parse_frame(
@@ -4027,7 +3873,9 @@ namespace muduo {
 				//先解析包头(header)，再解析包体(body)
 				int i = 0;
 				while (enough && buf->readableBytes() > 0) {
-					printf("websocket::parse_frame loop(%d) readableBytes(%d)\n", ++i, buf->readableBytes());
+					printf("websocket::parse_frame loop[%d] %s(lld) readableBytes(%d)\n",
+						++i,
+						websocket::Step_to_string(context.getWebsocketStep()).c_str(), extended_header.getRealDatalen(), buf->readableBytes());
 					//消息流解包步骤 ///
 					websocket::StepE step = context.getWebsocketStep();
 					switch (step) {
@@ -4036,15 +3884,15 @@ namespace muduo {
 						break;
 					}
 					case StepE::ReadExtendedPayloadlen2Byte: {
-						assert(false);
+						enough = parse_frame_ReadExtendedPayloadlen2Byte(context, buf, receiveTime, savedErrno);
 						break;
 					}
 					case StepE::ReadExtendedPayloadlen8Byte: {
-						assert(false);
+						enough = parse_frame_ReadExtendedPayloadlen8Byte(context, buf, receiveTime, savedErrno);
 						break;
 					}
 					case StepE::ReadMaskingkey: {
-						assert(false);
+						enough = parse_frame_ReadMaskingkey(context, buf, receiveTime, savedErrno);
 						break;
 					}
 					case StepE::ReadPayloadData: {
