@@ -676,7 +676,7 @@ namespace muduo {
 				}
 				//existMaskingkey Masking-key
 				inline bool existMaskingkey() const {
-					return header.existExtendedPayloadlen();
+					return header.existMaskingkey();
 				}
 				//reset extended_header_t
 				inline void reset() {
