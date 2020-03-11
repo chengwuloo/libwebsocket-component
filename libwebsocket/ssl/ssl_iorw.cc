@@ -149,8 +149,8 @@ namespace muduo {
 					if (rc > 0) {
 						n += (ssize_t)rc;
 						left -= (ssize_t)rc;
-						printf("IBytesBuffer::SSL_write rc = %d left = %d err = %d\n",
-							rc, left, SSL_get_error(ssl, rc));
+						//printf("IBytesBuffer::SSL_write rc = %d left = %d err = %d\n",
+						//	rc, left, SSL_get_error(ssl, rc));
 						assert(::SSL_get_error(ssl, rc) == 0);
 					}
 					else if (rc < 0) {
