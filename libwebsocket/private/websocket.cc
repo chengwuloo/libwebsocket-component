@@ -1658,6 +1658,7 @@ namespace muduo {
 				if (header.MASK == 1) {
 					buf->append(Masking_key, websocket::kMaskingkeyLen);
 				}
+				//带帧头的空包 ///
 				if (data && len > 0) {
 					buf->append(data, len);
 				}
@@ -1703,6 +1704,7 @@ namespace muduo {
 				if (header.MASK == 1) {
 					buf->append(Masking_key, websocket::kMaskingkeyLen);
 				}
+				//带帧头的空包 ///
 				if (data && len > 0) {
 					buf->append(data, len);
 				}
