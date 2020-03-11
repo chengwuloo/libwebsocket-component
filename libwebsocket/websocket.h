@@ -158,6 +158,184 @@ namespace muduo {
 				IBytesBuffer* buf,
 				char const* data, size_t len);
 
+#if 0
+			struct header_t;
+			struct extended_header_t;
+			struct frame_header_t;
+			struct message_header_t;
+			class Message;
+			class Context;
+
+			//validate_uncontrol_frame_header
+			/*static*/ void validate_uncontrol_frame_header(websocket::header_t& header);
+
+			//validate_control_frame_header
+			/*static*/ void validate_control_frame_header(websocket::header_t& header);
+
+			//parse_frame_header，int16_t
+			/*static*/ void parse_frame_header(websocket::header_t& header, IBytesBuffer* buf);
+
+			//pack_unmask_uncontrol_frame_header
+			/*static*/ websocket::header_t pack_unmask_uncontrol_frame_header(
+				IBytesBuffer* buf,
+				websocket::OpcodeE opcode, websocket::FinE fin, size_t Payloadlen);
+
+			//pack_unmask_control_frame_header
+			/*static*/ websocket::header_t pack_unmask_control_frame_header(
+				IBytesBuffer* buf,
+				websocket::OpcodeE opcode, websocket::FinE fin, size_t Payloadlen);
+
+			//pack_unmask_uncontrol_frame S2C
+			/*static*/ websocket::header_t pack_unmask_uncontrol_frame(
+				IBytesBuffer* buf,
+				char const* data, size_t len,
+				websocket::OpcodeE opcode, websocket::FinE fin);
+
+			//pack_unmask_control_frame
+			/*static*/ websocket::header_t pack_unmask_control_frame(
+				IBytesBuffer* buf,
+				char const* data, size_t len,
+				websocket::OpcodeE opcode, websocket::FinE fin);
+
+			//FrameControlE MessageFrameE use MAKEWORD best
+			/*static*/ std::pair<FrameControlE, MessageFrameE>
+				get_frame_control_message_type(websocket::header_t const& header);
+
+			//pack_unmask_data_frame_chunk S2C
+			/*static*/ void pack_unmask_data_frame_chunk(
+				IBytesBuffer* buf,
+				char const* data, size_t len,
+				websocket::MessageE messageType = MessageE::TextMessage,
+				size_t chunksz = 1024);
+
+			/*static*/ uint8_t get_frame_FIN(websocket::header_t const& header);
+			/*static*/ rsv123_t get_frame_RSV123(websocket::header_t const& header);
+			/*static*/ uint8_t get_frame_RSV1(websocket::header_t const& header);
+			/*static*/ uint8_t get_frame_RSV2(websocket::header_t const& header);
+			/*static*/ uint8_t get_frame_RSV3(websocket::header_t const& header);
+			/*static*/ uint8_t get_frame_opcode(websocket::header_t const& header);
+			/*static*/ uint8_t get_frame_MASK(websocket::header_t const& header);
+			/*static*/ uint8_t get_frame_Payloadlen(websocket::header_t const& header);
+
+			//dump websocket协议头信息
+			/*static*/ void dump_header_info(websocket::header_t const& header);
+			
+			//dump websocket带扩展协议头信息
+			/*static*/ void dump_extended_header_info(websocket::extended_header_t const& header);
+
+			//validate_message_frame 消息帧有效性安全检查
+			//@param websocket::Context& 组件内部私有接口
+			/*static*/ bool validate_message_frame(
+				websocket::Context& context,
+				IBytesBuffer /*const*/* buf,
+				ITimestamp* receiveTime, int* savedErrno);
+
+			//update_frame_body_parse_step 更新帧体(body)消息流解析步骤step
+			//	非控制帧(数据帧) frame body
+			//		Maybe include Extended payload length
+			//		Maybe include Masking-key
+			//		Must include Payload data
+			//	控制帧 frame body
+			//		Maybe include Extended payload length(<=126)
+			//		Maybe include Masking-key
+			//		Maybe include Payload data
+			//@param websocket::Context& 组件内部私有接口
+			/*static*/ bool update_frame_body_parse_step(
+				websocket::Context& context,
+				IBytesBuffer /*const*/* buf,
+				ITimestamp* receiveTime, int* savedErrno);
+
+			//parse_frame_ReadFrameHeader
+			//	解析基础协议头/帧头(header)
+			//	输出基础协议头信息
+			//	消息帧有效性安全检查
+			//	更新帧体(body)消息流解析步骤step
+			//@param websocket::Context& 组件内部私有接口
+			/*static*/ bool parse_frame_ReadFrameHeader(
+				websocket::Context& context,
+				IBytesBuffer /*const*/* buf,
+				ITimestamp* receiveTime, int* savedErrno);
+
+			//parse_frame_ReadExtendedPayloadlen2Byte
+			//@param websocket::Context& 组件内部私有接口
+			/*static*/ int parse_frame_ReadExtendedPayloadlen2Byte(
+				websocket::Context& context,
+				IBytesBuffer /*const*/* buf,
+				ITimestamp* receiveTime, int* savedErrno);
+
+			//parse_frame_ReadExtendedPayloadlen8Byte
+			//@param websocket::Context& 组件内部私有接口
+			/*static*/ int parse_frame_ReadExtendedPayloadlen8Byte(
+				websocket::Context& context,
+				IBytesBuffer /*const*/* buf,
+				ITimestamp* receiveTime, int* savedErrno);
+
+			//parse_frame_ReadMaskingkey
+			//@param websocket::Context& 组件内部私有接口
+			/*static*/ int parse_frame_ReadMaskingkey(
+				websocket::Context& context,
+				IBytesBuffer /*const*/* buf,
+				ITimestamp* receiveTime, int* savedErrno);
+
+			//parse_uncontrol_frame_ReadPayloadData
+			//@param websocket::Context& 组件内部私有接口
+			/*static*/ bool parse_uncontrol_frame_ReadPayloadData(
+				websocket::Context& context,
+				IBytesBuffer /*const*/* buf,
+				ITimestamp* receiveTime, int* savedErrno);
+
+			//parse_uncontrol_frame_ReadExtendedPayloadDataU16
+			//@param websocket::Context& 组件内部私有接口
+			/*static*/ bool parse_uncontrol_frame_ReadExtendedPayloadDataU16(
+				websocket::Context& context,
+				IBytesBuffer /*const*/* buf,
+				ITimestamp* receiveTime, int* savedErrno);
+
+			//parse_uncontrol_frame_ReadExtendedPayloadDataI64
+			//@param websocket::Context& 组件内部私有接口
+			/*static*/ bool parse_uncontrol_frame_ReadExtendedPayloadDataI64(
+				websocket::Context& context,
+				IBytesBuffer /*const*/* buf,
+				ITimestamp* receiveTime, int* savedErrno);
+
+			//parse_control_frame_ReadPayloadData
+			//@param websocket::Context& 组件内部私有接口
+			/*static*/ bool parse_control_frame_ReadPayloadData(
+				websocket::Context& context,
+				IBytesBuffer /*const*/* buf,
+				ITimestamp* receiveTime, int* savedErrno);
+
+			//parse_control_frame_ReadExtendedPayloadDataU16
+			//@param websocket::Context& 组件内部私有接口
+			/*static*/ bool parse_control_frame_ReadExtendedPayloadDataU16(
+				websocket::Context& context,
+				IBytesBuffer /*const*/* buf,
+				ITimestamp* receiveTime, int* savedErrno);
+
+			//parse_control_frame_ReadExtendedPayloadDataI64
+			//@param websocket::Context& 组件内部私有接口
+			/*static*/ bool parse_control_frame_ReadExtendedPayloadDataI64(
+				websocket::Context& context,
+				IBytesBuffer /*const*/* buf,
+				ITimestamp* receiveTime, int* savedErrno);
+
+			//parse_frame
+			//@param websocket::Context& 组件内部私有接口
+			/*static*/ int parse_frame(
+				websocket::Context& context,
+				IBytesBuffer /*const*/* buf,
+				ITimestamp* receiveTime, int* savedErrno);
+
+			//create_websocket_response 填充websocket握手成功响应头信息
+			/*static*/ void create_websocket_response(
+				http::IRequest const* req, std::string& rsp);
+
+			//do_handshake
+			/*static*/ bool do_handshake(
+				websocket::Context& context,
+				IBytesBuffer /*const*/* buf,
+				ITimestamp* receiveTime, int* saveErrno);
+#endif
 			void websocket_test_demo();
 
 		}//namespace websocket
