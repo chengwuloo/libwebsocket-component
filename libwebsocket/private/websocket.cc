@@ -1628,7 +1628,6 @@ namespace muduo {
 				IBytesBuffer* buf,
 				char const* data, size_t len,
 				websocket::OpcodeE opcode, websocket::FinE fin) {
-				assert(data && len > 0);
 				//websocket::header_t int16_t ///
 				websocket::header_t header = { 0 };
 				//Masking_key ///
@@ -1659,7 +1658,9 @@ namespace muduo {
 				if (header.MASK == 1) {
 					buf->append(Masking_key, websocket::kMaskingkeyLen);
 				}
-				buf->append(data, len);
+				if (data && len > 0) {
+					buf->append(data, len);
+				}
 				return header;
 			}
 
@@ -1668,7 +1669,6 @@ namespace muduo {
 				IBytesBuffer* buf,
 				char const* data, size_t len,
 				websocket::OpcodeE opcode, websocket::FinE fin) {
-				assert(data && len > 0);
 				//websocket::header_t int16_t ///
 				websocket::header_t header = { 0 };
 				//Masking_key ///
@@ -1703,7 +1703,9 @@ namespace muduo {
 				if (header.MASK == 1) {
 					buf->append(Masking_key, websocket::kMaskingkeyLen);
 				}
-				buf->append(data, len);
+				if (data && len > 0) {
+					buf->append(data, len);
+				}
 				return header;
 			}
 			
