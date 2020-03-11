@@ -476,6 +476,14 @@ namespace muduo {
 				inline header_t const& get_header() const {
 					return header;
 				}
+				//reset_header header_t，uint16_t
+				inline void reset_header() {
+#if 0
+					memset(&header, 0, kHeaderLen);
+#else
+					header = { 0 };
+#endif
+				}
 			public:
 				//getPayloadlen
 				inline size_t getPayloadlen() const {
@@ -578,6 +586,10 @@ namespace muduo {
 				//setMaskingkey Masking-key
 				inline void setMaskingkey(uint8_t const Masking_key[kMaskingkeyLen], size_t size) {
 					assert(size == websocket::kMaskingkeyLen);
+					uint8_t const Masking_key_[kMaskingkeyLen] = { 0 };
+					assert(memcmp(
+						this->Masking_key,
+						Masking_key_, kMaskingkeyLen) == 0);
 					memcpy(this->Masking_key, Masking_key, websocket::kMaskingkeyLen);
 				}
 				//getMaskingkey Masking-key
@@ -601,23 +613,31 @@ namespace muduo {
 				}
 				//reset extended_header_t
 				inline void reset() {
-					memset(&header, 0, kHeaderLen);
-					memset(&ExtendedPayloadlen, 0, 8);
+					reset_header();
+					static const size_t kExtendedPayloadlenUnion = sizeof ExtendedPayloadlen;
+					assert(kExtendedPayloadlenUnion == kExtendedPayloadlen8Byte);
+					memset(&ExtendedPayloadlen, 0, kExtendedPayloadlen8Byte);
 					memset(Masking_key, 0, kMaskingkeyLen);
 				}
 			public:
 				//@ header_t，uint16_t 基础协议头
 				header_t header;
+
+				//@ Masking-key 字节对齐关系，在ExtendedPayloadlen之前定义占用空间更小
+				uint8_t Masking_key[kMaskingkeyLen];
+
 				//@ Extended payload length
 				union {
 					uint16_t u16;
 					int64_t i64;
 				}ExtendedPayloadlen;
-				//@ Masking-key
-				uint8_t Masking_key[kMaskingkeyLen];
+				
 				//@ Payload Data
 				//uint8_t data[0];
 			};
+			
+			//带扩展协议头大小
+			static const size_t kExtendedHeaderLen = sizeof(extended_header_t);
 
 			//@@ frame_header_t 分片/未分片每帧头
 			struct frame_header_t {
@@ -678,9 +698,15 @@ namespace muduo {
 				inline bool existMaskingkey() const {
 					return header.existMaskingkey();
 				}
-				//reset extended_header_t
-				inline void reset() {
+				//resetExtendedHeader extended_header_t
+				inline void resetExtendedHeader() {
+#if 0
+					memset(&header, 0, kExtendedHeaderLen);
+#elif 1
+					header = { 0 };
+#else
 					header.reset();
+#endif
 				}
 			public:
 				//setFrameControlType 帧控制类型 控制帧/非控制帧
@@ -1106,11 +1132,13 @@ namespace muduo {
 					return controlMessage_;
 				}
 
-				//resetExtendedHeader
+				//resetExtendedHeader extended_header_t
 				inline void resetExtendedHeader() {
-#if 1
+#if 0
 					//重置正处于解析当中的帧头(当前帧头)
-					memset(&header_, 0, kHeaderLen);
+					memset(&header_, 0, kExtendedHeaderLen);
+#elif 1
+					header_ = { 0 };
 #else
 					header_.reset();
 #endif
@@ -1128,7 +1156,7 @@ namespace muduo {
 
 				//resetAll
 				inline void resetAll() {
-					memset(&header_, 0, kHeaderLen);
+					resetExtendedHeader();
 					dataMessage_.resetMessage();
 					controlMessage_.resetMessage();
 					//需要握手成功前释放httpContext资源 ///
@@ -1486,12 +1514,15 @@ namespace muduo {
 						assert(it->getFrameControlType() == FrameControlE::UnControlFrame);
 					}
 				}
+#if 0
 				//frame_header_t
-				//frame_header_t frameHeader = {
-				//				.frameControlType = frameControlType,
-				//				.messageFrameType = messageFrameType,
-				//};
+				frame_header_t frameHeader = {
+								frameControlType:frameControlType,
+								messageFrameType:messageFrameType,
+				};
+#else
 				frame_header_t frameHeader = { 0 };
+#endif
 				frameHeader.setFrameControlType(frameControlType);
 				frameHeader.setMessageFrameType(messageFrameType);
 				frameHeader.set_header(header.get_header());
