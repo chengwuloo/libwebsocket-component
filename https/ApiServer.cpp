@@ -107,7 +107,6 @@ ApiServer::ApiServer(
 	, server_state_(ServiceRunning)
 	, ttlUserLockSeconds_(1000)
 	, ttlAgentLockSeconds_(500)
-	, ssl_ctx_init_(cert_path, private_key_path, client_ca_cert_file_path, client_ca_cert_dir_path)
 {
 	
 	server_.setConnectionCallback(
