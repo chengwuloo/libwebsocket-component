@@ -256,16 +256,16 @@ namespace muduo {
 				IBytesBuffer /*const*/* buf,
 				ITimestamp* receiveTime, int* savedErrno);
 
-			//parse_frame_ReadExtendedPayloadlen2Byte
+			//parse_frame_ReadExtendedPayloadlenU16
 			//@param websocket::Context& 组件内部私有接口
-			/*static*/ int parse_frame_ReadExtendedPayloadlen2Byte(
+			/*static*/ int parse_frame_ReadExtendedPayloadlenU16(
 				websocket::Context& context,
 				IBytesBuffer /*const*/* buf,
 				ITimestamp* receiveTime, int* savedErrno);
 
-			//parse_frame_ReadExtendedPayloadlen8Byte
+			//parse_frame_ReadExtendedPayloadlenI64
 			//@param websocket::Context& 组件内部私有接口
-			/*static*/ int parse_frame_ReadExtendedPayloadlen8Byte(
+			/*static*/ int parse_frame_ReadExtendedPayloadlenI64(
 				websocket::Context& context,
 				IBytesBuffer /*const*/* buf,
 				ITimestamp* receiveTime, int* savedErrno);
