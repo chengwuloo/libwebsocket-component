@@ -3,8 +3,6 @@
 
 #include "muduo/net/TcpServer.h"
 
-#include <libwebsocket/ssl.h>
-
 // RFC 862
 class EchoServer
 {
@@ -15,6 +13,8 @@ class EchoServer
 	  std::string const& client_ca_cert_file_path = "",
 	  std::string const& client_ca_cert_dir_path = "");
   
+  ~EchoServer();
+
   //EventLoop one polling one thread
   void setThreadNum(int numThreads);
 
@@ -50,8 +50,6 @@ class EchoServer
 private:
     //监听客户端TCP请求
 	muduo::net::TcpServer server_;
-	//添加OpenSSL认证支持 ///
-	muduo::net::ssl::SSL_CTX_Init ssl_ctx_init_;
 };
 
 #endif  // MUDUO_EXAMPLES_SIMPLE_ECHO_ECHO_H

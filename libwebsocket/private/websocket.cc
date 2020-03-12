@@ -87,34 +87,6 @@ buf[0] = 0x78  - 低地址 = 低位
 /*    @Date		   03.03.2020                                           */
 /************************************************************************/
 
-//websocket协议
-//https://blog.csdn.net/sguniver_22/article/details/74273839
-//https://www.cnblogs.com/hustskyking/p/websocket-with-node.html
-//https://tools.ietf.org/html/rfc6455
-//WebSocket 协议 RFC6455 文档
-//https://blog.csdn.net/weixin_34388207/article/details/88581729
-//http://www.rfc-editor.org/info/rfc6455
-//wss测试
-//http://www.websocket.org/echo.html
-//http://tool.hibbba.com/websocket/
-//https://www.toolfk.com/tool-online-runwebsocket
-
-//1.websocket 基础协议头，占2字节(16bit) ///
-//websocket::header_t* header_;
-
-//2.Extended payload length ///
-//header_.Payloadlen 0~125，Payloadlen表示负载数据长度
-//header_.Payloadlen = 126 后续2字节(16bit)表示负载数据长度
-//header_.Payloadlen = 127 后续8字节(64bit)表示负载数据长度，最高位为0
-//uint8_t Extended_Payloadlen_[8];
-
-//3.Masking-key 0 or 4 bytes ///
-//如果MASK标志位设为1，那么该字段存在，否则，如果MASK标志位设为0，那么该字段缺失
-//uint8_t Masking_key_[4];
-
-//4.Payload Data (x + y) bytes 负载数据 = 扩展数据 + 应用数据 ///
-//uint8_t Payload_data_[4096];
-
 #include <boost/filesystem.hpp>
 #include <boost/property_tree/ptree.hpp>
 #include <boost/property_tree/json_parser.hpp>

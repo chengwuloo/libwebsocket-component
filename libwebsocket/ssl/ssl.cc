@@ -3,24 +3,6 @@
 /*    @Date		   03.03.2020                                           */
 /************************************************************************/
 
-//openssl
-//https://www.zhihu.com/question/41717174
-//https://segmentfault.com/a/1190000016855991
-//https://github.com/yhirose/cpp-httplib/blob/master/httplib.h
-//https://blog.csdn.net/zzhongcy/article/details/21989899
-//https://blog.csdn.net/oj847935591/article/details/79362542
-//http://openssl.6102.n7.nabble.com/SSL-connect-on-non-blocking-socket-Works-but-need-better-understanding-td25168.html
-//https://www.jianshu.com/p/92afb46c4a7d
-//https://mta.openssl.org/pipermail/openssl-users/2016-September/004430.html
-
-//https://stackoverflow.com/questions/38755515/ssl-accept-with-edge-triggered-non-blocking-epoll-always-returns-ssl-error-want
-//https://github.com/yedf/openssl-example/blob/master/async-ssl-svr.cc
-//https://github.com/yedf/openssl-example/blob/master/async-ssl-cli.cc
-//https://github.com/yedf/handy-ssl
-//https://www.cnblogs.com/dongfuye/p/4121066.html
-
-
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -233,19 +215,35 @@ namespace muduo {
 				return false;
 			}
 
-			static void* my_zeroing_malloc(size_t howmuch) {
+			static inline void* my_zeroing_malloc(size_t howmuch) {
 				return calloc(1, howmuch);
 			}
 
 			static SSL_CTX* ssl_ctx_;
-			
-			//@@ SSL_CTX_Init
-			SSL_CTX_Init::SSL_CTX_Init(
+
+			//SSL_library_init
+			//static inline void SSL_library_init();
+
+			//SSL_library_free
+			//static inline void SSL_library_free();
+
+			//SSL_CTX_create
+			//static inline bool SSL_CTX_create();
+
+			//SSL_CTX_setup_certs 加载CA证书
+			static inline void SSL_CTX_setup_certs(
+				std::string const& cert_path,
+				std::string const& private_key_path,
+				std::string const& client_ca_cert_file_path,
+				std::string const& client_ca_cert_dir_path);
+
+			//SSL_CTX_Init
+			void SSL_CTX_Init(
 				std::string const& cert_path,
 				std::string const& private_key_path,
 				std::string const& client_ca_cert_file_path,
 				std::string const& client_ca_cert_dir_path) {
-				SSL_CTX_Init::SSL_CTX_setup_certs(
+				ssl::SSL_CTX_setup_certs(
 					cert_path,
 					private_key_path,
 					client_ca_cert_file_path,
@@ -253,7 +251,7 @@ namespace muduo {
 			}
 
 			//SSL_library_init
-			/*static*/ void SSL_CTX_Init::SSL_library_init() {
+			static inline void SSL_library_init() {
 #if OPENSSL_VERSION_NUMBER < 0x1010001fL
 				CRYPTO_set_mem_functions(my_zeroing_malloc, realloc, free);
 				//OPENSSL_config(NULL);
@@ -273,34 +271,25 @@ namespace muduo {
 				printf("OPENSSL_init_ssl\n");
 #endif
 			}
-				
+
 			//SSL_library_free
-			/*static*/ void SSL_CTX_Init::SSL_library_free() {
+			static inline void SSL_library_free() {
 #if OPENSSL_VERSION_NUMBER < 0x1010001fL
 				::ERR_free_strings();
 #endif
 			}
 
-			SSL_CTX_Init::~SSL_CTX_Init() {
-				SSL_CTX_Init::SSL_CTX_free();
-			}
-				
-			//SSL_CTX_Valid
-			/*static*/ /*inline*/ bool SSL_CTX_Init::SSL_CTX_Valid() {
-				return NULL != ssl_ctx_;
-			}
-				
 			//SSL_CTX_Get
-			/*static*/ /*inline*/ SSL_CTX* SSL_CTX_Init::SSL_CTX_Get() {
+			SSL_CTX* SSL_CTX_Get() {
 				//assert(ssl_ctx_);
 				return ssl_ctx_;
 			}
-				
+
 			//SSL_CTX_create
-			/*static*/ /*inline*/ bool SSL_CTX_Init::SSL_CTX_create() {
+			static inline bool SSL_CTX_create() {
 				if (!ssl_ctx_) {
 					//openSSL库初始化 ///
-					SSL_CTX_Init::SSL_library_init();
+					ssl::SSL_library_init();
 					//////////////////////////////////////////////////////////////////////////
 					//SSLv2版本 SSLv2_server_method SSLv2_client_method
 					//SSL/TLS版本 SSLv23_server_method SSLv23_client_method
@@ -319,7 +308,7 @@ namespace muduo {
 					ssl_ctx_ = ::SSL_CTX_new(SSLv23_server_method());
 					if (!ssl_ctx_) {
 						printf("SSL_CTX_new failed\n");
-						SSL_CTX_Init::SSL_library_free();
+						ssl::SSL_library_free();
 						return false;
 					}
 #if 1
@@ -339,7 +328,7 @@ namespace muduo {
 						SSL_OP_SINGLE_DH_USE | SSL_OP_SINGLE_ECDH_USE |
 						SSL_OP_CIPHER_SERVER_PREFERENCE);
 
-					char* ssl_cipher_list = 
+					char* ssl_cipher_list =
 						"ECDHE-ECDSA-AES256-GCM-SHA384:"
 						"ECDHE-RSA-AES256-GCM-SHA384:"
 						"DHE-RSA-AES256-GCM-SHA384:"
@@ -362,12 +351,12 @@ namespace muduo {
 					EC_KEY* ecdh = ::EC_KEY_new_by_curve_name(NID_X9_62_prime256v1);
 					if (!ecdh) {
 						printf("EC_KEY_new_by_curve_name error\n");
-						SSL_CTX_Init::SSL_CTX_free();
+						ssl::SSL_CTX_free();
 						return false;
 					}
 					if (SSL_CTX_set_tmp_ecdh(ssl_ctx_, ecdh) != 1) {
 						printf("SSL_CTX_set_tmp_ecdh error\n");
-						SSL_CTX_Init::SSL_CTX_free();
+						ssl::SSL_CTX_free();
 						return false;
 					}
 					::EC_KEY_free(ecdh);
@@ -378,16 +367,16 @@ namespace muduo {
 			}
 
 			//SSL_CTX_free
-			/*static*/ /*inline*/ void SSL_CTX_Init::SSL_CTX_free() {
+			void SSL_CTX_free() {
 				if (ssl_ctx_) {
 					::SSL_CTX_free(ssl_ctx_);
 					ssl_ctx_ = NULL;
-					SSL_CTX_Init::SSL_library_free();
+					ssl::SSL_library_free();
 				}
 			}
-				
+
 			//SSL_CTX_setup_certs 加载CA证书
-			/*static*/ /*inline*/ void SSL_CTX_Init::SSL_CTX_setup_certs(
+			static inline void SSL_CTX_setup_certs(
 				std::string const& cert_path,
 				std::string const& private_key_path,
 				std::string const& client_ca_cert_file_path,
@@ -397,7 +386,7 @@ namespace muduo {
 					return;
 				}
 				//SSL_CTX_create ///
-				if (!SSL_CTX_Init::SSL_CTX_create()) {
+				if (!ssl::SSL_CTX_create()) {
 					return;
 				}
 				printf("Loading certificate-chain from '%s'\n" \
@@ -407,14 +396,14 @@ namespace muduo {
 				//为SSL会话加载本应用的证书所属的证书链
 				if (::SSL_CTX_use_certificate_chain_file(ssl_ctx_, cert_path.c_str()) != 1) {
 					printf("SSL_CTX_use_certificate_chain_file failed\n");
-					SSL_CTX_Init::SSL_CTX_free();
+					ssl::SSL_CTX_free();
 					return;
 				}
 #else
 				//为SSL会话加载本应用的证书*.cer
 				if (::SSL_CTX_use_certificate_file(ssl_ctx_, cert_path.c_str(), SSL_FILETYPE_PEM) != 1) {
 					printf("SSL_CTX_use_certificate_file failed\n");
-					SSL_CTX_Init::SSL_CTX_free();
+					ssl::SSL_CTX_free();
 					return;
 				}
 #endif
@@ -424,13 +413,13 @@ namespace muduo {
 				//为SSL会话加载本应用的私钥
 				if (::SSL_CTX_use_PrivateKey_file(ssl_ctx_, private_key_path.c_str(), SSL_FILETYPE_PEM) != 1) {
 					printf("SSL_CTX_use_PrivateKey_file failed\n");
-					SSL_CTX_Init::SSL_CTX_free();
+					ssl::SSL_CTX_free();
 					return;
 				}
 				//验证所加载的私钥和证书是否相匹配
 				if (::SSL_CTX_check_private_key(ssl_ctx_) != 1) {
 					printf("SSL_CTX_check_private_key failed\n");
-					SSL_CTX_Init::SSL_CTX_free();
+					ssl::SSL_CTX_free();
 					return;
 				}
 				if (!client_ca_cert_file_path.empty() || !client_ca_cert_dir_path.empty()) {
@@ -459,7 +448,6 @@ namespace muduo {
 #endif
 				}
 			}
-
 		};//namespace ssl
 	};//namespace net
-}; //namespace muduo
+};//namespace muduo

@@ -15,7 +15,6 @@
 #include <muduo/base/ThreadLocal.h>
 #include <muduo/base/ThreadPool.h>
 #include <muduo/base/ThreadLocalSingleton.h>
-#include <libwebsocket/ssl.h>
 
 #include <boost/filesystem.hpp>
 #include <boost/property_tree/ptree.hpp>
@@ -415,8 +414,6 @@ public:
 	std::string strIpAddr_;
 	//监听HTTP请求
 	muduo::net::TcpServer server_;
-	//添加OpenSSL认证支持 ///
-	muduo::net::ssl::SSL_CTX_Init ssl_ctx_init_;
 
 	//threadPool_游标 ///
 	muduo::AtomicInt32 nextThreadPool_;

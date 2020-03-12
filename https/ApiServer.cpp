@@ -63,6 +63,7 @@
 #include <fstream>
 #include <ios>
 #include "globalMacro.h"
+#include <libwebsocket/ssl.h>
 
 extern int g_bisDebug;
 
@@ -114,7 +115,13 @@ ApiServer::ApiServer(
 	server_.setMessageCallback(
 		std::bind(&ApiServer::onMessage, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
 		
-	//添加OpenSSL支持
+	//添加OpenSSL支持 ///
+	muduo::net::ssl::SSL_CTX_Init(
+		cert_path,
+		private_key_path,
+		client_ca_cert_file_path, client_ca_cert_dir_path);
+	
+	//指定SSL_CTX
 	server_.set_SSL_CTX(muduo::net::ssl::SSL_CTX_Init::SSL_CTX_Get());
     
 	threadTimer_->startLoop();
@@ -122,6 +129,8 @@ ApiServer::ApiServer(
 
 ApiServer::~ApiServer()
 {
+	//释放SSL_CTX
+	muduo::net::ssl::SSL_CTX_free();
 }
 
 //启动HTTP业务线程 ///

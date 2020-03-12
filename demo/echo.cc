@@ -1,6 +1,7 @@
 #include "demo/echo.h"
 #include "muduo/base/Logging.h"
 #include <libwebsocket/websocket.h>
+#include <libwebsocket/ssl.h>
 
 using std::placeholders::_1;
 using std::placeholders::_2;
@@ -11,9 +12,8 @@ EchoServer::EchoServer(muduo::net::EventLoop* loop,
 	std::string const& cert_path, std::string const& private_key_path,
 	std::string const& client_ca_cert_file_path,
 	std::string const& client_ca_cert_dir_path)
-    : server_(loop, listenAddr, "EchoServer")
-    , ssl_ctx_init_(cert_path, private_key_path, client_ca_cert_file_path, client_ca_cert_dir_path)
-{
+    : server_(loop, listenAddr, "EchoServer") {
+
 	//TCP callback ///
 	server_.setConnectionCallback(
 		std::bind(
@@ -40,7 +40,18 @@ EchoServer::EchoServer(muduo::net::EventLoop* loop,
 			std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
 
 	//添加OpenSSL认证支持 ///
-	server_.set_SSL_CTX(muduo::net::ssl::SSL_CTX_Init::SSL_CTX_Get());
+	muduo::net::ssl::SSL_CTX_Init(
+		cert_path,
+		private_key_path,
+		client_ca_cert_file_path, client_ca_cert_dir_path);
+
+	//指定SSL_CTX
+	server_.set_SSL_CTX(muduo::net::ssl::SSL_CTX_Get());
+}
+
+EchoServer::~EchoServer() {
+	//释放SSL_CTX
+	muduo::net::ssl::SSL_CTX_free();
 }
 
 //EventLoop one polling one thread
