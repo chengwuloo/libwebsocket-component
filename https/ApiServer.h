@@ -39,9 +39,10 @@
 #include <iostream>
 #include <iomanip>
 
+//#define _STAT_ORDER_QPS_			//间隔deltaTime统计QPS
 //#define _STAT_ORDER_QPS_DETAIL_	//上下分QPS细节，单个函数处理性能指标
 //#define _NO_LOGIC_PROCESS_		//不带逻辑空请求
-//#define _EVENTLOOP_CONTEXT_       //最高效的cpu利用率，没有线程切换开销，没有共享锁竞态 ///
+//#define _EVENTLOOP_CONTEXT_       //最高效的cpu利用率，没有线程切换开销，没有共享锁竞态
 
 //IP访问白名单控制 ///
 enum eWhiteListCtrl {
