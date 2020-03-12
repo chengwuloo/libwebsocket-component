@@ -15,6 +15,7 @@
 #include <muduo/base/ThreadLocal.h>
 #include <muduo/base/ThreadPool.h>
 #include <muduo/base/ThreadLocalSingleton.h>
+#include <libwebsocket/ssl.h>
 
 #include <boost/filesystem.hpp>
 #include <boost/property_tree/ptree.hpp>

@@ -95,16 +95,23 @@ void EchoServer::onWebSocketMessage(
 	const muduo::net::TcpConnectionPtr& conn,
 	muduo::net::Buffer* buf, int msgType,
 	muduo::Timestamp receiveTime) {
-
+#if 1
 	printf("%s recv %d bytes, str = \"%.*s\" received at %s\n",
 		conn->name().c_str(),
 		buf->readableBytes(),
 		buf->readableBytes(), buf->peek(),
 		receiveTime.toFormattedString().c_str());
-
+#else
+	printf(
+		"%s recv %u bytes, received at %s\n",
+		conn->name().c_str(),
+		buf->readableBytes(),
+		receiveTime.toFormattedString().c_str());
+#endif
 	std::string str = "pack_unmask_data_frame:  ";
 	std::string result(buf->peek(), buf->readableBytes());
 	std::string suffix("[wss://192.168.2.93:10000]");
+	buf->retrieveAll();
 	//str += result;
 	str += suffix;
 	//////////////////////////////////////////////////////////////////////////
