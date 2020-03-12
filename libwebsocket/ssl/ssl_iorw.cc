@@ -61,7 +61,7 @@ namespace muduo {
 				}
 				//SSL_pending = 0 ///
 				//printf("IBytesBuffer::SSL_read SSL_pending = %d\n", SSL_pending(ssl));
-				printf("\nIBytesBuffer::SSL_read begin {{{\n");
+				//printf("\nIBytesBuffer::SSL_read begin {{{\n");
 				ssize_t n = 0;
 				do {
 #if 0 //test
@@ -125,7 +125,7 @@ namespace muduo {
 							//SSL has been shutdown
 						case SSL_ERROR_ZERO_RETURN:
 							*savedErrno = SSL_ERROR_ZERO_RETURN;
-							printf("IBytesBuffer::SSL_read: SSL has been shutdown(%d).\n", err);
+							//printf("IBytesBuffer::SSL_read: SSL has been shutdown(%d).\n", err);
 							break;
 							//Connection has been aborted by peer
 						default:
@@ -136,7 +136,7 @@ namespace muduo {
 						break;
 					}
 				} while (true);
-				printf("IBytesBuffer::SSL_read end }}}\n\n");
+				//printf("IBytesBuffer::SSL_read end }}}\n\n");
 				return n;
 			}//SSL_read
 

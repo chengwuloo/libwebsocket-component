@@ -61,7 +61,9 @@ namespace muduo {
 			//SSL_handshake SSL握手建链
 			/*inline*/ bool SSL_handshake(SSL_CTX* ctx, SSL*& ssl, int sockfd, int& saveErrno) {
 				if (ctx) {
+#ifdef DEBUG
 					printf("-----------------------------------------------------------------------------\n");
+#endif
 #if 0
 					//create the SSL：SSL_new
 					if ((ssl = ::SSL_new(ctx)) == NULL) {
@@ -162,47 +164,67 @@ namespace muduo {
 						//握手失败
 						switch (saveErrno) {
 						case SSL_ERROR_SSL:
+#ifdef DEBUG
 							printf("SSL_do_handshake SSL_ERROR_SSL\n");
+#endif
 							muduo::net::ssl::SSL_free(ssl);
 							break;
 							//SSL需要在非阻塞socket可读时读入数据
 						case SSL_ERROR_WANT_READ:
+#ifdef DEBUG
 							printf("SSL_do_handshake SSL_ERROR_WANT_READ\n");
+#endif
 							break;
 							//SSL需要在非阻塞socket可写时写入数据
 						case SSL_ERROR_WANT_WRITE:
+#ifdef DEBUG
 							printf("SSL_do_handshake SSL_ERROR_WANT_WRITE\n");
+#endif
 							break;
 						case SSL_ERROR_WANT_X509_LOOKUP:
+#ifdef DEBUG
 							printf("SSL_do_handshake SSL_ERROR_WANT_X509_LOOKUP\n");
+#endif
 							muduo::net::ssl::SSL_free(ssl);
 							break;
 						case SSL_ERROR_SYSCALL:
+#ifdef DEBUG
 							printf("SSL_do_handshake SSL_ERROR_SYSCALL\n");
+#endif
 							muduo::net::ssl::SSL_free(ssl);
 							break;
 						case SSL_ERROR_ZERO_RETURN:
+#ifdef DEBUG
 							printf("SSL_do_handshake SSL_ERROR_ZERO_RETURN\n");
+#endif
 							break;
 						case SSL_ERROR_WANT_CONNECT:
+#ifdef DEBUG
 							printf("SSL_do_handshake SSL_ERROR_WANT_CONNECT\n");
+#endif
 							break;
 						case SSL_ERROR_WANT_ACCEPT:
+#ifdef DEBUG
 							printf("SSL_do_handshake SSL_ERROR_WANT_ACCEPT\n");
+#endif
 							break;
 						default:
 #if 0
 							::ERR_print_errors(bio);
 							::BIO_free(bio);
 #endif
+#ifdef DEBUG
 							printf("SSL_do_handshake failed\n");
+#endif
 							muduo::net::ssl::SSL_free(ssl);
 							break;
 						}
 						return false;
 					}
+#ifdef DEBUG
 					printf("SSL_do_handshake succ(version \"%s\" cipher:\"%s\")\n",
 						SSL_get_version(ssl), SSL_get_cipher_name(ssl));
+#endif
 					//握手成功
 					return true;
 #endif

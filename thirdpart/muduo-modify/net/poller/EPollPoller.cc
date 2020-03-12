@@ -125,7 +125,7 @@ void EPollPoller::fillActiveChannels(int numEvents,
     assert(it->second == channel);
 #endif
 	//Fixed BUG 同一个channel，不同的events，会出现覆盖的情况
-	//by YangZhi 2019.12.14
+	//by andy_ro 2019.12.14
     channel->set_revents(events_[i].events);
     activeChannels->push_back(channel);
   }

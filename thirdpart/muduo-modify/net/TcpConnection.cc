@@ -83,9 +83,9 @@ TcpConnection::~TcpConnection()
     //TcpConnection::dtor ->
     //Socket::dtor -> sockets::close(sockfd_)
     //////////////////////////////////////////////////////////////////////////
-    LOG_INFO << "TcpConnection::dtor[" <<  name_ << "] at " << this
-            << " fd=" << channel_->fd()
-            << " state=" << stateToString();
+    //LOG_INFO << "TcpConnection::dtor[" <<  name_ << "] at " << this
+    //       << " fd=" << channel_->fd()
+    //        << " state=" << stateToString();
     if (state_ != kDisconnected) {
         LOG_ERROR << __FUNCTION__ << " --- *** " << " state_ = " << state_;
     }
@@ -238,7 +238,7 @@ void TcpConnection::sendInLoop(const void* data, size_t len)
   // if no thing in output queue, try writing directly
   if (!channel_->isWriting() && outputBuffer_.readableBytes() == 0)
   {
-#if 1
+#if 0
       printf("\n----------------------------------------------\n");
       !ssl_ ?
           printf("write_with_no_copy >>>\n%.*s\n", len, data) :
@@ -471,7 +471,7 @@ void TcpConnection::handleRead(Timestamp receiveTime)
 		  channel_->enableWriting();
 		  break;
       case SSL_ERROR_SSL:
-          LOG_ERROR << __FUNCTION__ << " --- *** " << "SSL_ERROR_SSL handleClose()";
+          //LOG_ERROR << __FUNCTION__ << " --- *** " << "SSL_ERROR_SSL handleClose()";
           handleClose();
           break;
 	  case 0:
@@ -533,7 +533,7 @@ void TcpConnection::handleWrite()
   else {
       if (channel_->isWriting())
       {
-#if 1
+#if 0
           printf("\n----------------------------------------------\n");
           !ssl_ ?
               printf("write_with_copy >>>\n%.*s\n", outputBuffer_.readableBytes(), outputBuffer_.peek()) :

@@ -61,7 +61,7 @@ ssize_t Buffer::readFd(int fd, int* savedErrno)
 
 /*
     SSL_read
-    @author create by Yangzhi
+    @author create by andy_ro
     @Date		   03.03.2020
 */
 ssize_t Buffer::SSL_read(SSL* ssl, int* savedErrno) {
@@ -70,7 +70,7 @@ ssize_t Buffer::SSL_read(SSL* ssl, int* savedErrno) {
 
 /*
     SSL_write
-    @author create by Yangzhi
+    @author create by andy_ro
     @Date		   03.03.2020
 */
 ssize_t Buffer::SSL_write(SSL* ssl, void const* data, size_t len, int* savedErrno) {

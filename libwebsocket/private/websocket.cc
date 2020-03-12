@@ -234,8 +234,8 @@ static std::string varname##_to_string(int varname);
 //消息流解包步骤 ///
 #define MY_MAP_STEP(XX) \
 			XX(StepE::ReadFrameHeader, "") \
-			XX(StepE::ReadExtendedPayloadlen2Byte, "") \
-			XX(StepE::ReadExtendedPayloadlen8Byte, "") \
+			XX(StepE::ReadExtendedPayloadlenU16, "") \
+			XX(StepE::ReadExtendedPayloadlenI64, "") \
 			XX(StepE::ReadMaskingkey, "") \
 			XX(StepE::ReadPayloadData, "") \
 			XX(StepE::ReadExtendedPayloadDataU16, "") \
@@ -324,8 +324,8 @@ namespace muduo {
 			//消息流解包步骤 ///
 			enum StepE {
 				ReadFrameHeader,
-				ReadExtendedPayloadlen2Byte,
-				ReadExtendedPayloadlen8Byte,
+				ReadExtendedPayloadlenU16,
+				ReadExtendedPayloadlenI64,
 				ReadMaskingkey,
 				ReadPayloadData,
 				ReadExtendedPayloadDataU16,
@@ -454,8 +454,8 @@ namespace muduo {
 			//基础协议头大小
 			static const size_t kHeaderLen = sizeof(header_t);
 			static const size_t kMaskingkeyLen = 4;
-			static const size_t kExtendedPayloadlen2Byte = sizeof(uint16_t);
-			static const size_t kExtendedPayloadlen8Byte = sizeof(int64_t);
+			static const size_t kExtendedPayloadlenU16 = sizeof(uint16_t);
+			static const size_t kExtendedPayloadlenI64 = sizeof(int64_t);
 
 			//@@ extended_header_t 带扩展协议头
 			struct extended_header_t {
@@ -616,8 +616,8 @@ namespace muduo {
 				inline void reset() {
 					reset_header();
 					static const size_t kExtendedPayloadlenUnion = sizeof ExtendedPayloadlen;
-					assert(kExtendedPayloadlenUnion == kExtendedPayloadlen8Byte);
-					memset(&ExtendedPayloadlen, 0, kExtendedPayloadlen8Byte);
+					assert(kExtendedPayloadlenUnion == kExtendedPayloadlenI64);
+					memset(&ExtendedPayloadlen, 0, kExtendedPayloadlenI64);
 					memset(Masking_key, 0, kMaskingkeyLen);
 				}
 			public:
@@ -1099,7 +1099,9 @@ namespace muduo {
 					/*, httpContext_(NULL)*/ {
 				}
 				~Context() {
-					//printf("--- *** websocket::Context::dtor ...\n");
+#ifdef DEBUG
+					printf("--- *** websocket::Context::dtor ...\n");
+#endif
 					resetAll();
 					step_ = StepE::ReadFrameHeader;
 					state_ = StateE::kClosed;
@@ -1255,7 +1257,9 @@ namespace muduo {
 				IBytesBufferPtr dataBuffer,
 				IBytesBufferPtr controlBuffer) {
 				IContextPtr newobj(new websocket::Context());
-				//assert(std::dynamic_pointer_cast<IContext>(newobj));
+#ifdef DEBUG
+				assert(std::dynamic_pointer_cast<IContext>(newobj));
+#endif
 				if (newobj) {
 					newobj->setHttpContext(context);
 					newobj->setDataBuffer(dataBuffer);
@@ -1263,7 +1267,9 @@ namespace muduo {
 					newobj->setCallbackHandler(handler);
 				}
 				else {
+#ifdef DEBUG
 					printf("websocket::context_new() error\n");
+#endif
 				}
 				return newobj;
 			}
@@ -1720,10 +1726,10 @@ namespace muduo {
 				}
 				header = pack_unmask_uncontrol_frame_header(buf, opcode, fin, Payloadlen);
 				if (Payloadlen == 126) {
-					buf->append(&ExtendedPayloadlenU16, websocket::kExtendedPayloadlen2Byte);
+					buf->append(&ExtendedPayloadlenU16, websocket::kExtendedPayloadlenU16);
 				}
 				else if (Payloadlen == 127) {
-					buf->append(&ExtendedPayloadlenI64, websocket::kExtendedPayloadlen8Byte);
+					buf->append(&ExtendedPayloadlenI64, websocket::kExtendedPayloadlenI64);
 				}
 				if (header.MASK == 1) {
 					buf->append(Masking_key, websocket::kMaskingkeyLen);
@@ -1762,14 +1768,16 @@ namespace muduo {
 				}
 				header = pack_unmask_control_frame_header(buf, opcode, fin, Payloadlen);
 				if (Payloadlen == 126) {
-					buf->append(&ExtendedPayloadlenU16, websocket::kExtendedPayloadlen2Byte);
+					buf->append(&ExtendedPayloadlenU16, websocket::kExtendedPayloadlenU16);
 				}
 				else if (Payloadlen == 127) {
+#ifdef DEBUG
 					//控制帧，Payload len<=126字节，且不能被分片
 					printf("pack_unmask_control_frame Payloadlen =%d ExtendedPayloadlenI64 = %lld\n",
 						Payloadlen, ExtendedPayloadlenI64);
+#endif
 					assert(false);
-					buf->append(&ExtendedPayloadlenI64, websocket::kExtendedPayloadlen8Byte);
+					buf->append(&ExtendedPayloadlenI64, websocket::kExtendedPayloadlenI64);
 				}
 				if (header.MASK == 1) {
 					buf->append(Masking_key, websocket::kMaskingkeyLen);
@@ -1938,6 +1946,7 @@ namespace muduo {
 					messageType, websocket::FinE::FrameContinue);
 				n += chunksz;
 				left -= chunksz;
+#ifdef DEBUG
 				int i = 0;
 				std::pair<FrameControlE, MessageFrameE> ty = get_frame_control_message_type(header);
 				printf("\n\n--- *** websocket::pack_unmask_data_frame_chunk:\n");
@@ -1949,6 +1958,7 @@ namespace muduo {
 					websocket::MessageFrame_to_string(ty.second).c_str(),
 					websocket::Opcode_to_string(header.opcode).c_str(),
 					websocket::Fin_to_string(header.FIN).c_str(), header.Payloadlen, header.MASK);
+#endif
 				while (left > 0) {
 					size_t size = left > chunksz ? chunksz : left;
 					if (left > chunksz) {
@@ -1958,6 +1968,7 @@ namespace muduo {
 							websocket::FinE::FrameContinue);
 						n += chunksz;
 						left -= chunksz;
+#ifdef DEBUG
 						std::pair<FrameControlE, MessageFrameE> ty = get_frame_control_message_type(header);
 						printf("Frame[%d][%s][%s][%s] opcode[%s] FIN[%s] Payloadlen[%d] MASK[%d]\n",
 							i++,
@@ -1966,6 +1977,7 @@ namespace muduo {
 							websocket::MessageFrame_to_string(ty.second).c_str(),
 							websocket::Opcode_to_string(header.opcode).c_str(),
 							websocket::Fin_to_string(header.FIN).c_str(), header.Payloadlen, header.MASK);
+#endif
 					}
 					else {
 						websocket::header_t header = pack_unmask_uncontrol_frame(
@@ -1974,6 +1986,7 @@ namespace muduo {
 							websocket::FinE::FrameFinished);
 						n += left;
 						left -= left;
+#ifdef DEBUG
 						std::pair<FrameControlE, MessageFrameE> ty = get_frame_control_message_type(header);
 						printf("Frame[%d][%s][%s][%s] opcode[%s] FIN[%s] Payloadlen[%d] MASK[%d]\n",
 							i++,
@@ -1983,6 +1996,7 @@ namespace muduo {
 							websocket::Opcode_to_string(header.opcode).c_str(),
 							websocket::Fin_to_string(header.FIN).c_str(), header.Payloadlen, header.MASK);
 						printf("+-----------------------------------------------------------------------------------------------------------------+\n\n");
+#endif
 						assert(left == 0);
 						break;
 					}
@@ -2008,6 +2022,7 @@ namespace muduo {
 					websocket::header_t header = pack_unmask_uncontrol_frame(
 						buf, data, len,
 						messageType, websocket::FinE::FrameFinished);
+#ifdef DEBUG
 					int i = 0;
 					std::pair<FrameControlE, MessageFrameE> ty = get_frame_control_message_type(header);
 					printf("\n\n--- *** websocket::pack_unmask_data_frame:\n" \
@@ -2020,6 +2035,7 @@ namespace muduo {
 						websocket::Opcode_to_string(header.opcode).c_str(),
 						websocket::Fin_to_string(header.FIN).c_str(), header.Payloadlen, header.MASK);
 					printf("+-----------------------------------------------------------------------------------------------------------------+\n\n");
+#endif
 				}
 			}
 
@@ -2032,6 +2048,7 @@ namespace muduo {
 					buf, data, len,
 					websocket::OpcodeE::CloseMessage,
 					websocket::FinE::FrameFinished);
+#ifdef DEBUG
 				int i = 0;
 				std::pair<FrameControlE, MessageFrameE> ty = get_frame_control_message_type(header);
 				printf("\n\n--- *** websocket::pack_unmask_close_frame:\n" \
@@ -2044,6 +2061,7 @@ namespace muduo {
 					websocket::Opcode_to_string(header.opcode).c_str(),
 					websocket::Fin_to_string(header.FIN).c_str(), header.Payloadlen, header.MASK);
 				printf("+-----------------------------------------------------------------------------------------------------------------+\n\n");
+#endif
 			}
 
 			//pack_unmask_ping_frame S2C
@@ -2054,6 +2072,7 @@ namespace muduo {
 					buf, data, len,
 					websocket::OpcodeE::PingMessage,
 					websocket::FinE::FrameFinished);
+#ifdef DEBUG
 				int i = 0;
 				std::pair<FrameControlE, MessageFrameE> ty = get_frame_control_message_type(header);
 				printf("\n\n--- *** websocket::pack_unmask_ping_frame:\n" \
@@ -2066,6 +2085,7 @@ namespace muduo {
 					websocket::Opcode_to_string(header.opcode).c_str(),
 					websocket::Fin_to_string(header.FIN).c_str(), header.Payloadlen, header.MASK);
 				printf("+-----------------------------------------------------------------------------------------------------------------+\n\n");
+#endif
 			}
 
 			//pack_unmask_pong_frame S2C
@@ -2076,6 +2096,7 @@ namespace muduo {
 					buf, data, len,
 					websocket::OpcodeE::PongMessage,
 					websocket::FinE::FrameFinished);
+#ifdef DEBUG
 				int i = 0;
 				std::pair<FrameControlE, MessageFrameE> ty = get_frame_control_message_type(header);
 				printf("\n\n--- *** websocket::pack_unmask_pong_frame:\n" \
@@ -2088,6 +2109,7 @@ namespace muduo {
 					websocket::Opcode_to_string(header.opcode).c_str(),
 					websocket::Fin_to_string(header.FIN).c_str(), header.Payloadlen, header.MASK);
 				printf("+-----------------------------------------------------------------------------------------------------------------+\n\n");
+#endif
 			}
 
 			static uint8_t get_frame_FIN(websocket::header_t const& header) {
@@ -2389,16 +2411,16 @@ namespace muduo {
 				return bok;
 			}
 
-			//parse_frame_ReadExtendedPayloadlen2Byte
+			//parse_frame_ReadExtendedPayloadlenU16
 			//@param websocket::Context& 组件内部私有接口
-			static int parse_frame_ReadExtendedPayloadlen2Byte(
+			static int parse_frame_ReadExtendedPayloadlenU16(
 				websocket::Context& context,
 				IBytesBuffer /*const*/* buf,
 				ITimestamp* receiveTime, int* savedErrno);
 			
-			//parse_frame_ReadExtendedPayloadlen8Byte
+			//parse_frame_ReadExtendedPayloadlenI64
 			//@param websocket::Context& 组件内部私有接口
-			static int parse_frame_ReadExtendedPayloadlen8Byte(
+			static int parse_frame_ReadExtendedPayloadlenI64(
 				websocket::Context& context,
 				IBytesBuffer /*const*/* buf,
 				ITimestamp* receiveTime, int* savedErrno);
@@ -2485,21 +2507,21 @@ namespace muduo {
 					switch (header.Payloadlen) {
 					case 126: {
 						//////////////////////////////////////////////////////////////////////////
-						//StepE::ReadExtendedPayloadlen2Byte
+						//StepE::ReadExtendedPayloadlenU16
 						//////////////////////////////////////////////////////////////////////////
-						context.setWebsocketStep(websocket::StepE::ReadExtendedPayloadlen2Byte);
+						context.setWebsocketStep(websocket::StepE::ReadExtendedPayloadlenU16);
 						{
-							parse_frame_ReadExtendedPayloadlen2Byte(context, buf, receiveTime, savedErrno);
+							parse_frame_ReadExtendedPayloadlenU16(context, buf, receiveTime, savedErrno);
 						}
 						break;
 					}
 					case 127: {
 						//////////////////////////////////////////////////////////////////////////
-						//StepE::ReadExtendedPayloadlen8Byte
+						//StepE::ReadExtendedPayloadlenI64
 						//////////////////////////////////////////////////////////////////////////
-						context.setWebsocketStep(websocket::StepE::ReadExtendedPayloadlen8Byte);
+						context.setWebsocketStep(websocket::StepE::ReadExtendedPayloadlenI64);
 						{
-							parse_frame_ReadExtendedPayloadlen8Byte(context, buf, receiveTime, savedErrno);
+							parse_frame_ReadExtendedPayloadlenI64(context, buf, receiveTime, savedErrno);
 						}
 						break;
 					}
@@ -2552,20 +2574,22 @@ namespace muduo {
 					assert(context.getWebsocketStep() == websocket::StepE::ReadFrameHeader);
 					//数据包不足够解析，等待下次接收再解析
 					if (buf->readableBytes() < websocket::kHeaderLen) {
+#ifdef DEBUG
 						printf("websocket::parse_frame_ReadFrameHeader[bad][%d]: %s(%d) readableBytes(%d)\n",
 							header.Payloadlen,
 							websocket::Step_to_string(context.getWebsocketStep()).c_str(), websocket::kHeaderLen, buf->readableBytes());
+#endif
 						enough = false;
 						break;
 					}
-
+#ifdef DEBUG
 					printf("websocket::parse_frame_ReadFrameHeader[ok][%d]: %s(%d) readableBytes(%d)\n",
 						header.Payloadlen,
 						websocket::Step_to_string(context.getWebsocketStep()).c_str(), websocket::kHeaderLen, buf->readableBytes());
-
+#endif
 					//解析基础协议头/帧头(header)
 					parse_frame_header(header, buf);
-#if 0
+#ifdef DEBUG
 					//输出基础协议头信息
 					dump_header_info(header);
 #endif
@@ -2586,9 +2610,9 @@ namespace muduo {
 				return enough;
 			}
 
-			//parse_frame_ReadExtendedPayloadlen2Byte
+			//parse_frame_ReadExtendedPayloadlenU16
 			//@param websocket::Context& 组件内部私有接口
-			static int parse_frame_ReadExtendedPayloadlen2Byte(
+			static int parse_frame_ReadExtendedPayloadlenU16(
 				websocket::Context& context,
 				IBytesBuffer /*const*/* buf,
 				ITimestamp* receiveTime, int* savedErrno) {
@@ -2601,22 +2625,24 @@ namespace muduo {
 					//判断 Payloadlen = 126，读取后续2字节
 					assert(header.Payloadlen == 126);
 					//////////////////////////////////////////////////////////////////////////
-					//StepE::ReadExtendedPayloadlen2Byte
+					//StepE::ReadExtendedPayloadlenU16
 					//////////////////////////////////////////////////////////////////////////
-					assert(context.getWebsocketStep() == websocket::StepE::ReadExtendedPayloadlen2Byte);
-					if (buf->readableBytes() < websocket::kExtendedPayloadlen2Byte) {
+					assert(context.getWebsocketStep() == websocket::StepE::ReadExtendedPayloadlenU16);
+					if (buf->readableBytes() < websocket::kExtendedPayloadlenU16) {
 						//读取后续2字节，不够
-						printf("websocket::parse_frame_ReadExtendedPayloadlen2Byte[bad][%d]: %s(%d) readableBytes(%d)\n",
+#ifdef DEBUG
+						printf("websocket::parse_frame_ReadExtendedPayloadlenU16[bad][%d]: %s(%d) readableBytes(%d)\n",
 							header.Payloadlen,
-							websocket::Step_to_string(context.getWebsocketStep()).c_str(), websocket::kExtendedPayloadlen2Byte, buf->readableBytes());
+							websocket::Step_to_string(context.getWebsocketStep()).c_str(), websocket::kExtendedPayloadlenU16, buf->readableBytes());
+#endif
 						enough = false;
 						break;
 					}
-					
-					printf("websocket::parse_frame_ReadExtendedPayloadlen2Byte[ok][%d]: %s(%d) readableBytes(%d)\n",
+#ifdef DEBUG
+					printf("websocket::parse_frame_ReadExtendedPayloadlenU16[ok][%d]: %s(%d) readableBytes(%d)\n",
 						header.Payloadlen,
-						websocket::Step_to_string(context.getWebsocketStep()).c_str(), websocket::kExtendedPayloadlen2Byte, buf->readableBytes());
-
+						websocket::Step_to_string(context.getWebsocketStep()).c_str(), websocket::kExtendedPayloadlenU16, buf->readableBytes());
+#endif
 					//读取后续2字节 Extended payload length real Payload Data length
 					extended_header.setExtendedPayloadlen(Endian::networkToHost16(buf->readInt16()));
 					//判断 MASK = 1，读取Masking_key ///
@@ -2635,9 +2661,9 @@ namespace muduo {
 				return enough;
 			}
 			
-			//parse_frame_ReadExtendedPayloadlen8Byte
+			//parse_frame_ReadExtendedPayloadlenI64
 			//@param websocket::Context& 组件内部私有接口
-			static int parse_frame_ReadExtendedPayloadlen8Byte(
+			static int parse_frame_ReadExtendedPayloadlenI64(
 				websocket::Context& context,
 				IBytesBuffer /*const*/* buf,
 				ITimestamp* receiveTime, int* savedErrno) {
@@ -2650,22 +2676,24 @@ namespace muduo {
 					//判断 Payloadlen = 127，读取后续8字节
 					assert(header.Payloadlen == 127);
 					//////////////////////////////////////////////////////////////////////////
-					//StepE::ReadExtendedPayloadlen8Byte
+					//StepE::ReadExtendedPayloadlenI64
 					//////////////////////////////////////////////////////////////////////////
-					assert(context.getWebsocketStep() == websocket::StepE::ReadExtendedPayloadlen8Byte);
-					if (buf->readableBytes() < websocket::kExtendedPayloadlen8Byte) {
+					assert(context.getWebsocketStep() == websocket::StepE::ReadExtendedPayloadlenI64);
+					if (buf->readableBytes() < websocket::kExtendedPayloadlenI64) {
 						//读取后续8字节，不够
-						printf("websocket::parse_frame_ReadExtendedPayloadlen8Byte[bad][%d]: %s(%d) readableBytes(%d)\n",
+#ifdef DEBUG
+						printf("websocket::parse_frame_ReadExtendedPayloadlenI64[bad][%d]: %s(%d) readableBytes(%d)\n",
 							header.Payloadlen,
-							websocket::Step_to_string(context.getWebsocketStep()).c_str(), websocket::kExtendedPayloadlen8Byte, buf->readableBytes());
+							websocket::Step_to_string(context.getWebsocketStep()).c_str(), websocket::kExtendedPayloadlenI64, buf->readableBytes());
+#endif
 						enough = false;
 						break;
 					}
-
-					printf("websocket::parse_frame_ReadExtendedPayloadlen8Byte[ok][%d]: %s(%d) readableBytes(%d)\n",
+#ifdef DEBUG
+					printf("websocket::parse_frame_ReadExtendedPayloadlenI64[ok][%d]: %s(%d) readableBytes(%d)\n",
 						header.Payloadlen,
 						websocket::Step_to_string(context.getWebsocketStep()).c_str(), websocket::kMaskingkeyLen, buf->readableBytes());
-
+#endif
 					//读取后续8字节 Extended payload length real Payload Data length
 					extended_header.setExtendedPayloadlen((int64_t)Endian::networkToHost64(buf->readInt64()));
 					//判断 MASK = 1，读取Masking_key ///
@@ -2704,17 +2732,19 @@ namespace muduo {
 					assert(context.getWebsocketStep() == websocket::StepE::ReadMaskingkey);
 					if (buf->readableBytes() < websocket::kMaskingkeyLen) {
 						//读取不够
+#ifdef DEBUG
 						printf("websocket::parse_frame_ReadMaskingkey[bad][%d]: %s(%d) readableBytes(%d)\n",
 							header.Payloadlen,
 							websocket::Step_to_string(context.getWebsocketStep()).c_str(), websocket::kMaskingkeyLen, buf->readableBytes());
+#endif
 						enough = false;
 						break;
 					}
-
+#ifdef DEBUG
 					printf("websocket::parse_frame_ReadMaskingkey[ok][%d]: %s(%d) readableBytes(%d)\n",
 						header.Payloadlen,
 						websocket::Step_to_string(context.getWebsocketStep()).c_str(), websocket::kMaskingkeyLen, buf->readableBytes());
-
+#endif
 					//读取Masking_key
 					extended_header.setMaskingkey((uint8_t const*)buf->peek(), websocket::kMaskingkeyLen);
 					buf->retrieve(websocket::kMaskingkeyLen);
@@ -2795,20 +2825,26 @@ namespace muduo {
 					//读取Payload Data ///
 					if (buf->readableBytes() < header.Payloadlen) {
 						//读取不够
+#ifdef DEBUG
 						printf("websocket::parse_uncontrol_frame_ReadPayloadData[bad][%d]: %s(%d) readableBytes(%d)\n",
 							header.Payloadlen,
 							websocket::Step_to_string(context.getWebsocketStep()).c_str(), header.Payloadlen, buf->readableBytes());
+#endif
 						enough = false;
 						break;
 					}
+#ifdef DEBUG
+					//添加消息帧头
 					websocket::MessageFrameE messageFrameType = context.getDataMessage().addFrameHeader(extended_header);
 					//输出扩展协议头信息
 					dump_extended_header_info(extended_header);
+#endif
 					{
+#ifdef DEBUG
 						printf("websocket::parse_uncontrol_frame_ReadPayloadData[ok][%d]: %s(%d) readableBytes(%d)\n",
 							header.Payloadlen,
 							websocket::Step_to_string(context.getWebsocketStep()).c_str(), header.Payloadlen, buf->readableBytes());
-
+#endif
 						//读取Payload Data ///
 						context.getDataMessage().getMessageBuffer()->append(buf->peek(), header.Payloadlen);
 						buf->retrieve(header.Payloadlen);
@@ -2837,8 +2873,10 @@ namespace muduo {
 							//帧已结束(未分片/分片消息)，完整消息包，执行消息回调，继续从帧头开始解析 //////
 							//未分片消息结束帧 FIN = FrameFinished opcode = TextMessage|BinaryMessage|CloseMessage|PingMessage|PongMessage
 							//分片消息结束帧 FIN = FrameFinished opcode = SegmentMessage
+#ifdef DEBUG
 							//打印数据帧全部帧头信息
 							context.getDataMessage().dumpFrameHeaders("websocket::parse_uncontrol_frame_ReadPayloadData");
+#endif
 							switch (header.opcode) {
 							case OpcodeE::SegmentMessage: {
 								//分片消息帧(消息片段)，中间数据帧
@@ -2912,20 +2950,26 @@ namespace muduo {
 					//读取Payload Data ///
 					if (buf->readableBytes() < extended_header.getExtendedPayloadlenU16()) {
 						//读取不够
+#ifdef DEBUG
 						printf("websocket::parse_uncontrol_frame_ReadExtendedPayloadDataU16[bad][%d]: %s(%d) readableBytes(%d)\n",
 							header.Payloadlen,
 							websocket::Step_to_string(context.getWebsocketStep()).c_str(), extended_header.getExtendedPayloadlenU16(), buf->readableBytes());
+#endif
 						enough = false;
 						break;
 					}
+#ifdef DEBUG
+					//添加消息帧头
 					websocket::MessageFrameE messageFrameType = context.getDataMessage().addFrameHeader(extended_header);
 					//输出扩展协议头信息
 					dump_extended_header_info(extended_header);
+#endif
 					{
+#ifdef DEBUG
 						printf("websocket::parse_uncontrol_frame_ReadExtendedPayloadDataU16[ok][%d]: %s(%d) readableBytes(%d)\n",
 							header.Payloadlen,
 							websocket::Step_to_string(context.getWebsocketStep()).c_str(), extended_header.getExtendedPayloadlenU16(), buf->readableBytes());
-
+#endif
 						//读取Payload Data ///
 						context.getDataMessage().getMessageBuffer()->append(buf->peek(), extended_header.getExtendedPayloadlenU16());
 						buf->retrieve(extended_header.getExtendedPayloadlenU16());
@@ -2954,8 +2998,10 @@ namespace muduo {
 							//帧已结束(未分片/分片消息)，完整消息包，执行消息回调，继续从帧头开始解析 //////
 							//未分片消息结束帧 FIN = FrameFinished opcode = TextMessage|BinaryMessage|CloseMessage|PingMessage|PongMessage
 							//分片消息结束帧 FIN = FrameFinished opcode = SegmentMessage
+#ifdef DEBUG
 							//打印数据帧全部帧头信息
 							context.getDataMessage().dumpFrameHeaders("websocket::parse_uncontrol_frame_ReadExtendedPayloadDataU16");
+#endif
 							switch (header.opcode) {
 							case OpcodeE::SegmentMessage: {
 								//分片消息帧(消息片段)，中间数据帧
@@ -3029,21 +3075,27 @@ namespace muduo {
 					//读取Payload Data ///
 					if (buf->readableBytes() < extended_header.getExtendedPayloadlenI64()) {
 						//读取不够
+#ifdef DEBUG
 						//parse_uncontrol_frame_ReadExtendedPayloadDataI64[bad][127]: StepE::ReadPayloadData(131072) readableBytes(16370)
 						printf("websocket::parse_uncontrol_frame_ReadExtendedPayloadDataI64[bad][%d]: %s(%lld) readableBytes(%d)\n",
 							header.Payloadlen,
 							websocket::Step_to_string(context.getWebsocketStep()).c_str(), extended_header.getExtendedPayloadlenI64(), buf->readableBytes());
+#endif
 						enough = false;
 						break;
 					}
+#ifdef DEBUG
+					//添加消息帧头
 					websocket::MessageFrameE messageFrameType = context.getDataMessage().addFrameHeader(extended_header);
 					//输出扩展协议头信息
 					dump_extended_header_info(extended_header);
+#endif
 					{
+#ifdef DEBUG
 						printf("websocket::parse_uncontrol_frame_ReadExtendedPayloadDataI64[ok][%d]: %s(%lld) readableBytes(%d)\n",
 							header.Payloadlen,
 							websocket::Step_to_string(context.getWebsocketStep()).c_str(), extended_header.getExtendedPayloadlenI64(), buf->readableBytes());
-
+#endif
 						//读取Payload Data ///
 						context.getDataMessage().getMessageBuffer()->append(buf->peek(), extended_header.getExtendedPayloadlenI64());
 						buf->retrieve(extended_header.getExtendedPayloadlenI64());
@@ -3072,10 +3124,10 @@ namespace muduo {
 							//帧已结束(未分片/分片消息)，完整消息包，执行消息回调，继续从帧头开始解析 //////
 							//未分片消息结束帧 FIN = FrameFinished opcode = TextMessage|BinaryMessage|CloseMessage|PingMessage|PongMessage
 							//分片消息结束帧 FIN = FrameFinished opcode = SegmentMessage
+#ifdef DEBUG
 							//打印数据帧全部帧头信息
 							context.getDataMessage().dumpFrameHeaders("websocket::parse_uncontrol_frame_ReadExtendedPayloadDataI64");
-							//打印控制帧全部帧头信息
-							context.getControlMessage().dumpFrameHeaders("websocket::parse_control_frame_ReadExtendedPayloadDataI64");
+#endif
 							switch (header.opcode) {
 							case OpcodeE::SegmentMessage: {
 								//分片消息帧(消息片段)，中间数据帧
@@ -3149,20 +3201,26 @@ namespace muduo {
 					//读取Payload Data ///
 					if (buf->readableBytes() < header.Payloadlen) {
 						//读取不够
+#ifdef DEBUG
 						printf("websocket::parse_control_frame_ReadPayloadData[bad][%d]: %s(%d) readableBytes(%d)\n",
 							header.Payloadlen,
 							websocket::Step_to_string(context.getWebsocketStep()).c_str(), header.Payloadlen, buf->readableBytes());
+#endif
 						enough = false;
 						break;
 					}
+#ifdef DEBUG
+					//添加消息帧头
 					websocket::MessageFrameE messageFrameType = context.getControlMessage().addFrameHeader(extended_header);
 					//输出扩展协议头信息
 					dump_extended_header_info(extended_header);
+#endif
 					{
+#ifdef DEBUG
 						printf("websocket::parse_control_frame_ReadPayloadData[ok][%d]: %s(%d) readableBytes(%d)\n",
 							header.Payloadlen,
 							websocket::Step_to_string(context.getWebsocketStep()).c_str(), header.Payloadlen, buf->readableBytes());
-
+#endif
 						//读取Payload Data ///
 						context.getControlMessage().getMessageBuffer()->append(buf->peek(), header.Payloadlen);
 						buf->retrieve(header.Payloadlen);
@@ -3191,8 +3249,10 @@ namespace muduo {
 							//帧已结束(未分片/分片消息)，完整消息包，执行消息回调，继续从帧头开始解析 //////
 							//未分片消息结束帧 FIN = FrameFinished opcode = TextMessage|BinaryMessage|CloseMessage|PingMessage|PongMessage
 							//分片消息结束帧 FIN = FrameFinished opcode = SegmentMessage
+#ifdef DEBUG
 							//打印控制帧全部帧头信息
 							context.getControlMessage().dumpFrameHeaders("websocket::parse_control_frame_ReadPayloadData");
+#endif
 							switch (header.opcode) {
 							case OpcodeE::CloseMessage: {
 								//连接关闭帧
@@ -3296,20 +3356,26 @@ namespace muduo {
 					//读取Payload Data ///
 					if (buf->readableBytes() < extended_header.getExtendedPayloadlenU16()) {
 						//读取不够
+#ifdef DEBUG
 						printf("websocket::parse_control_frame_ReadExtendedPayloadDataU16[bad][%d]: %s(%d) readableBytes(%d)\n",
 							header.Payloadlen,
 							websocket::Step_to_string(context.getWebsocketStep()).c_str(), extended_header.getExtendedPayloadlenU16(), buf->readableBytes());
+#endif
 						enough = false;
 						break;
 					}
+#ifdef DEBUG
+					//添加消息帧头
 					websocket::MessageFrameE messageFrameType = context.getControlMessage().addFrameHeader(extended_header);
 					//输出扩展协议头信息
 					dump_extended_header_info(extended_header);
+#endif
 					{
+#ifdef DEBUG
 						printf("websocket::parse_control_frame_ReadExtendedPayloadDataU16[ok][%d]: %s(%d) readableBytes(%d)\n",
 							header.Payloadlen,
 							websocket::Step_to_string(context.getWebsocketStep()).c_str(), extended_header.getExtendedPayloadlenU16(), buf->readableBytes());
-
+#endif
 						//读取Payload Data ///
 						context.getControlMessage().getMessageBuffer()->append(buf->peek(), extended_header.getExtendedPayloadlenU16());
 						buf->retrieve(extended_header.getExtendedPayloadlenU16());
@@ -3338,8 +3404,10 @@ namespace muduo {
 							//帧已结束(未分片/分片消息)，完整消息包，执行消息回调，继续从帧头开始解析 //////
 							//未分片消息结束帧 FIN = FrameFinished opcode = TextMessage|BinaryMessage|CloseMessage|PingMessage|PongMessage
 							//分片消息结束帧 FIN = FrameFinished opcode = SegmentMessage
+#ifdef DEBUG
 							//打印控制帧全部帧头信息
 							context.getControlMessage().dumpFrameHeaders("websocket::parse_control_frame_ReadExtendedPayloadDataU16");
+#endif
 							switch (header.opcode) {
 							case OpcodeE::CloseMessage: {
 								//连接关闭帧
@@ -3443,21 +3511,27 @@ namespace muduo {
 					//读取Payload Data ///
 					if (buf->readableBytes() < extended_header.getExtendedPayloadlenI64()) {
 						//读取不够
+#ifdef DEBUG
 						//parse_control_frame_ReadExtendedPayloadDataI64[bad][127]: StepE::ReadPayloadData(131072) readableBytes(16370)
 						printf("websocket::parse_control_frame_ReadExtendedPayloadDataI64[bad][%d]: %s(%lld) readableBytes(%d)\n",
 							header.Payloadlen,
 							websocket::Step_to_string(context.getWebsocketStep()).c_str(), extended_header.getExtendedPayloadlenI64(), buf->readableBytes());
+#endif
 						enough = false;
 						break;
 					}
+#ifdef DEBUG
+					//添加消息帧头
 					websocket::MessageFrameE messageFrameType = context.getControlMessage().addFrameHeader(extended_header);
 					//输出扩展协议头信息
 					dump_extended_header_info(extended_header);
+#endif
 					{
+#ifdef DEBUG
 						printf("websocket::parse_control_frame_ReadExtendedPayloadDataI64[ok][%d]: %s(%lld) readableBytes(%d)\n",
 							header.Payloadlen,
 							websocket::Step_to_string(context.getWebsocketStep()).c_str(), extended_header.getExtendedPayloadlenI64(), buf->readableBytes());
-
+#endif
 						//读取Payload Data ///
 						context.getControlMessage().getMessageBuffer()->append(buf->peek(), extended_header.getExtendedPayloadlenI64());
 						buf->retrieve(extended_header.getExtendedPayloadlenI64());
@@ -3486,8 +3560,10 @@ namespace muduo {
 							//帧已结束(未分片/分片消息)，完整消息包，执行消息回调，继续从帧头开始解析 //////
 							//未分片消息结束帧 FIN = FrameFinished opcode = TextMessage|BinaryMessage|CloseMessage|PingMessage|PongMessage
 							//分片消息结束帧 FIN = FrameFinished opcode = SegmentMessage
+#ifdef DEBUG
 							//打印控制帧全部帧头信息
 							context.getControlMessage().dumpFrameHeaders("websocket::parse_control_frame_ReadExtendedPayloadDataI64");
+#endif
 							switch (header.opcode) {
 							case OpcodeE::CloseMessage: {
 								//连接关闭帧
@@ -3591,15 +3667,18 @@ namespace muduo {
 				assert(controlBuffer);
 				std::pair<FrameControlE, MessageFrameE> ty = get_frame_control_message_type(header);
 				bool enough = true;
-				//先解析包头(header)，再解析包体(body)
+#ifdef DEBUG
 				int i = 0;
+#endif
 				//关闭消息帧 PayloadDatalen == 0/buf->readableBytes() == 0
 				while (enough && buf->readableBytes() > 0) {
+#ifdef DEBUG
 					//websocket::parse_frame loop[1] StepE::ReadFrameHeader readableBytes(6)
 					//websocket::parse_frame loop[2] StepE::ReadMaskingkey readableBytes(4)
 					printf("websocket::parse_frame loop[%d] %s readableBytes(%d)\n",
 						++i, websocket::Step_to_string(context.getWebsocketStep()).c_str(), buf->readableBytes());
-					//消息流解析步骤step
+#endif
+					//消息流解析步骤step，先解析包头(header)，再解析包体(body)
 					websocket::StepE step = context.getWebsocketStep();
 					switch (step) {
 					case StepE::ReadFrameHeader: {
@@ -3610,12 +3689,12 @@ namespace muduo {
 						enough = parse_frame_ReadFrameHeader(context, buf, receiveTime, savedErrno);
 						break;
 					}
-					case StepE::ReadExtendedPayloadlen2Byte: {
-						enough = parse_frame_ReadExtendedPayloadlen2Byte(context, buf, receiveTime, savedErrno);
+					case StepE::ReadExtendedPayloadlenU16: {
+						enough = parse_frame_ReadExtendedPayloadlenU16(context, buf, receiveTime, savedErrno);
 						break;
 					}
-					case StepE::ReadExtendedPayloadlen8Byte: {
-						enough = parse_frame_ReadExtendedPayloadlen8Byte(context, buf, receiveTime, savedErrno);
+					case StepE::ReadExtendedPayloadlenI64: {
+						enough = parse_frame_ReadExtendedPayloadlenI64(context, buf, receiveTime, savedErrno);
 						break;
 					}
 					case StepE::ReadMaskingkey: {
@@ -3714,37 +3793,47 @@ namespace muduo {
 					//数据包太小 ///
 					if (buf->readableBytes() <= 4) {
 						*saveErrno = HandShakeE::WS_ERROR_WANT_MORE;
+#ifdef DEBUG
 						printf("-----------------------------------------------------------------------------\n");
 						printf("websocket::do_handshake WS_ERROR_WANT_MORE\n");
+#endif
 						break;
 					}
 					//数据包太大 ///
 					else if (buf->readableBytes() > 1024) {
 						*saveErrno = HandShakeE::WS_ERROR_PACKSZ;
+#ifdef DEBUG
+						
 						printf("-----------------------------------------------------------------------------\n");
 						printf("websocket::do_handshake WS_ERROR_PACKSZ\n");
+#endif
 						break;
 					}
 					//查找\r\n\r\n ///
 					const char* crlfcrlf = buf->findCRLFCRLF();
 					if (!crlfcrlf) {
 						*saveErrno = HandShakeE::WS_ERROR_CRLFCRLF;
+#ifdef DEBUG
 						printf("-----------------------------------------------------------------------------\n");
 						printf("websocket::do_handshake WS_ERROR_CRLFCRLF\n");
+#endif
 						break;
 					}
 
-					//LOG_ERROR << __FUNCTION__ << " --- *** ";
+#ifdef DEBUG
 					printf("----------------------------------------------\n");
 					printf("size = %d %.*s\n", buf->readableBytes(), buf->readableBytes(), buf->peek());
+#endif
 					//http::IContext ///
 					http::IContextPtr httpContext(context.getHttpContext().lock());
 					assert(httpContext);
 					if (!httpContext->parseRequestPtr(buf, receiveTime)) {
 						//发生错误
 						*saveErrno = HandShakeE::WS_ERROR_PARSE;
+#ifdef DEBUG
 						printf("-----------------------------------------------------------------------------\n");
 						printf("websocket::do_handshake WS_ERROR_PARSE\n");
+#endif
 						break;
 					}
 					else if (httpContext->gotAll()) {
@@ -3801,8 +3890,10 @@ namespace muduo {
 						//释放httpContext资源 ///
 						httpContext.reset();
 						//握手成功 ///
+#ifdef DEBUG
 						printf("-----------------------------------------------------------------\n");
 						printf("websocket::do_handshake succ\n");
+#endif
 						return true;
 					}
 				} while (0);
@@ -3811,8 +3902,10 @@ namespace muduo {
 				case HandShakeE::WS_ERROR_PARSE:
 				case HandShakeE::WS_ERROR_PACKSZ:
 					//握手失败 ///
+#ifdef DEBUG
 					printf("-----------------------------------------------------------------\n");
 					printf("websocket::do_handshake failed\n");
+#endif
 					break;
 				}
 				return false;

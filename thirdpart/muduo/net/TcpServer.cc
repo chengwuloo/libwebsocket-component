@@ -122,8 +122,8 @@ void TcpServer::removeConnection(const TcpConnectionPtr& conn)
 void TcpServer::removeConnectionInLoop(const TcpConnectionPtr& conn)
 {
   loop_->assertInLoopThread();
-  LOG_INFO << "TcpServer::removeConnectionInLoop [" << name_
-           << "] - connection " << conn->name();
+  //LOG_INFO << "TcpServer::removeConnectionInLoop [" << name_
+  //         << "] - connection " << conn->name();
   //////////////////////////////////////////////////////////////////////////
   //释放conn连接对象sockfd资源流程 ///
   //TcpServer::removeConnection ->
