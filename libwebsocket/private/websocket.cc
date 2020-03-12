@@ -3595,11 +3595,10 @@ namespace muduo {
 				int i = 0;
 				//关闭消息帧 PayloadDatalen == 0/buf->readableBytes() == 0
 				while (enough && buf->readableBytes() > 0) {
-					//websocket::parse_frame loop[1] StepE::ReadFrameHeader(0) readableBytes(6)
-					//websocket::parse_frame loop[2] StepE::ReadMaskingkey(0) readableBytes(4)
-					printf("websocket::parse_frame loop[%d] %s(%lld) readableBytes(%d)\n",
-						++i,
-						websocket::Step_to_string(context.getWebsocketStep()).c_str(), extended_header.getRealDatalen(), buf->readableBytes());
+					//websocket::parse_frame loop[1] StepE::ReadFrameHeader readableBytes(6)
+					//websocket::parse_frame loop[2] StepE::ReadMaskingkey readableBytes(4)
+					printf("websocket::parse_frame loop[%d] %s readableBytes(%d)\n",
+						++i, websocket::Step_to_string(context.getWebsocketStep()).c_str(), buf->readableBytes());
 					//消息流解析步骤step
 					websocket::StepE step = context.getWebsocketStep();
 					switch (step) {
