@@ -461,7 +461,7 @@ namespace muduo {
 			struct extended_header_t {
 			public:
 				//set_header header_t，uint16_t
-				inline void set_header(header_t const& header) {
+				inline void set_header(websocket::header_t const& header) {
 #if 0
 					memcpy(&this->header, &header, kHeaderLen);
 #else
@@ -469,11 +469,11 @@ namespace muduo {
 #endif
 				}
 				//get_header header_t，uint16_t
-				inline header_t& get_header() {
+				inline websocket::header_t& get_header() {
 					return header;
 				}
 				//get_header header_t，uint16_t
-				inline header_t const& get_header() const {
+				inline websocket::header_t const& get_header() const {
 					return header;
 				}
 				//reset_header header_t，uint16_t
@@ -622,7 +622,7 @@ namespace muduo {
 				}
 			public:
 				//@ header_t，uint16_t 基础协议头
-				header_t header;
+				websocket::header_t header;
 
 				//@ Masking-key 字节对齐关系，在ExtendedPayloadlen之前定义占用空间更小
 				uint8_t Masking_key[kMaskingkeyLen];
@@ -643,16 +643,52 @@ namespace muduo {
 			//@@ frame_header_t 分片/未分片每帧头
 			struct frame_header_t {
 			public:
+				explicit frame_header_t(
+					FrameControlE frameControlType,
+					MessageFrameE messageFrameType)
+					: frameControlType(frameControlType)
+					, messageFrameType(messageFrameType)
+					, header({ 0 }) {
+
+				}
+				explicit frame_header_t(
+					FrameControlE frameControlType,
+					MessageFrameE messageFrameType, websocket::extended_header_t const& ref)
+					: frameControlType(frameControlType)
+					, messageFrameType(messageFrameType)
+					, header({ 0 }) {
+					header.set_header(ref.get_header());
+					header.setExtendedPayloadlen(ref.getExtendedPayloadlenI64());
+					header.setMaskingkey(ref.getMaskingkey(), websocket::kMaskingkeyLen);
+				}
+				//copy contruct for emplace_back
+				explicit frame_header_t(frame_header_t const& ref) {
+					copy(ref);
+				}
+				//operator=
+				inline frame_header_t const& operator=(frame_header_t const& ref) {
+					copy(ref); return *this;
+				}
+				//copy frame_header_t
+				inline void copy(frame_header_t const& ref) {
+					setFrameControlType(ref.getFrameControlType());
+					setMessageFrameType(ref.getMessageFrameType());
+					//header.reset();
+					resetExtendedHeader();
+					header.set_header(ref.get_header());
+					header.setExtendedPayloadlen(ref.getExtendedPayloadlenI64());
+					header.setMaskingkey(ref.getMaskingkey(), websocket::kMaskingkeyLen);
+				}
 				//set_header header_t，uint16_t
-				inline void set_header(header_t const& header) {
+				inline void set_header(websocket::header_t const& header) {
 					this->header.set_header(header);
 				}
 				//get_header header_t，uint16_t
-				inline header_t& get_header() {
+				inline websocket::header_t& get_header() {
 					return header.get_header();
 				}
 				//get_header header_t，uint16_t
-				inline header_t const& get_header() const {
+				inline websocket::header_t const& get_header() const {
 					return header.get_header();
 				}
 				//getPayloadlen
@@ -1521,14 +1557,16 @@ namespace muduo {
 								frameControlType:frameControlType,
 								messageFrameType:messageFrameType,
 				};
-#else
+#elif 0
 				frame_header_t frameHeader = { 0 };
-#endif
 				frameHeader.setFrameControlType(frameControlType);
 				frameHeader.setMessageFrameType(messageFrameType);
 				frameHeader.set_header(header.get_header());
 				frameHeader.setExtendedPayloadlen(header.getExtendedPayloadlenI64());
 				frameHeader.setMaskingkey(header.getMaskingkey(), websocket::kMaskingkeyLen);
+#else
+				frame_header_t frameHeader(frameControlType, messageFrameType, header);
+#endif
 				//测试帧头合法性 ///
 				frameHeader.testValidate();
 				//添加帧头
