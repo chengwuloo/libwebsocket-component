@@ -2442,7 +2442,7 @@ namespace muduo {
 				bool bok = true;
 				do {
 					//之前解析基础协议头/帧头(header) header_t，uint16_t
-					assert(context.getWebsocketState() == websocket::StepE::ReadFrameHeader);
+					assert(context.getWebsocketStep() == websocket::StepE::ReadFrameHeader);
 					//Payloadlen 判断
 					switch (header.Payloadlen) {
 					case 126: {
@@ -2511,7 +2511,7 @@ namespace muduo {
 					//////////////////////////////////////////////////////////////////////////
 					//StepE::ReadFrameHeader
 					//////////////////////////////////////////////////////////////////////////
-					assert(context.getWebsocketStep() == StepE::ReadFrameHeader);
+					assert(context.getWebsocketStep() == websocket::StepE::ReadFrameHeader);
 					//数据包不足够解析，等待下次接收再解析
 					if (buf->readableBytes() < websocket::kHeaderLen) {
 						printf("websocket::parse_frame_ReadFrameHeader[bad][%d]: %s(%d) readableBytes(%d)\n",
@@ -2532,6 +2532,7 @@ namespace muduo {
 					dump_header_info(header);
 #endif
 					//消息帧有效性安全检查
+					//判断并指定帧消息类型
 					validate_message_frame(context, buf, receiveTime, savedErrno);
 					//更新帧体(body)消息流解析步骤step
 					//	非控制帧(数据帧) frame body
@@ -3792,7 +3793,7 @@ namespace muduo {
 					websocket::Context* pctx = reinterpret_cast<websocket::Context*>(ctx.get());
 					websocket::Context& context = *pctx;
 					int saveErrno = 0;
-					if (context.getWebsocketState() == StateE::kClosed) {
+					if (context.getWebsocketState() == websocket::StateE::kClosed) {
 						//do_handshake 握手
 						bool wsConnected = websocket::do_handshake(context, buf, receiveTime, &saveErrno);
 						switch (saveErrno)
@@ -3816,7 +3817,7 @@ namespace muduo {
 						}
 					}
 					else {
-						assert(context.getWebsocketState() == StateE::kConnected);
+						assert(context.getWebsocketState() == websocket::StateE::kConnected);
 						//parse_frame 解析帧
 						websocket::parse_frame(context, buf, receiveTime, &saveErrno);
 					}
