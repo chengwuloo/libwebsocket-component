@@ -82,6 +82,12 @@ namespace muduo {
 		typedef std::shared_ptr<IBytesBuffer> IBytesBufferPtr;
 		typedef std::weak_ptr<IBytesBuffer> WeakIBytesBufferPtr;
 
+		//readFdFull for EPOLLET
+		ssize_t readFdFull(int sockfd, IBytesBuffer* buf, int* savedErrno);
+		
+		//writeFdFull for EPOLLET
+		ssize_t writeFdFull(int sockfd, void const* data, size_t len, int* savedErrno);
+
 	}  // namespace net
 }  // namespace muduo
 
