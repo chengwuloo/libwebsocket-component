@@ -423,9 +423,20 @@ class Buffer : public muduo::copyable, public muduo::net::IBytesBuffer
   /// It may implement with readv(2)
   /// @return result of read(2), @c errno is saved
   ssize_t readFd(int fd, int* savedErrno);
+  
+  //readFull for EPOLLET
+  ssize_t readFull(int sockfd, int* savedErrno);
+  
+  //writeFull for EPOLLET
+  static ssize_t writeFull(int sockfd, void const* data, size_t len, int* savedErrno);
+
+  //SSL_read
   ssize_t SSL_read(SSL* ssl, int* savedErrno);
+  
+  //SSL_write
   static ssize_t SSL_write(SSL* ssl, void const* data, size_t len, int* savedErrno);
- private:
+
+private:
 
   char* begin()
   { return &*buffer_.begin(); }

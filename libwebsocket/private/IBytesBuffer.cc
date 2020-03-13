@@ -53,14 +53,14 @@ namespace muduo {
 			/// 0      <=      readerIndex   <=   writerIndex    <=     size
 			/// @endcode
 			///
-			//readFdFull for EPOLLET
-			ssize_t readFdFull(int sockfd, IBytesBuffer* buf, int* savedErrno) {
+			//readFull for EPOLLET
+			ssize_t readFull(int sockfd, IBytesBuffer* buf, int* savedErrno) {
 				assert(buf->writableBytes() >= 0);
 				//make sure that writable > 0
 				if (buf->writableBytes() == 0) {
 					buf->ensureWritableBytes(implicit_cast<size_t>(4096));
 				}
-				//printf("\nIBytesBuffer::readFdFull begin {{{\n");
+				//printf("\nIBytesBuffer::readFull begin {{{\n");
 				ssize_t n = 0;
 				do {
 #if 0 //test
@@ -84,8 +84,11 @@ namespace muduo {
 							errno != ECONNABORTED &&
 							errno != EPROTO*/ &&
 							errno != EINTR) {
-							printf("IBytesBuffer::readFdFull rc = %d errno = %d errmsg = %s\n",
+							printf("IBytesBuffer::readFull rc = %d errno = %d errmsg = %s\n",
 								rc, errno, strerror(errno));
+							*savedErrno = errno;
+						}
+						else {
 							*savedErrno = errno;
 						}
 						break;
@@ -94,12 +97,12 @@ namespace muduo {
 						//Connection has been aborted by peer
 					}
 				} while (true);
-				//printf("IBytesBuffer::readFdFull end }}}\n\n");
+				//printf("IBytesBuffer::readFull end }}}\n\n");
 				return n;
-			}//readFdFull
+			}//readFull
 			
-			//writeFdFull for EPOLLET
-			ssize_t writeFdFull(int sockfd, void const* data, size_t len, int* savedErrno) {
+			//writeFull for EPOLLET
+			ssize_t writeFull(int sockfd, void const* data, size_t len, int* savedErrno) {
 				ssize_t left = (ssize_t)len;
 				ssize_t n = 0;
 				while (left > 0) {
@@ -116,8 +119,11 @@ namespace muduo {
 							errno != ECONNABORTED &&
 							errno != EPROTO*/ &&
 							errno != EINTR) {
-							printf("IBytesBuffer::writeFdFull rc = %d left = %d errno = %d errmsg = %s\n",
+							printf("IBytesBuffer::writeFull rc = %d left = %d errno = %d errmsg = %s\n",
 								rc, left, errno, strerror(errno));
+							*savedErrno = errno;
+						}
+						else {
 							*savedErrno = errno;
 						}
 						break;
@@ -129,7 +135,7 @@ namespace muduo {
 					}
 				}
 				return n;
-			}//writeFdFull
+			}//writeFull
 
 		}//namespace ssl
     } // namespace net

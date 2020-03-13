@@ -59,20 +59,22 @@ ssize_t Buffer::readFd(int fd, int* savedErrno)
   return n;
 }
 
-/*
-    SSL_read
-    @author create by andy_ro
-    @Date		   03.03.2020
-*/
+//readFull for EPOLLET
+ssize_t Buffer::readFull(int sockfd, int* savedErrno) {
+    return ::muduo::net::readFull(sockfd, this, savedErrno);
+}
+
+//writeFull for EPOLLET
+ssize_t Buffer::writeFull(int sockfd, void const* data, size_t len, int* savedErrno) {
+    return ::muduo::net::writeFull(sockfd, data, len, savedErrno);
+}
+
+//SSL_read
 ssize_t Buffer::SSL_read(SSL* ssl, int* savedErrno) {
     return muduo::net::ssl::SSL_read(ssl, this, savedErrno);
 }
 
-/*
-    SSL_write
-    @author create by andy_ro
-    @Date		   03.03.2020
-*/
+//SSL_write
 ssize_t Buffer::SSL_write(SSL* ssl, void const* data, size_t len, int* savedErrno) {
     return muduo::net::ssl::SSL_write(ssl, data, len, savedErrno);
 }

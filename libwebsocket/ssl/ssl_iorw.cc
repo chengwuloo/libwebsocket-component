@@ -111,6 +111,13 @@ namespace muduo {
 							*savedErrno = SSL_ERROR_WANT_WRITE;
 							break;
 						default:
+							if (errno != EAGAIN /*&&
+								errno != EWOULDBLOCK &&
+								errno != ECONNABORTED &&
+								errno != EPROTO*/ &&
+								errno != EINTR) {
+								//*savedErrno = errno;
+							}
 							*savedErrno = err;
 							break;
 						}
@@ -172,6 +179,13 @@ namespace muduo {
 							*savedErrno = SSL_ERROR_SSL;
 							break;
 						default:
+							if (errno != EAGAIN /*&&
+								errno != EWOULDBLOCK &&
+								errno != ECONNABORTED &&
+								errno != EPROTO*/ &&
+								errno != EINTR) {
+								//*savedErrno = errno;
+							}
 							*savedErrno = err;
 							break;
 						}

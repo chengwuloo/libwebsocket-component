@@ -44,7 +44,7 @@ class Acceptor : noncopyable
   void listen();
 
  private:
-  void handleRead();
+  void handleRead(int events);
 
   EventLoop* loop_;
   Socket acceptSocket_;

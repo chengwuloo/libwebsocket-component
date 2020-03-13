@@ -126,6 +126,8 @@ void TcpServer::removeConnectionInLoop(const TcpConnectionPtr& conn)
   //         << "] - connection " << conn->name();
   //////////////////////////////////////////////////////////////////////////
   //释放conn连接对象sockfd资源流程 ///
+  //TcpConnection::handleClose ->
+  //TcpConnection::closeCallback_ ->
   //TcpServer::removeConnection ->
   //TcpServer::removeConnectionInLoop ->
   //TcpConnection::dtor ->
