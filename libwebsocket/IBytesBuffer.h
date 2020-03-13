@@ -77,16 +77,16 @@ namespace muduo {
 			virtual void shrink(size_t reserve) = 0;
 			virtual size_t internalCapacity() const = 0;
 			virtual ssize_t readFd(int fd, int* savedErrno) = 0;
+
+			//readFull for EPOLLET
+			static ssize_t readFull(int sockfd, IBytesBuffer* buf, int* savedErrno);
+
+			//writeFull for EPOLLET
+			static ssize_t writeFull(int sockfd, void const* data, size_t len, int* savedErrno);
 		};
 		
 		typedef std::shared_ptr<IBytesBuffer> IBytesBufferPtr;
 		typedef std::weak_ptr<IBytesBuffer> WeakIBytesBufferPtr;
-
-		//readFull for EPOLLET
-		ssize_t readFull(int sockfd, IBytesBuffer* buf, int* savedErrno);
-		
-		//writeFull for EPOLLET
-		ssize_t writeFull(int sockfd, void const* data, size_t len, int* savedErrno);
 
 	}  // namespace net
 }  // namespace muduo

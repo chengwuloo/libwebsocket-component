@@ -469,58 +469,57 @@ void TcpConnection::handleRead(Timestamp receiveTime)
 {
   loop_->assertInLoopThread();
   if (ssl_ctx_ && !sslConnected_) {
-        int saveErrno = 0;
-        //SSL握手连接 ///
-        sslConnected_ = ssl::SSL_handshake(ssl_ctx_, ssl_, socket_->fd(), saveErrno);
-        switch (saveErrno)
-        {
-        case SSL_ERROR_WANT_READ:
-            channel_->enableReading();
-            break;
-        case SSL_ERROR_WANT_WRITE:
-            channel_->enableWriting();
-            break;
-        case SSL_ERROR_SSL:
-            //LOG_ERROR << __FUNCTION__ << " --- *** " << "SSL_ERROR_SSL handleClose()";
-            handleClose();
-            break;
-        case 0:
-            //succ
-            break;
-        default:
-            handleClose();
-            break;
-        }
-    }
-    else {
-        int savedErrno = 0;
-        ssize_t n = !ssl_ ?
-           /* inputBuffer_.readFd(channel_->fd(), &savedErrno)*/
-            inputBuffer_.readFull(channel_->fd(), &savedErrno) :
-            inputBuffer_.SSL_read(ssl_, &savedErrno);
-        if (n > 0)
-        {
-            messageCallback_(shared_from_this(), &inputBuffer_, receiveTime);
-        }
-        else if (n == 0)
-        {
-            if (errno != EAGAIN &&
-                errno != EINTR) {
-                handleClose();
-            }
-            else {
-				LOG_SYSERR << "TcpConnection::handleRead";
-				handleError();
-                errno = savedErrno;
-			}
-        }
-        //else
-        //{
-        //    errno = savedErrno;
-        //    //LOG_SYSERR << "TcpConnection::handleRead";
-        //    handleError();
-        //}
-    }
+	  int saveErrno = 0;
+	  //SSL握手连接 ///
+	  sslConnected_ = ssl::SSL_handshake(ssl_ctx_, ssl_, socket_->fd(), saveErrno);
+	  switch (saveErrno)
+	  {
+	  case SSL_ERROR_WANT_READ:
+		  channel_->enableReading();
+		  break;
+	  case SSL_ERROR_WANT_WRITE:
+		  channel_->enableWriting();
+		  break;
+	  case SSL_ERROR_SSL:
+		  //LOG_ERROR << __FUNCTION__ << " --- *** " << "SSL_ERROR_SSL handleClose()";
+		  handleClose();
+		  break;
+	  case 0:
+		  //succ
+		  break;
+	  default:
+		  handleClose();
+		  break;
+	  }
+  }
+  else {
+	  int savedErrno = 0;
+	  ssize_t n = !ssl_ ?
+		  /* inputBuffer_.readFd(channel_->fd(), &savedErrno)*/
+		  inputBuffer_.readFull(channel_->fd(), &savedErrno) :
+		  inputBuffer_.SSL_read(ssl_, &savedErrno);
+	  if (n > 0)
+	  {
+		  messageCallback_(shared_from_this(), &inputBuffer_, receiveTime);
+	  }
+	  else if (n == 0)
+	  {
+		  if (errno != EAGAIN &&
+			  errno != EINTR) {
+			  handleClose();
+		  }
+		  else {
+			  LOG_SYSERR << "TcpConnection::handleRead";
+			  handleError();
+			  errno = savedErrno;
+		  }
+	  }
+	  //else
+	  //{
+	  //    errno = savedErrno;
+	  //    //LOG_SYSERR << "TcpConnection::handleRead";
+	  //    handleError();
+	  //}
   }
 }
 
