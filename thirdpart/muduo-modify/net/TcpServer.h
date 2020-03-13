@@ -99,7 +99,7 @@ class TcpServer : noncopyable
   ///
   /// It's harmless to call it multiple times.
   /// Thread safe.
-  void start();
+  void start(bool et = false);
 
   /// Set connection callback.
   /// Not thread safe.
@@ -130,7 +130,7 @@ class TcpServer : noncopyable
   void removeConnectionInLoop(const TcpConnectionPtr& conn);
 
   typedef std::map<string, TcpConnectionPtr> ConnectionMap;
-  
+  bool enable_et_;
   SSL_CTX* ssl_ctx_;
   EventLoop* loop_;  // the acceptor loop
   const string ipPort_;

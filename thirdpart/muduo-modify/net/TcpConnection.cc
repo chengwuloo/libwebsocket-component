@@ -43,7 +43,8 @@ TcpConnection::TcpConnection(EventLoop* loop,
                              int sockfd,
                              const InetAddress& localAddr,
                              const InetAddress& peerAddr,
-                             SSL_CTX* ctx)
+                             SSL_CTX* ctx,
+                             bool et)
   : loop_(CHECK_NOTNULL(loop)),
     name_(nameArg),
     state_(kConnecting),
@@ -55,7 +56,8 @@ TcpConnection::TcpConnection(EventLoop* loop,
     highWaterMark_(64*1024*1024),
     ssl_ctx_(ctx),
     ssl_(NULL),
-    sslConnected_(false)
+    sslConnected_(false),
+    enable_et_(et)
 {
   channel_->setReadCallback(
       std::bind(&TcpConnection::handleRead, this, _1));
@@ -305,7 +307,7 @@ void TcpConnection::sendInLoop(const void* data, size_t len)
     outputBuffer_.append(static_cast<const char*>(data)+nwrote, remaining);
     if (!channel_->isWriting())
     {
-      channel_->enableWriting();
+      channel_->enableWriting(enable_et_);
     }
   }
 }
@@ -421,7 +423,7 @@ void TcpConnection::startReadInLoop()
   loop_->assertInLoopThread();
   if (!reading_ || !channel_->isReading())
   {
-    channel_->enableReading();
+    channel_->enableReading(enable_et_);
     reading_ = true;
   }
 }
@@ -436,7 +438,7 @@ void TcpConnection::stopReadInLoop()
   loop_->assertInLoopThread();
   if (reading_ || channel_->isReading())
   {
-    channel_->disableReading();
+    channel_->disableReading(enable_et_);
     reading_ = false;
   }
 }
@@ -447,7 +449,7 @@ void TcpConnection::connectEstablished()
   assert(state_ == kConnecting);
   setState(kConnected);
   channel_->tie(shared_from_this());
-  channel_->enableReading();
+  channel_->enableReading(enable_et_);
 
   connectionCallback_(shared_from_this());
 }
@@ -475,10 +477,10 @@ void TcpConnection::handleRead(Timestamp receiveTime)
 	  switch (saveErrno)
 	  {
 	  case SSL_ERROR_WANT_READ:
-		  channel_->enableReading();
+		  channel_->enableReading(enable_et_);
 		  break;
 	  case SSL_ERROR_WANT_WRITE:
-		  channel_->enableWriting();
+		  channel_->enableWriting(enable_et_);
 		  break;
 	  case SSL_ERROR_SSL:
 		  //LOG_ERROR << __FUNCTION__ << " --- *** " << "SSL_ERROR_SSL handleClose()";
@@ -532,10 +534,10 @@ void TcpConnection::handleWrite()
 	  switch (saveErrno)
 	  {
 	  case SSL_ERROR_WANT_READ:
-		  channel_->enableReading();
+		  channel_->enableReading(enable_et_);
 		  break;
 	  case SSL_ERROR_WANT_WRITE:
-		  channel_->enableWriting();
+		  channel_->enableWriting(enable_et_);
 		  break;
 	  case SSL_ERROR_SSL:
           LOG_ERROR << __FUNCTION__ << " --- *** " << "SSL_ERROR_SSL handleClose()";
@@ -575,7 +577,7 @@ void TcpConnection::handleWrite()
               outputBuffer_.retrieve(n);
               if (outputBuffer_.readableBytes() == 0)
               {
-                  channel_->disableWriting();
+                  channel_->disableWriting(enable_et_);
                   if (writeCompleteCallback_)
                   {
                       loop_->queueInLoop(std::bind(writeCompleteCallback_, shared_from_this()));
@@ -591,7 +593,7 @@ void TcpConnection::handleWrite()
 				  switch (savedErrno)
 				  {
 				  case SSL_ERROR_WANT_WRITE:
-					  channel_->enableWriting();
+					  channel_->enableWriting(enable_et_);
                       //goto _loop;
 					  break;
 				  case SSL_ERROR_ZERO_RETURN:
@@ -607,11 +609,11 @@ void TcpConnection::handleWrite()
 				  switch (savedErrno)
 				  {
 				  case EAGAIN:
-                      channel_->enableWriting();
+                      channel_->enableWriting(enable_et_);
                       //goto _loop;
                       break;
 				  case EINTR:
-					  channel_->enableWriting();
+					  channel_->enableWriting(enable_et_);
 					  break;
 				  default:
 					  handleClose();

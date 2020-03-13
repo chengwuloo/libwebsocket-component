@@ -56,7 +56,8 @@ class TcpConnection : noncopyable,
                 int sockfd,
                 const InetAddress& localAddr,
                 const InetAddress& peerAddr,
-                SSL_CTX* ctx = NULL);
+                SSL_CTX* ctx = NULL,
+                bool et = false);
   ~TcpConnection();
 
   EventLoop* getLoop() const { return loop_; }
@@ -157,6 +158,7 @@ class TcpConnection : noncopyable,
   }
 
 private:
+  bool enable_et_;
   SSL* ssl_;
   SSL_CTX* ssl_ctx_;
   bool sslConnected_;

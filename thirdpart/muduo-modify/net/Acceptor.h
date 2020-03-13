@@ -41,7 +41,7 @@ class Acceptor : noncopyable
   void setConditionCallback(const ConditionCallback& cb)
   {  conditionCallback_ = cb; }
   bool listenning() const { return listenning_; }
-  void listen();
+  void listen(bool et = false);
 
  private:
   void handleRead(int events);

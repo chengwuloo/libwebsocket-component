@@ -59,7 +59,7 @@ void TcpServer::setThreadNum(int numThreads)
   threadPool_->setThreadNum(numThreads);
 }
 
-void TcpServer::start()
+void TcpServer::start(bool et)
 {
   if (started_.getAndSet(1) == 0)
   {
@@ -70,8 +70,9 @@ void TcpServer::start()
     {
       acceptor_->setConditionCallback(conditionCallback_);
     }
+    enable_et_ = et;
     loop_->runInLoop(
-        std::bind(&Acceptor::listen, get_pointer(acceptor_)));
+        std::bind(&Acceptor::listen, get_pointer(acceptor_), enable_et_));
   }
 }
 
@@ -95,7 +96,8 @@ void TcpServer::newConnection(int sockfd, const InetAddress& peerAddr)
                                           sockfd,
                                           localAddr,
                                           peerAddr,
-                                          ssl_ctx_));
+                                          ssl_ctx_,
+                                          enable_et_));
   connections_[connName] = conn;
   isWebsocketSupport_ = conn->initWebsocketContext(enableWebsocket_);
   if (isWebsocketSupport_) {

@@ -44,12 +44,12 @@ Acceptor::~Acceptor()
   ::close(idleFd_);
 }
 
-void Acceptor::listen()
+void Acceptor::listen(bool et)
 {
   loop_->assertInLoopThread();
   listenning_ = true;
   acceptSocket_.listen();
-  acceptChannel_.enableReading();
+  acceptChannel_.enableReading(et);
 }
 
 void Acceptor::handleRead(int events)
