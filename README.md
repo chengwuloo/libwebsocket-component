@@ -55,4 +55,5 @@
 		* 打开测试网站 http://www.websocket.org/echo.html 或者 http://www.websocket-test.com/
 		* 将测试地址换成 ws://192.168.2.93:10000 或SSL认证支持的 wss://192.168.2.93:10000 
 
-# QPAlgorithm
+# 修改版本的muduo库在支持https/ws/wss同时加入了支持更高并发的EPOLLET模式
+   TcpServer 中 server_.start(bool et == false)
