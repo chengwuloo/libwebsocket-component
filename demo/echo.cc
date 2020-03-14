@@ -65,7 +65,7 @@ void EchoServer::setThreadNum(int numThreads) {
 }
 
 void EchoServer::start() {
-	server_.start();
+	server_.start(true);
 }
 
 void EchoServer::onConnection(const muduo::net::TcpConnectionPtr& conn) {

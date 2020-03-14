@@ -559,11 +559,17 @@ void TcpConnection::handleRead(Timestamp receiveTime)
 		  case SSL_ERROR_WANT_WRITE:
 			  channel_->enableWriting(enable_et_);
 			  break;
+          case SSL_ERROR_ZERO_RETURN:
+			  handleClose();
+			  break;
 		  case SSL_ERROR_SSL:
 			  handleClose();
 			  break;
 		  case 0:
-			  //succ
+              //SSL_read for EPOLLET
+              if (channel_->isETReading()) {
+                  channel_->enableReading(enable_et_);
+              }
 			  break;
 		  default:
 			  handleClose();

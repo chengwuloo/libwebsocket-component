@@ -11,6 +11,8 @@
 #ifndef MUDUO_NET_POLLER_EPOLLPOLLER_H
 #define MUDUO_NET_POLLER_EPOLLPOLLER_H
 
+//#define _MUDUO_OPTIMIZE_CHNANNEL_
+
 #include "muduo/net/Poller.h"
 
 #include <vector>

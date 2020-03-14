@@ -11,6 +11,8 @@
 #ifndef MUDUO_NET_EVENTLOOP_H
 #define MUDUO_NET_EVENTLOOP_H
 
+//#define _MUDUO_OPTIMIZE_CHNANNEL_
+
 #include <atomic>
 #include <functional>
 #include <vector>

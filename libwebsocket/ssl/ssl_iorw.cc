@@ -116,6 +116,11 @@ namespace muduo {
 						case SSL_ERROR_SSL:
 							*savedErrno = SSL_ERROR_SSL;
 							break;
+							//SSL has been shutdown
+						case SSL_ERROR_ZERO_RETURN:
+							*savedErrno = SSL_ERROR_ZERO_RETURN;
+							//printf("IBytesBuffer::SSL_read SSL has been shutdown(%d).\n", err);
+							break;
 						default:
 							if (errno != EAGAIN /*&&
 								errno != EWOULDBLOCK &&
@@ -135,6 +140,15 @@ namespace muduo {
 						int err = ::SSL_get_error(ssl, rc);
 						switch (err)
 						{
+						case SSL_ERROR_WANT_READ:
+							*savedErrno = SSL_ERROR_WANT_READ;
+							break;
+						case SSL_ERROR_WANT_WRITE:
+							*savedErrno = SSL_ERROR_WANT_WRITE;
+							break;
+						case SSL_ERROR_SSL:
+							*savedErrno = SSL_ERROR_SSL;
+							break;
 							//SSL has been shutdown
 						case SSL_ERROR_ZERO_RETURN:
 							*savedErrno = SSL_ERROR_ZERO_RETURN;
