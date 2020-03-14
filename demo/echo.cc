@@ -39,6 +39,7 @@ EchoServer::EchoServer(muduo::net::EventLoop* loop,
 			&EchoServer::onWebSocketClosed, this,
 			std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
 
+#if 1
 	//添加OpenSSL认证支持 ///
 	muduo::net::ssl::SSL_CTX_Init(
 		cert_path,
@@ -47,11 +48,14 @@ EchoServer::EchoServer(muduo::net::EventLoop* loop,
 
 	//指定SSL_CTX
 	server_.set_SSL_CTX(muduo::net::ssl::SSL_CTX_Get());
+#endif
 }
 
 EchoServer::~EchoServer() {
+#if 0
 	//释放SSL_CTX
 	muduo::net::ssl::SSL_CTX_free();
+#endif
 }
 
 //EventLoop one polling one thread

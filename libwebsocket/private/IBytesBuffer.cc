@@ -55,29 +55,45 @@ namespace muduo {
 		//readFull for EPOLLET
 		ssize_t IBytesBuffer::readFull(int sockfd, IBytesBuffer* buf, int* savedErrno) {
 			assert(buf->writableBytes() >= 0);
-			//make sure that writable > 0
-			if (buf->writableBytes() == 0) {
-				buf->ensureWritableBytes(implicit_cast<size_t>(4096));
-			}
 			//printf("\nIBytesBuffer::readFull begin {{{\n");
 			ssize_t n = 0;
 			do {
-#if 0 //test
+				//make sure that writable > 0
+				if (buf->writableBytes() == 0) {
+					buf->ensureWritableBytes(implicit_cast<size_t>(4096));
+				}
+#if 1 //test
 				const size_t writable = 5;
+				if (buf->writableBytes() < writable) {
+					buf->ensureWritableBytes(implicit_cast<size_t>(writable));
+				}
 #else
 				const size_t writable = buf->writableBytes();
 #endif
 				const ssize_t rc = ::read(sockfd, buf->beginWrite(), writable);
+				*savedErrno = (int)rc;
 				if (rc > 0) {
+					//
+					//rc > 0 errno = EAGAIN(11)
+					//rc > 0 errno = 0
+					//
 					//只要可读(内核buf中还有数据)，就一直读，直到返回0，或者errno = EAGAIN
 					n += (ssize_t)rc;
 					buf->hasWritten(rc);
-					if (buf->writableBytes() == 0) {
-						buf->ensureWritableBytes(implicit_cast<size_t>(4096));
+#if 0
+					//make sure that reset errno = 0 after callback
+					if (errno == EAGAIN ||
+						errno == EINTR) {
+						break;
 					}
+#endif
 					continue;
 				}
 				else if (rc < 0) {
+					//
+					//rc = -1 errno = EAGAIN(11)
+					//rc = -1 errno = 0
+					//
 					if (errno != EAGAIN /*&&
 						errno != EWOULDBLOCK &&
 						errno != ECONNABORTED &&
@@ -85,15 +101,18 @@ namespace muduo {
 						errno != EINTR) {
 						printf("IBytesBuffer::readFull rc = %d errno = %d errmsg = %s\n",
 							rc, errno, strerror(errno));
-						*savedErrno = errno;
-					}
-					else {
-						*savedErrno = errno;
 					}
 					break;
 				}
 				else /*if (rc == 0)*/ {
+					//
+					//rc = 0 errno = EAGAIN(11)
+					//rc = 0 errno = 0 peer close
+					//
 					//Connection has been aborted by peer
+					//printf("IBytesBuffer::readFull Connection has been aborted by peer rc = %d errno = %d errmsg = %s\n",
+					//	rc, errno, strerror(errno));
+					break;
 				}
 			} while (true);
 			//printf("IBytesBuffer::readFull end }}}\n\n");
@@ -105,14 +124,23 @@ namespace muduo {
 			ssize_t left = (ssize_t)len;
 			ssize_t n = 0;
 			while (left > 0) {
-				int rc = ::write(sockfd, (char const*)data + n, left);
+				const ssize_t rc = ::write(sockfd, (char const*)data + n, left);
+				*savedErrno = (int)rc;
 				if (rc > 0) {
+					//
+					//rc > 0 errno = EAGAIN(11)
+					//rc > 0 errno = 0
+					//
 					//只要可写(内核buf还有空间且用户待写数据还未写完)，就一直写，直到数据发送完，或者errno = EAGAIN
 					n += (ssize_t)rc;
 					left -= (ssize_t)rc;
-					assert(errno == 0);
+					continue;
 				}
 				else if (rc < 0) {
+					//
+					//rc = -1 errno = EAGAIN(11)
+					//rc = -1 errno = 0
+					//
 					if (errno != EAGAIN /*&&
 						errno != EWOULDBLOCK &&
 						errno != ECONNABORTED &&
@@ -120,14 +148,14 @@ namespace muduo {
 						errno != EINTR) {
 						printf("IBytesBuffer::writeFull rc = %d left = %d errno = %d errmsg = %s\n",
 							rc, left, errno, strerror(errno));
-						*savedErrno = errno;
-					}
-					else {
-						*savedErrno = errno;
 					}
 					break;
 				}
 				else /*if (rc == 0)*/ {
+					//
+					//rc = 0 errno = EAGAIN(11)
+					//rc = 0 errno = 0 peer close
+					//
 					//assert(left == 0);
 					//Connection has been aborted by peer
 					break;

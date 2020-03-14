@@ -87,9 +87,9 @@ TcpConnection::~TcpConnection()
     //TcpConnection::dtor ->
     //Socket::dtor -> sockets::close(sockfd_)
     //////////////////////////////////////////////////////////////////////////
-    //LOG_INFO << "TcpConnection::dtor[" <<  name_ << "] at " << this
-    //       << " fd=" << channel_->fd()
-    //        << " state=" << stateToString();
+    LOG_INFO << "TcpConnection::dtor[" <<  name_ << "] at " << this
+           << " fd=" << channel_->fd()
+            << " state=" << stateToString();
     if (state_ != kDisconnected) {
         LOG_ERROR << __FUNCTION__ << " --- *** " << " state_ = " << state_;
     }
@@ -261,36 +261,82 @@ void TcpConnection::sendInLoop(const void* data, size_t len)
         loop_->queueInLoop(std::bind(writeCompleteCallback_, shared_from_this()));
       }
     }
-    if (savedErrno != 0) // nwrote < 0
-    {
-	  if (ssl_) {
+	if (ssl_) {
 		switch (savedErrno)
 		{
 		case SSL_ERROR_WANT_WRITE:
 			break;
 		case SSL_ERROR_ZERO_RETURN:
+			//SSL has been shutdown
 			handleClose();
+			break;
+		case 0:
 			break;
 		default:
 			handleClose();
 			break;
 		}
-	  }
-      else {
-		  nwrote = 0;
-          if (errno != EAGAIN /*&&
-              errno != EWOULDBLOCK &&
-              errno != ECONNABORTED*/ &&
-              errno != EINTR)
-		  {
-			  //ERROR Broken pipe (errno=32) TcpConnection::sendInLoop - TcpConnection.cc:170
-			  //LOG_SYSERR << "TcpConnection::sendInLoop";
-			  if (errno == EPIPE || errno == ECONNRESET) // FIXME: any others?
-			  {
-				  faultError = true;
-			  }
-		  }
-      }
+	}
+    else { // nwrote < 0
+		if (savedErrno > 0) {
+			//rc > 0 errno = EAGAIN(11)
+			//rc > 0 errno = 0
+			switch (savedErrno)
+			{
+			case EAGAIN:
+				channel_->enableWriting(enable_et_);
+				//goto _loop;
+				break;
+			case EINTR:
+				channel_->enableWriting(enable_et_);
+				break;
+			default:
+				handleClose();
+				break;
+			}
+		}
+		else if (savedErrno == 0) { // n = 0
+			//rc = 0 errno = EAGAIN(11)
+			//rc = 0 errno = 0 peer close
+			handleClose();
+		}
+		else /*if (savedErrno < 0)*/ {
+			//rc = -1 errno = EAGAIN(11)
+			//rc = -1 errno = 0
+			switch (savedErrno)
+			{
+			case EAGAIN:
+				break;
+			case EINTR:
+				break;
+			default:
+				handleClose();
+				break;
+			}
+			if (errno == EAGAIN ||
+				errno == EINTR) {
+				//make sure that reset errno after callback
+				errno = 0;
+			}
+			else if (errno != 0) {
+				//LOG_SYSERR << "TcpConnection::handleWrite";
+				//handleError();
+				handleClose();
+			}
+		}
+		nwrote = 0;
+        if (errno != EAGAIN /*&&
+            errno != EWOULDBLOCK &&
+            errno != ECONNABORTED*/ &&
+            errno != EINTR)
+		{
+			//ERROR Broken pipe (errno=32) TcpConnection::sendInLoop - TcpConnection.cc:170
+			//LOG_SYSERR << "TcpConnection::sendInLoop";
+			if (errno == EPIPE || errno == ECONNRESET) // FIXME: any others?
+			{
+				faultError = true;
+			}
+		}
     }
   }
 
@@ -471,10 +517,10 @@ void TcpConnection::handleRead(Timestamp receiveTime)
 {
   loop_->assertInLoopThread();
   if (ssl_ctx_ && !sslConnected_) {
-	  int saveErrno = 0;
+	  int savedErrno = 0;
 	  //SSL握手连接 ///
-	  sslConnected_ = ssl::SSL_handshake(ssl_ctx_, ssl_, socket_->fd(), saveErrno);
-	  switch (saveErrno)
+	  sslConnected_ = ssl::SSL_handshake(ssl_ctx_, ssl_, socket_->fd(), savedErrno);
+	  switch (savedErrno)
 	  {
 	  case SSL_ERROR_WANT_READ:
 		  channel_->enableReading(enable_et_);
@@ -483,7 +529,6 @@ void TcpConnection::handleRead(Timestamp receiveTime)
 		  channel_->enableWriting(enable_et_);
 		  break;
 	  case SSL_ERROR_SSL:
-		  //LOG_ERROR << __FUNCTION__ << " --- *** " << "SSL_ERROR_SSL handleClose()";
 		  handleClose();
 		  break;
 	  case 0:
@@ -502,26 +547,59 @@ void TcpConnection::handleRead(Timestamp receiveTime)
 		  inputBuffer_.SSL_read(ssl_, &savedErrno);
 	  if (n > 0)
 	  {
+		  if (errno == EAGAIN ||
+			  errno == EINTR) {
+			  errno = 0;
+		  }
 		  messageCallback_(shared_from_this(), &inputBuffer_, receiveTime);
 	  }
-	  else if (n == 0)
-	  {
-		  if (errno != EAGAIN &&
-			  errno != EINTR) {
+      if (ssl_) {
+		  switch (savedErrno)
+		  {
+		  case SSL_ERROR_WANT_READ:
+			  channel_->enableReading(enable_et_);
+			  break;
+		  case SSL_ERROR_WANT_WRITE:
+			  channel_->enableWriting(enable_et_);
+			  break;
+		  case SSL_ERROR_SSL:
+              printf("SSL_ERROR_SSL ....\n");
+			  handleClose();
+			  break;
+		  case 0:
+			  //succ
+			  break;
+		  default:
+              printf("default SSL_ERROR_SSL ....\n");
+			  handleClose();
+			  break;
+		  }
+      }
+      else {
+		  if (savedErrno > 0) {
+			  //rc > 0 errno = EAGAIN(11)
+			  //rc > 0 errno = 0
+		  }
+		  else if (savedErrno == 0) { // n = 0
+			  //rc = 0 errno = EAGAIN(11)
+			  //rc = 0 errno = 0 peer close
 			  handleClose();
 		  }
-		  else {
-			  LOG_SYSERR << "TcpConnection::handleRead";
-			  handleError();
-			  errno = savedErrno;
+		  else /*if (savedErrno < 0)*/ {
+			  //rc = -1 errno = EAGAIN(11)
+			  //rc = -1 errno = 0
+			  if (errno == EAGAIN ||
+				  errno == EINTR) {
+				  //make sure that reset errno after callback
+				  errno = 0;
+			  }
+			  else if (errno != 0) {
+				  //LOG_SYSERR << "TcpConnection::handleRead";
+				  //handleError();
+				  handleClose();
+			  }
 		  }
-	  }
-	  //else
-	  //{
-	  //    errno = savedErrno;
-	  //    //LOG_SYSERR << "TcpConnection::handleRead";
-	  //    handleError();
-	  //}
+      }
   }
 }
 
@@ -540,7 +618,6 @@ void TcpConnection::handleWrite()
 		  channel_->enableWriting(enable_et_);
 		  break;
 	  case SSL_ERROR_SSL:
-          LOG_ERROR << __FUNCTION__ << " --- *** " << "SSL_ERROR_SSL handleClose()";
 		  handleClose();
 		  break;
 	  case 0:
@@ -588,30 +665,34 @@ void TcpConnection::handleWrite()
                   }
               }
           }
-          if (savedErrno != 0) {
-			  if (ssl_) {
-				  switch (savedErrno)
-				  {
-				  case SSL_ERROR_WANT_WRITE:
-					  channel_->enableWriting(enable_et_);
-                      //goto _loop;
-					  break;
-				  case SSL_ERROR_ZERO_RETURN:
-                      //SSL has been shutdown
-					  handleClose();
-					  break;
-				  default:
-					  handleClose();
-					  break;
-				  }
+		  if (ssl_) {
+			  switch (savedErrno)
+			  {
+			  case SSL_ERROR_WANT_WRITE:
+				  channel_->enableWriting(enable_et_);
+				  //goto _loop;
+				  break;
+			  case SSL_ERROR_ZERO_RETURN:
+				  //SSL has been shutdown
+				  handleClose();
+				  break;
+              case 0:
+                  break;
+			  default:
+				  handleClose();
+				  break;
 			  }
-			  else {
+		  }
+		  else {
+			  if (savedErrno > 0) {
+				  //rc > 0 errno = EAGAIN(11)
+				  //rc > 0 errno = 0
 				  switch (savedErrno)
 				  {
 				  case EAGAIN:
-                      channel_->enableWriting(enable_et_);
-                      //goto _loop;
-                      break;
+					  channel_->enableWriting(enable_et_);
+					  //goto _loop;
+					  break;
 				  case EINTR:
 					  channel_->enableWriting(enable_et_);
 					  break;
@@ -620,8 +701,39 @@ void TcpConnection::handleWrite()
 					  break;
 				  }
 			  }
-              //LOG_SYSERR << "TcpConnection::handleWrite";
-          }
+			  else if (savedErrno == 0) { // n = 0
+				  //rc = 0 errno = EAGAIN(11)
+				  //rc = 0 errno = 0 peer close
+				  handleClose();
+			  }
+			  else /*if (savedErrno < 0)*/ {
+				  //rc = -1 errno = EAGAIN(11)
+				  //rc = -1 errno = 0
+				  switch (savedErrno)
+				  {
+				  case EAGAIN:
+					  channel_->enableWriting(enable_et_);
+					  //goto _loop;
+					  break;
+				  case EINTR:
+					  channel_->enableWriting(enable_et_);
+					  break;
+				  default:
+					  handleClose();
+					  break;
+				  }
+				  if (errno == EAGAIN ||
+					  errno == EINTR) {
+					  //make sure that reset errno after callback
+					  errno = 0;
+				  }
+				  else if (errno != 0) {
+					  //LOG_SYSERR << "TcpConnection::handleWrite";
+					  //handleError();
+					  handleClose();
+				  }
+			  }
+		  }
           //else
           //{
           //    LOG_SYSERR << "TcpConnection::handleWrite";

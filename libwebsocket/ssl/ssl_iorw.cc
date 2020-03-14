@@ -55,17 +55,20 @@ namespace muduo {
 			//SSL_read
 			ssize_t SSL_read(SSL* ssl, IBytesBuffer* buf, int* savedErrno) {
 				assert(buf->writableBytes() >= 0);
-				//make sure that writable > 0
-				if (buf->writableBytes() == 0) {
-					buf->ensureWritableBytes(implicit_cast<size_t>(4096));
-				}
 				//SSL_pending = 0 ///
 				//printf("IBytesBuffer::SSL_read SSL_pending = %d\n", SSL_pending(ssl));
 				//printf("\nIBytesBuffer::SSL_read begin {{{\n");
 				ssize_t n = 0;
 				do {
+					//make sure that writable > 0
+					if (buf->writableBytes() == 0) {
+						buf->ensureWritableBytes(implicit_cast<size_t>(4096));
+					}
 #if 0 //test
 					const size_t writable = 5;
+					if (buf->writableBytes() < writable) {
+						buf->ensureWritableBytes(implicit_cast<size_t>(writable));
+					}
 #else
 					const size_t writable = buf->writableBytes();
 #endif
@@ -110,6 +113,9 @@ namespace muduo {
 						case SSL_ERROR_WANT_WRITE:
 							*savedErrno = SSL_ERROR_WANT_WRITE;
 							break;
+						case SSL_ERROR_SSL:
+							*savedErrno = SSL_ERROR_SSL;
+							break;
 						default:
 							if (errno != EAGAIN /*&&
 								errno != EWOULDBLOCK &&
@@ -132,12 +138,12 @@ namespace muduo {
 							//SSL has been shutdown
 						case SSL_ERROR_ZERO_RETURN:
 							*savedErrno = SSL_ERROR_ZERO_RETURN;
-							//printf("IBytesBuffer::SSL_read: SSL has been shutdown(%d).\n", err);
+							//printf("IBytesBuffer::SSL_read SSL has been shutdown(%d).\n", err);
 							break;
 							//Connection has been aborted by peer
 						default:
 							*savedErrno = err;
-							//printf("IBytesBuffer::SSL_read: Connection has been aborted(%d).\n", err);
+							//printf("IBytesBuffer::SSL_read Connection has been aborted(%d).\n", err);
 							break;
 						}
 						break;
@@ -199,12 +205,12 @@ namespace muduo {
 							//SSL has been shutdown
 						case SSL_ERROR_ZERO_RETURN:
 							*savedErrno = SSL_ERROR_ZERO_RETURN;
-							printf("IBytesBuffer::SSL_write: SSL has been shutdown(%d).\n", err);
+							printf("IBytesBuffer::SSL_write SSL has been shutdown(%d).\n", err);
 							break;
 							//Connection has been aborted by peer
 						default:
 							*savedErrno = err;
-							printf("IBytesBuffer::SSL_write: Connection has been aborted(%d).\n", err);
+							printf("IBytesBuffer::SSL_write Connection has been aborted(%d).\n", err);
 							break;
 						}
 						break;
