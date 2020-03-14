@@ -65,6 +65,7 @@ void EchoServer::setThreadNum(int numThreads) {
 }
 
 void EchoServer::start() {
+	//使用ET模式accept/read/write
 	server_.start(true);
 }
 
