@@ -87,9 +87,9 @@ TcpConnection::~TcpConnection()
     //TcpConnection::dtor ->
     //Socket::dtor -> sockets::close(sockfd_)
     //////////////////////////////////////////////////////////////////////////
-    LOG_INFO << "TcpConnection::dtor[" <<  name_ << "] at " << this
-           << " fd=" << channel_->fd()
-            << " state=" << stateToString();
+    //LOG_INFO << "TcpConnection::dtor[" <<  name_ << "] at " << this
+    //       << " fd=" << channel_->fd()
+    //        << " state=" << stateToString();
     if (state_ != kDisconnected) {
         LOG_ERROR << __FUNCTION__ << " --- *** " << " state_ = " << state_;
     }
