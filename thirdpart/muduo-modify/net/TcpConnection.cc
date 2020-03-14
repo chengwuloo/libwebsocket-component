@@ -281,16 +281,18 @@ void TcpConnection::sendInLoop(const void* data, size_t len)
 		if (savedErrno > 0) {
 			//rc > 0 errno = EAGAIN(11)
 			//rc > 0 errno = 0
-			switch (savedErrno)
+			switch (errno)
 			{
 			case EAGAIN:
-				channel_->enableWriting(enable_et_);
-				//goto _loop;
+            case EINTR:
+				//make sure that reset errno after callback
+				errno = 0;
 				break;
-			case EINTR:
-				channel_->enableWriting(enable_et_);
-				break;
+            case 0:
+                break;
 			default:
+				//LOG_SYSERR << "TcpConnection::handleWrite";
+				//handleError();
 				handleClose();
 				break;
 			}
@@ -303,25 +305,20 @@ void TcpConnection::sendInLoop(const void* data, size_t len)
 		else /*if (savedErrno < 0)*/ {
 			//rc = -1 errno = EAGAIN(11)
 			//rc = -1 errno = 0
-			switch (savedErrno)
+			switch (errno)
 			{
 			case EAGAIN:
-				break;
 			case EINTR:
-				break;
-			default:
-				handleClose();
-				break;
-			}
-			if (errno == EAGAIN ||
-				errno == EINTR) {
 				//make sure that reset errno after callback
 				errno = 0;
-			}
-			else if (errno != 0) {
+				break;
+			case 0:
+				break;
+			default:
 				//LOG_SYSERR << "TcpConnection::handleWrite";
 				//handleError();
 				handleClose();
+				break;
 			}
 		}
 		nwrote = 0;
@@ -563,14 +560,12 @@ void TcpConnection::handleRead(Timestamp receiveTime)
 			  channel_->enableWriting(enable_et_);
 			  break;
 		  case SSL_ERROR_SSL:
-              printf("SSL_ERROR_SSL ....\n");
 			  handleClose();
 			  break;
 		  case 0:
 			  //succ
 			  break;
 		  default:
-              printf("default SSL_ERROR_SSL ....\n");
 			  handleClose();
 			  break;
 		  }
@@ -579,6 +574,22 @@ void TcpConnection::handleRead(Timestamp receiveTime)
 		  if (savedErrno > 0) {
 			  //rc > 0 errno = EAGAIN(11)
 			  //rc > 0 errno = 0
+			  switch (errno)
+			  {
+			  case EAGAIN:
+			  case EINTR:
+				  //make sure that reset errno after callback
+				  errno = 0;
+                  channel_->enableReading(enable_et_);
+				  break;
+			  case 0:
+				  break;
+			  default:
+				  //LOG_SYSERR << "TcpConnection::handleRead";
+				  //handleError();
+				  handleClose();
+				  break;
+			  }
 		  }
 		  else if (savedErrno == 0) { // n = 0
 			  //rc = 0 errno = EAGAIN(11)
@@ -588,15 +599,21 @@ void TcpConnection::handleRead(Timestamp receiveTime)
 		  else /*if (savedErrno < 0)*/ {
 			  //rc = -1 errno = EAGAIN(11)
 			  //rc = -1 errno = 0
-			  if (errno == EAGAIN ||
-				  errno == EINTR) {
+			  switch (errno)
+			  {
+			  case EAGAIN:
+			  case EINTR:
 				  //make sure that reset errno after callback
 				  errno = 0;
-			  }
-			  else if (errno != 0) {
+                  channel_->enableReading(enable_et_);
+				  break;
+			  case 0:
+				  break;
+			  default:
 				  //LOG_SYSERR << "TcpConnection::handleRead";
 				  //handleError();
 				  handleClose();
+				  break;
 			  }
 		  }
       }
@@ -687,16 +704,20 @@ void TcpConnection::handleWrite()
 			  if (savedErrno > 0) {
 				  //rc > 0 errno = EAGAIN(11)
 				  //rc > 0 errno = 0
-				  switch (savedErrno)
+				  switch (errno)
 				  {
 				  case EAGAIN:
+                  case EINTR:
+                      //make sure that reset errno after callback
+                      errno = 0;
 					  channel_->enableWriting(enable_et_);
 					  //goto _loop;
 					  break;
-				  case EINTR:
-					  channel_->enableWriting(enable_et_);
-					  break;
+                  case 0:
+                      break;
 				  default:
+					  //LOG_SYSERR << "TcpConnection::handleWrite";
+					  //handleError();
 					  handleClose();
 					  break;
 				  }
@@ -709,28 +730,22 @@ void TcpConnection::handleWrite()
 			  else /*if (savedErrno < 0)*/ {
 				  //rc = -1 errno = EAGAIN(11)
 				  //rc = -1 errno = 0
-				  switch (savedErrno)
+				  switch (errno)
 				  {
 				  case EAGAIN:
+                  case EINTR:
+					  //make sure that reset errno after callback
+					  errno = 0;
 					  channel_->enableWriting(enable_et_);
 					  //goto _loop;
 					  break;
-				  case EINTR:
-					  channel_->enableWriting(enable_et_);
+				  case 0:
 					  break;
 				  default:
-					  handleClose();
-					  break;
-				  }
-				  if (errno == EAGAIN ||
-					  errno == EINTR) {
-					  //make sure that reset errno after callback
-					  errno = 0;
-				  }
-				  else if (errno != 0) {
 					  //LOG_SYSERR << "TcpConnection::handleWrite";
 					  //handleError();
 					  handleClose();
+					  break;
 				  }
 			  }
 		  }
