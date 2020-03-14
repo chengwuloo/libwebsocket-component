@@ -62,7 +62,7 @@ namespace muduo {
 				if (buf->writableBytes() == 0) {
 					buf->ensureWritableBytes(implicit_cast<size_t>(4096));
 				}
-#if 1 //test
+#if 0 //test
 				const size_t writable = 5;
 				if (buf->writableBytes() < writable) {
 					buf->ensureWritableBytes(implicit_cast<size_t>(writable));
