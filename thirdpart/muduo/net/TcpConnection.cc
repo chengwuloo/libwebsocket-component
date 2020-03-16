@@ -281,8 +281,10 @@ void TcpConnection::sendInLoop(const void* data, size_t len)
 		if (savedErrno > 0) {
 			//rc > 0 errno = EAGAIN(11)
 			//rc > 0 errno = 0
+            //rc > 0 errno = EINPROGRESS(115)
 			switch (errno)
 			{
+            case EINPROGRESS:
 			case EAGAIN:
             case EINTR:
 				//make sure that reset errno after callback
@@ -710,8 +712,10 @@ void TcpConnection::handleWrite()
 			  if (savedErrno > 0) {
 				  //rc > 0 errno = EAGAIN(11)
 				  //rc > 0 errno = 0
+                  //rc > 0 errno = EINPROGRESS(115)
 				  switch (errno)
 				  {
+                  case EINPROGRESS:
 				  case EAGAIN:
                   case EINTR:
                       //make sure that reset errno after callback

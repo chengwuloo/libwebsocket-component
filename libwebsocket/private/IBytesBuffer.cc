@@ -130,10 +130,13 @@ namespace muduo {
 					//
 					//rc > 0 errno = EAGAIN(11)
 					//rc > 0 errno = 0
+					//rc > 0 errno = EINPROGRESS(115)
 					//
 					//只要可写(内核buf还有空间且用户待写数据还未写完)，就一直写，直到数据发送完，或者errno = EAGAIN
 					n += (ssize_t)rc;
 					left -= (ssize_t)rc;
+					//printf("IBytesBuffer::writeFull rc = %d left = %d errno = %d errmsg = %s\n",
+					//	rc, left, errno, strerror(errno));
 					continue;
 				}
 				else if (rc < 0) {

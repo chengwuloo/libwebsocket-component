@@ -132,12 +132,12 @@ void EchoServer::onWebSocketMessage(
 	//////////////////////////////////////////////////////////////////////////
 	//pack_unmask_data_frame
 	//////////////////////////////////////////////////////////////////////////
-	muduo::net::Buffer rspbuf;
+	muduo::net::Buffer rspdata;
 	muduo::net::websocket::pack_unmask_data_frame(
-		&rspbuf,
+		&rspdata,
 		str.c_str(), str.length(),
 		muduo::net::websocket::MessageT::TyTextMessage, 1);
-	conn->send(&rspbuf);
+	conn->send(&rspdata);
 }
 
 //onWebSocketClosed websocket
@@ -150,7 +150,7 @@ void EchoServer::onWebSocketClosed(
 		//<< (conn->connected() ? "UP" : "DOWN");
 	
 	//////////////////////////////////////////////////////////////////////////
-	//pack_unmask_data_frame
+	//pack_unmask_close_frame
 	//////////////////////////////////////////////////////////////////////////
 	muduo::net::Buffer rspdata;
 	muduo::net::websocket::pack_unmask_close_frame(
