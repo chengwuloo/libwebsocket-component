@@ -169,6 +169,7 @@ namespace muduo {
 
 			//SSL_write
 			ssize_t SSL_write(SSL* ssl, void const* data, size_t len, int* savedErrno) {
+				//printf("\nIBytesBuffer::SSL_read SSL_write {{{\n");
 				ssize_t left = (ssize_t)len;
 				ssize_t n = 0;
 				while (left > 0) {
@@ -230,6 +231,7 @@ namespace muduo {
 						break;
 					}
 				}
+				//printf("IBytesBuffer::SSL_write end }}}\n\n");
 				return n;
 			}//SSL_write
 

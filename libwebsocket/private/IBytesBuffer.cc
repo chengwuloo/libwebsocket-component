@@ -121,6 +121,7 @@ namespace muduo {
 			
 		//writeFull for EPOLLET
 		ssize_t IBytesBuffer::writeFull(int sockfd, void const* data, size_t len, int* savedErrno) {
+			//printf("\nIBytesBuffer::writeFull begin {{{\n");
 			ssize_t left = (ssize_t)len;
 			ssize_t n = 0;
 			while (left > 0) {
@@ -164,6 +165,7 @@ namespace muduo {
 					break;
 				}
 			}
+			//printf("IBytesBuffer::writeFull end }}}\n\n");
 			return n;
 		}//writeFull
 
