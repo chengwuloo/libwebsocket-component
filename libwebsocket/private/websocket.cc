@@ -2156,7 +2156,7 @@ namespace muduo {
 							"+-------------------------------+-------------------------------+\n" \
 							"| Masking-key (continued)       |          Payload Data         |\n" \
 							"+-------------------------------- - - - - - - - - - - - - - - - +\n" \
-							"|%063d|\n\n\n",
+							"|%063u|\n\n\n",
 							header.get_header().FIN,
 							RSV1, RSV2, RSV3,
 							header.get_header().opcode,
@@ -2201,7 +2201,7 @@ namespace muduo {
 							"+-------------------------------+-------------------------------+\n" \
 							"| Masking-key (continued)       |          Payload Data         |\n" \
 							"+-------------------------------- - - - - - - - - - - - - - - - +\n" \
-							"|%063d|\n\n\n",
+							"|%063u|\n\n\n",
 							header.get_header().FIN,
 							RSV1, RSV2, RSV3,
 							header.get_header().opcode,

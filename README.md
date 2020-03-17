@@ -56,4 +56,11 @@
 		* 将测试地址换成 ws://192.168.2.93:10000 或SSL认证支持的 wss://192.168.2.93:10000 
 
 ### 修改版本的muduo库在支持https/ws/wss同时加入了支持更高并发的EPOLLET模式
+   
+   //readFull for EPOLLET
+   static ssize_t readFull(int sockfd, IBytesBuffer* buf, int* savedErrno);
+
+   //writeFull for EPOLLET
+   static ssize_t writeFull(int sockfd, void const* data, size_t len, int* savedErrno);
+   
    TcpServer 中 server_.start(bool et == false)
