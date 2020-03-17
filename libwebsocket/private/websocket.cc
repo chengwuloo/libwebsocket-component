@@ -558,10 +558,12 @@ namespace muduo {
 				//setMaskingkey Masking-key
 				inline void setMaskingkey(uint8_t const Masking_key[kMaskingkeyLen], size_t size) {
 					assert(size == websocket::kMaskingkeyLen);
+#if 0
 					uint8_t const Masking_key_[kMaskingkeyLen] = { 0 };
 					assert(memcmp(
 						this->Masking_key,
 						Masking_key_, kMaskingkeyLen) == 0);
+#endif
 					memcpy(this->Masking_key, Masking_key, websocket::kMaskingkeyLen);
 				}
 				//getMaskingkey Masking-key
@@ -882,7 +884,7 @@ namespace muduo {
 					: messageHeader_(messageType)
 					, messageBuffer_(messageBuffer)
 					/*, header_({ 0 })*/
-					, unMask_c_(0)
+					/*, unMask_c_(0)*/
 					, segmentOffset_(0) {
 					//assert must not be NULL
 					assert(messageBuffer_);
@@ -892,7 +894,7 @@ namespace muduo {
 					if (messageBuffer_) {
 						messageBuffer_->retrieveAll();
 						segmentOffset_ = 0;
-						unMask_c_ = 0;
+						//unMask_c_ = 0;
 						messageBuffer_.reset();
 					}
 				}
@@ -968,7 +970,7 @@ namespace muduo {
 					if (messageBuffer_) {
 						messageBuffer_->retrieveAll();
 						segmentOffset_ = 0;
-						unMask_c_ = 0;
+						//unMask_c_ = 0;
 						//断开连接析构时候调用释放 ///
 						//messageBuffer_.reset();
 					}
@@ -982,13 +984,17 @@ namespace muduo {
 				//@param Masking_key uint8_t const*
 				inline bool unMaskPayloadData(bool unMask, IBytesBuffer* buf, uint8_t const Masking_key[kMaskingkeyLen]) {
 					if (unMask &&
-						buf->readableBytes() > 0 && buf->readableBytes() > segmentOffset_) {
-						for (ssize_t i = segmentOffset_; i < buf->readableBytes(); ++i) {
-							*((char*)buf->peek() + i) = *(buf->peek() + i) ^ *(Masking_key + i % websocket::kMaskingkeyLen);
+						buf->readableBytes() > 0 &&
+						buf->readableBytes() > segmentOffset_) {
+						for (ssize_t i = segmentOffset_;
+							i < buf->readableBytes(); ++i) {
+							*((uint8_t*)buf->peek() + i) ^= Masking_key[i % websocket::kMaskingkeyLen];
 						}
+#if 0
 						if (unMask_c_++ == 0) {
 							assert(segmentOffset_ == 0);
 						}
+#endif
 						segmentOffset_ = buf->readableBytes();
 						return true;
 					}
@@ -1000,7 +1006,7 @@ namespace muduo {
 				//完整websocket消息体(body)，存放接收数据解析之后的buffer
 				IBytesBufferPtr messageBuffer_;
 				//消息分片数据UnMask Masking-key操作段偏移，UnMask操作次数
-				size_t segmentOffset_, unMask_c_;
+				size_t segmentOffset_/*, unMask_c_*/;
 			};
 
 			//@@ Context
