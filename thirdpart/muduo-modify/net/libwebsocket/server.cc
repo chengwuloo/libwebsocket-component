@@ -18,11 +18,13 @@ namespace muduo {
 				std::string const& client_ca_cert_file_path,
 				std::string const& client_ca_cert_dir_path)
 				: server_(loop, listenAddr, name) {
-
+				//注册TCP消息回调
 				server_.setMessageCallback(
 					std::bind(&Server::onMessage, this,
 						std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+				//开启websocket
 				server_.enableWebsocket(true);
+				//websocket关闭回调，这个不用暴露给调用者
 				server_.setWsClosedCallback(
 					std::bind(
 						&Server::onWebSocketClosed, this,

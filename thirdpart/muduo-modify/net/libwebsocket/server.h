@@ -24,15 +24,15 @@ namespace muduo {
                     std::string const& client_ca_cert_dir_path = "");
                 ~Server();
                 muduo::net::EventLoop* getLoop() const { return server_.getLoop(); }
-                //setConnectionCallback
+                //setConnectionCallback TCP连接/关闭回调
                 void setConnectionCallback(muduo::net::ConnectionCallback const& cb) {
                     server_.setConnectionCallback(cb);
                 }
-                //setWsConnectedCallback
+                //setWsConnectedCallback websocket握手成功回调
                 void setWsConnectedCallback(muduo::net::WsConnectedCallback const& cb) {
                     server_.setWsConnectedCallback(cb);
                 }
-                //setWsMessageCallback
+                //setWsMessageCallback websocket消息回调
                 void setWsMessageCallback(muduo::net::WsMessageCallback const& cb) {
                     server_.setWsMessageCallback(cb);
                 }
@@ -40,7 +40,7 @@ namespace muduo {
                 void setThreadNum(int numThreads);
                 //start
                 void start(bool et = false);
-                //sendData
+                //sendData 发送消息
                 static void sendData(const muduo::net::TcpConnectionPtr& conn, char const* data, size_t len);
                 static void sendData(const muduo::net::TcpConnectionPtr& conn, uint8_t const* data, size_t len);
                 static void sendData(const muduo::net::TcpConnectionPtr& conn, std::vector<uint8_t> const& data);
