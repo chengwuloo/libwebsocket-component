@@ -14,11 +14,11 @@
 #include "muduo/net/EventLoop.h"
 #include "muduo/net/Socket.h"
 #include "muduo/net/SocketsOps.h"
-#include <libwebsocket/ssl.h>
 
 #include <errno.h>
 
-#include "libwebsocket/websocket.h"
+#include <muduo/net/libwebsocket/websocket.h>
+#include <muduo/net/libwebsocket/ssl.h>
 
 using namespace muduo;
 using namespace muduo::net;

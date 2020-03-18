@@ -35,7 +35,6 @@ class InetAddress;
 class TcpServer : noncopyable
 {
  public:
-  typedef std::function<bool(const InetAddress&)> ConditionCallback;
   typedef std::function<void(EventLoop*)> ThreadInitCallback;
   enum Option
   {
