@@ -11,6 +11,7 @@ namespace muduo {
 	namespace net {
 		namespace websocket {
 
+			//@@ Server ctor
 			Server::Server(muduo::net::EventLoop* loop,
 				const muduo::net::InetAddress& listenAddr,
 				const std::string& name,
@@ -37,34 +38,25 @@ namespace muduo {
 				//指定SSL_CTX
 				server_.set_SSL_CTX(muduo::net::ssl::SSL_CTX_Get());
 			}
+			
+			//@@ Server dtor
 			Server::~Server() {
 				//释放SSL_CTX
 				muduo::net::ssl::SSL_CTX_free();
 			}
+			
 			//setThreadNum EventLoop one polling one thread
 			void Server::setThreadNum(int numThreads) {
 				server_.setThreadNum(numThreads);
 			}
+			
 			//start
 			void Server::start(bool et) {
 				server_.start(et);
 			}
-			//onMessage
-			void Server::onMessage(
-				const muduo::net::TcpConnectionPtr& conn,
-				muduo::net::Buffer* buf,
-				muduo::Timestamp receiveTime) {
-
-				//////////////////////////////////////////////////////////////////////////
-				//parse_message_frame
-				//////////////////////////////////////////////////////////////////////////
-				muduo::net::websocket::parse_message_frame(
-					conn->getWebsocketContext(),
-					buf,
-					&receiveTime);
-			}
-			//sendData
-			void Server::sendData(const muduo::net::TcpConnectionPtr& conn, char const* data, size_t len) {
+			
+			//send 发送消息
+			void Server::send(const muduo::net::TcpConnectionPtr& conn, char const* data, size_t len) {
 				//////////////////////////////////////////////////////////////////////////
 				//pack_unmask_data_frame
 				//////////////////////////////////////////////////////////////////////////
@@ -75,20 +67,37 @@ namespace muduo {
 					muduo::net::websocket::MessageT::TyBinaryMessage, false);
 				conn->send(&rspdata);
 			}
-			//sendData
-			void Server::sendData(const muduo::net::TcpConnectionPtr& conn, uint8_t const* data, size_t len) {
-				sendData(conn, (char const*)data, len);
+			
+			//send 发送消息
+			void Server::send(const muduo::net::TcpConnectionPtr& conn, uint8_t const* data, size_t len) {
+				send(conn, (char const*)data, len);
 			}
-			//sendData
-			void Server::sendData(const muduo::net::TcpConnectionPtr& conn, std::vector<uint8_t> const& data) {
-				sendData(conn, (char const*)&data[0], data.size());
+			
+			//send 发送消息
+			void Server::send(const muduo::net::TcpConnectionPtr& conn, std::vector<uint8_t> const& data) {
+				send(conn, (char const*)&data[0], data.size());
 			}
+
+			//onMessage
+			void Server::onMessage(
+				const muduo::net::TcpConnectionPtr& conn,
+				muduo::net::Buffer* buf, muduo::Timestamp receiveTime) {
+
+				//////////////////////////////////////////////////////////////////////////
+				//parse_message_frame
+				//////////////////////////////////////////////////////////////////////////
+				muduo::net::websocket::parse_message_frame(
+					conn->getWebsocketContext(),
+					buf,
+					&receiveTime);
+			}
+
 			//onWebSocketClosed
 			void Server::onWebSocketClosed(
 				const muduo::net::TcpConnectionPtr& conn,
 				muduo::net::Buffer* buf, muduo::Timestamp receiveTime) {
 
-				LOG_INFO << "Server - onWebSocketClosed - ";// << conn->peerAddress().toIpPort() << " -> "
+				LOG_INFO << "websocket::Server - onWebSocketClosed - ";// << conn->peerAddress().toIpPort() << " -> "
 					//<< conn->localAddress().toIpPort() << " is "
 					//<< (conn->connected() ? "UP" : "DOWN");
 
