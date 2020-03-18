@@ -2,8 +2,8 @@
 /*    @author create by andy_ro@qq.com                                  */
 /*    @Date		   03.18.2020                                           */
 /************************************************************************/
-#ifndef MUDUO_LIBWEBSOCKET_SERVER_H
-#define MUDUO_LIBWEBSOCKET_SERVER_H
+#ifndef MUDUO_NET_WEBSOCKET_SERVER_H
+#define MUDUO_NET_WEBSOCKET_SERVER_H
 
 #include <muduo/base/noncopyable.h>
 #include <muduo/net/TcpServer.h>
@@ -41,9 +41,9 @@ namespace muduo {
                 //start
                 void start(bool et = false);
                 //sendData
-                void sendData(const muduo::net::TcpConnectionPtr& conn, char const* data, size_t len);
-                void sendData(const muduo::net::TcpConnectionPtr& conn, uint8_t const* data, size_t len);
-                void sendData(const muduo::net::TcpConnectionPtr& conn, std::vector<uint8_t> const& data);
+                static void sendData(const muduo::net::TcpConnectionPtr& conn, char const* data, size_t len);
+                static void sendData(const muduo::net::TcpConnectionPtr& conn, uint8_t const* data, size_t len);
+                static void sendData(const muduo::net::TcpConnectionPtr& conn, std::vector<uint8_t> const& data);
             private:
                 //onMessage
                 void onMessage(const muduo::net::TcpConnectionPtr& conn,
