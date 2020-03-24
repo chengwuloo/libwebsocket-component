@@ -1470,49 +1470,6 @@ std::string ApiServer::OrderProcess(std::string const& reqStr, muduo::Timestamp 
 			errmsg = "agent.status error";
 			break;
 		}
-#if 0
-		agentId = 10000;
-		p_agent_info->md5code = "334270F58E3E9DEC";
-		p_agent_info->descode = "111362EE140F157D";
-		timestamp = "1579599778583";
-		paraValue = "0RJ5GGzw2hLO8AsVvwORE2v16oE%2fXSjaK78A98ct5ajN7reFMf9YnI6vEnpttYHK%2fp04Hq%2fshp28jc4EIN0aAFeo4pni5jxFA9vg%2bLOx%2fek%3d";
-		key = "C6656A2145BAEF7ED6D38B9AF2E35442";
-#elif 0
-		agentId = 111169;
-		p_agent_info->md5code = "8B56598D6FB32329";
-		p_agent_info->descode = "D470FD336AAB17E4";
-		timestamp = "1580776071271";
-		paraValue = "h2W2jwWIVFQTZxqealorCpSfOwlgezD8nHScU93UQ8g%2FDH1UnoktBusYRXsokDs8NAPFEG8WdpSe%0AY5rtksD0jw%3D%3D";
-		key = "a7634b1e9f762cd4b0d256744ace65f0";
-#elif 0
-		agentId = 111190;
-		timestamp = "1583446283986";
-		p_agent_info->md5code = "728F0884A000FD72";
-		p_agent_info->descode = "AAFFF4393E17DB6B";
-		paraValue = "KDtKjjnaaxKWNuK%252BBRwv9f2gBxLkSvY%252FqT4HBaZY2IrxqGMK3DYlWOW4dHgiMZV8Uu66h%252BHjH8MfAfpQIE5eIHoRZMplj7dljS7Tfyf3%252BlM%253D";
-		key = "4F6F53FDC4D27EC33B3637A656DD7C9F";
-#elif 0
-		agentId = 111149;
-		timestamp = "1583448714906";
-		p_agent_info->md5code = "7196FD6921347DB1";
-		p_agent_info->descode = "A5F8C07B7843C73E";
-		paraValue = "nu%252FtdBhN6daQdad3aOVOgzUr6bHVMYNEpWE4yLdHkKRn%252F%252Fn1V3jIFR%252BI7wawXWNyjR3%252FW0M9qzcdzM8rNx8xwe%252BEW9%252BM92ZN4hlpUAhFH74%253D";
-		key = "9EEC240FAFAD3E5B6AB6B2DDBCDFE1FF";
-#elif 0
-		agentId = 10033;
-		timestamp = "1583543899005";
-		p_agent_info->md5code = "5998F124C180A817";
-		p_agent_info->descode = "38807549DEA3178D";
-		paraValue = "9303qk%2FizHRAszhN33eJxG2aOLA2Wq61s9f96uxDe%2Btczf2qSG8O%2FePyIYhVAaeek9m43u7awgra%0D%0Au8a8b%2FDchcZSosz9SVfPjXdc7h4Vma2dA8FHYZ5dJTcxWY7oDLlSOHKVXYHFMIWeafVwCN%2FU5fzv%0D%0AHWyb1Oa%2FWJ%2Bnfx7QXy8%3D";
-		key = "2a6b55cf8df0cd8824c1c7f4308fd2e4";
-#elif 0
-		agentId = 111190;
-		timestamp = "1583543899005";
-		p_agent_info->md5code = "728F0884A000FD72";
-		p_agent_info->descode = "AAFFF4393E17DB6B";
-		paraValue = "%252FPxIlQ9UaP6WljAYhfYZpBO6Hz2KTrxGN%252Bmdffv9sZpaii2avwhJn3APpIOozbD7T3%252BGE1rh5q4OdfrRokriWNEhlweRKzC6%252FtABz58Kdzo%253D";
-		key = "9F1E44E8B61335CCFE2E17EE3DB7C05A";
-#endif
 		//解码 ///
 		std::string decrypt;
 		{
