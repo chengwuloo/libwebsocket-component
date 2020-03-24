@@ -12,6 +12,7 @@
 #define array_length(a) (sizeof (a) / sizeof (a)[0])
 
 //https://www.runoob.com/charsets/ref-html-entities-4.html
+//https://tool.chinaz.com/tools/htmlencode.aspx
 
 namespace HTML {
 	//字符标记 &...;
@@ -27,16 +28,16 @@ namespace HTML {
 		{ "\"", "&quot;" },
 		{ "'",  "&apos;" },
 		{ "©",  "&copy;" },
-		{ "#",  "&num;"  },
+		//{ "#",  "&num;"  },
 		{ "§",  "&sect;" },
 		{ "¥",  "&yen;"  },
-		{ "$",  "&dollar;" },
+		//{ "$",  "&dollar;" },
 		{ "£",  "&pound;"  },
 		{ "¢",  "&cent;"   },
-		{ "%",  "&percnt;" },
-		{ "*",  "$ast;"    },
-		{ "@",  "&commat;" },
-		{ "^",  "&Hat;"    },
+		//{ "%",  "&percnt;" },
+		//{ "*",  "$ast;"    },
+		//{ "@",  "&commat;" },
+		//{ "^",  "&Hat;"    },
 		{ "±",  "&plusmn;" },
 		{ " ",  "&nbsp;"   },
 		{ "·",  "&middot;" },
