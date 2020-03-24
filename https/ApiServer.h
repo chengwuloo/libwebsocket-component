@@ -39,10 +39,9 @@
 #include <iostream>
 #include <iomanip>
 
-//#define _STAT_ORDER_QPS_			//间隔deltaTime统计QPS
-//#define _STAT_ORDER_QPS_DETAIL_	//上下分QPS细节，单个函数处理性能指标
-//#define _NO_LOGIC_PROCESS_		//不带逻辑空请求
-//#define _EVENTLOOP_CONTEXT_       //最高效的cpu利用率，没有线程切换开销，没有共享锁竞态
+#ifndef NotScore
+#define NotScore(a) ((a)<0.01f)
+#endif
 
 //IP访问白名单控制 ///
 enum eWhiteListCtrl {
@@ -50,6 +49,11 @@ enum eWhiteListCtrl {
 	Open       = 1,//应用层IP截断
 	OpenAccept = 2,//网络底层IP截断
 };
+
+//#define _STAT_ORDER_QPS_			//间隔deltaTime统计QPS
+//#define _STAT_ORDER_QPS_DETAIL_	//上下分QPS细节，单个函数处理性能指标
+//#define _NO_LOGIC_PROCESS_		//不带逻辑空请求
+//#define _EVENTLOOP_CONTEXT_       //最高效的cpu利用率，没有线程切换开销，没有共享锁竞态
 
 //
 //GET 请求 ///
@@ -515,7 +519,7 @@ public:
 	std::string OrderProcess(std::string const& reqStr, muduo::Timestamp receiveTime, int& errcode, std::string& errmsg, boost::property_tree::ptree& latest, int& testTPS);
 	
 	//上下分操作 ///
-	int doOrderExecute(int32_t opType, std::string const& account, int64_t score, agent_info_t& _agent_info, std::string const& orderId, std::string& errmsg, boost::property_tree::ptree& latest, int& testTPS);
+	int doOrderExecute(int32_t opType, std::string const& account, double score, agent_info_t& _agent_info, std::string const& orderId, std::string& errmsg, boost::property_tree::ptree& latest, int& testTPS);
 	
 	//上分写db操作 ///
 	int AddOrderScore(std::string const& account, int64_t score, agent_info_t& _agent_info, std::string const& orderId, std::string& errmsg, boost::property_tree::ptree& latest, int& testTPS);

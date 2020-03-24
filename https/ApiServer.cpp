@@ -722,7 +722,7 @@ std::string ApiServer::createResponse(
 	int32_t opType,
 	std::string const& orderId,
 	uint32_t agentId,
-	std::string account, int64_t score,
+	std::string account, double score,
 	int errcode, std::string const& errmsg, bool debug)
 {
 #if 0
@@ -1273,7 +1273,7 @@ std::string ApiServer::OrderProcess(std::string const& reqStr, muduo::Timestamp 
 #endif
 	std::string account;
 	std::string orderId;
-	int64_t score = 0;
+	double score = 0;
 	std::string timestamp;
 	std::string paraValue, key;
 	agent_info_t /*_agent_info = { 0 },*/* p_agent_info = NULL;
@@ -1345,8 +1345,13 @@ std::string ApiServer::OrderProcess(std::string const& reqStr, muduo::Timestamp 
 			}
 			//score
 			HttpParams::const_iterator scoreKey = params.find("score");
+#if 0
 			if (scoreKey == params.end() || scoreKey->second.empty() || !IsDigitStr(scoreKey->second) ||
 				(score = atoll(scoreKey->second.c_str())) <= 0) {
+#else
+			if (scoreKey == params.end() || scoreKey->second.empty() || !IsDigitStr(scoreKey->second) ||
+				(score = atof(scoreKey->second.c_str())) <= 0 || NotScore(score)) {
+#endif
 				// 传输参数错误
 				errcode = eApiErrorCode::GameHandleParamsError;
 				errmsg += "score ";
@@ -1500,6 +1505,13 @@ std::string ApiServer::OrderProcess(std::string const& reqStr, muduo::Timestamp 
 		p_agent_info->descode = "38807549DEA3178D";
 		paraValue = "9303qk%2FizHRAszhN33eJxG2aOLA2Wq61s9f96uxDe%2Btczf2qSG8O%2FePyIYhVAaeek9m43u7awgra%0D%0Au8a8b%2FDchcZSosz9SVfPjXdc7h4Vma2dA8FHYZ5dJTcxWY7oDLlSOHKVXYHFMIWeafVwCN%2FU5fzv%0D%0AHWyb1Oa%2FWJ%2Bnfx7QXy8%3D";
 		key = "2a6b55cf8df0cd8824c1c7f4308fd2e4";
+#elif 0
+		agentId = 111190;
+		timestamp = "1583543899005";
+		p_agent_info->md5code = "728F0884A000FD72";
+		p_agent_info->descode = "AAFFF4393E17DB6B";
+		paraValue = "%252FPxIlQ9UaP6WljAYhfYZpBO6Hz2KTrxGN%252Bmdffv9sZpaii2avwhJn3APpIOozbD7T3%252BGE1rh5q4OdfrRokriWNEhlweRKzC6%252FtABz58Kdzo%253D";
+		key = "9F1E44E8B61335CCFE2E17EE3DB7C05A";
 #endif
 		//解码 ///
 		std::string decrypt;
@@ -1516,8 +1528,8 @@ std::string ApiServer::OrderProcess(std::string const& reqStr, muduo::Timestamp 
 			}
 
 			//HTML::Decode ///
-			//paraValue = HTML::Decode(paraValue);
-			//LOG_DEBUG << "--- *** " << "HTML::Decode >>> " << paraValue;
+			paraValue = HTML::Decode(paraValue);
+			LOG_DEBUG << "--- *** " << "HTML::Decode >>> " << paraValue;
 
 			//UrlDecode 1次或2次解码 ///
 			for (int c = 1; c < 3; ++c) {
@@ -1612,8 +1624,13 @@ std::string ApiServer::OrderProcess(std::string const& reqStr, muduo::Timestamp 
 			}
 			//score
 			HttpParams::const_iterator scoreKey = decryptParams.find("score");
+#if 0
 			if (scoreKey == decryptParams.end() || scoreKey->second.empty() || !IsDigitStr(scoreKey->second) ||
 				(score = atoll(scoreKey->second.c_str())) <= 0) {
+#else
+			if (scoreKey == decryptParams.end() || scoreKey->second.empty() || !IsDigitStr(scoreKey->second) ||
+				(score = atof(scoreKey->second.c_str())) <= 0 || NotScore(score)) {
+#endif
 				// 传输参数错误
 				errcode = eApiErrorCode::GameHandleParamsError;
 				errmsg += "score ";
@@ -1642,7 +1659,7 @@ std::string ApiServer::OrderProcess(std::string const& reqStr, muduo::Timestamp 
 }
 
 //上下分操作 ///
-int ApiServer::doOrderExecute(int32_t opType, std::string const& account, int64_t score, agent_info_t& _agent_info, std::string const& orderId, std::string& errmsg, boost::property_tree::ptree& latest, int& testTPS)
+int ApiServer::doOrderExecute(int32_t opType, std::string const& account, double score, agent_info_t& _agent_info, std::string const& orderId, std::string& errmsg, boost::property_tree::ptree& latest, int& testTPS)
 {
 	int errcode = eApiErrorCode::NoError;
 	do {
@@ -1655,7 +1672,7 @@ int ApiServer::doOrderExecute(int32_t opType, std::string const& account, int64_
 				<< " deltascore[" << score << "]";
 
 			//处理上分请求 ///
-			errcode = AddOrderScore(account, score * 100, _agent_info, orderId, errmsg, latest, testTPS);
+			errcode = AddOrderScore(account, int64_t(score * 100), _agent_info, orderId, errmsg, latest, testTPS);
 
 			/*LOG_WARN*/LOG_INFO << __FUNCTION__ << " --- *** " << "上分RSP "
 				<< "\norderId[" << orderId << "] " << "account[" << account << "] status[" << errcode << "] errmsg[" << errmsg << "]";
@@ -1669,7 +1686,7 @@ int ApiServer::doOrderExecute(int32_t opType, std::string const& account, int64_
 				<< " deltascore[" << score << "]";
 
 			//处理下分请求 ///
-			errcode = SubOrderScore(account, score * 100, _agent_info, orderId, errmsg, latest, testTPS);
+			errcode = SubOrderScore(account, int64_t(score * 100), _agent_info, orderId, errmsg, latest, testTPS);
 
 			/*LOG_WARN*/LOG_INFO << __FUNCTION__ << " --- *** " << "下分RSP "
 				<< "orderId[" << orderId << "] " << "account[" << account << "] status[" << errcode << "] errmsg[" << errmsg << "]";

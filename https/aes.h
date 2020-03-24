@@ -134,11 +134,13 @@ namespace Crypto {
 		unsigned char dst[1024] = { 0 };
 		uint32_t len = sizeof dst;
 		std::string strSrcHex = Base64::Decode(data);
-		cipher::AES_ECB_Cipher cipher((const unsigned char*)key.c_str(), false);
-		if (cipher.decrypt(
-			(const unsigned char*)strSrcHex.c_str(),
-			strSrcHex.length(), dst, len) < 0) {
-			return "";
+		if (!strSrcHex.empty()) {
+			cipher::AES_ECB_Cipher cipher((const unsigned char*)key.c_str(), false);
+			if (cipher.decrypt(
+				(const unsigned char*)strSrcHex.c_str(),
+				strSrcHex.length(), dst, len) < 0) {
+				return "";
+			}
 		}
 		return std::string((const char*)dst);
 #endif

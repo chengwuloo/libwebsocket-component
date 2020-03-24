@@ -242,6 +242,10 @@ namespace cipher
 			printf("AES_ECB_Cipher::decode src is NULL ");
 			return -1;
 		}
+		if (src_len == 0) {
+			printf("AES_ECB_Cipher::decode src_len is 0");
+			return -1;
+		}
 		// make sure dest buff is larger than src buff
 		if (len < src_len)
 		{
