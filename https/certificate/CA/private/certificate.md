@@ -7,12 +7,12 @@ mkdir -p CA/private
 #第一步 生成私钥文件
 sudo openssl genrsa -out /etc/pki/CA/private/cakey.pem 2048
 #第二步 生成自签证书 -key 私钥文件 -out 证书存放位置 -new 生成新证书签署请求 -days n 证书有效天数 -x509 生成自签证书
-//CN Guangdong Shenzhen TXQP Test test.Api.cn andy_ro@qq.com
+//CN Guangdong Shenzhen MUDUO Test test.Api.cn andy_ro@qq.com
 sudo openssl req -new -x509 -key /etc/pki/CA/private/cakey.pem -out /etc/pki/CA/cacert.pem -days 365
 #第三步 生成私钥
 sudo openssl genrsa -out /etc/pki/CA/private/certificate.key 2048
 #第四步 生成请求签署文件
-//CN Guangdong Shenzhen TXQP Test www.testApi.com andy_ro@qq.com
+//CN Guangdong Shenzhen MUDUO Test www.testApi.com andy_ro@qq.com
 sudo openssl req -new -key /etc/pki/CA/private/certificate.key -out CA/private/certificate.csr
 #第五步 签署证书 -in 证书请求签署文件 -out 签发后的证书文件 -days n 证书有效天数
 sudo touch CA/private/index.txt
@@ -67,11 +67,11 @@ sudo vim /etc/hosts
 *   CAfile: /etc/pki/tls/certs/ca-bundle.crt
   CApath: none
 * Server certificate:
-* 	subject: E=andy_ro@qq.com,CN=test.Api.cn,OU=Test,O=TXQP,L=Shenzhen,ST=Guangdong,C=CN
+* 	subject: E=andy_ro@qq.com,CN=test.Api.cn,OU=Test,O=MUDUO,L=Shenzhen,ST=Guangdong,C=CN
 * 	start date: Feb 27 12:09:40 2020 GMT
 * 	expire date: Feb 26 12:09:40 2021 GMT
 * 	common name: test.Api.cn
-* 	issuer: E=andy_ro@qq.com,CN=test.Api.cn,OU=Test,O=TXQP,L=Shenzhen,ST=Guangdong,C=CN
+* 	issuer: E=andy_ro@qq.com,CN=test.Api.cn,OU=Test,O=MUDUO,L=Shenzhen,ST=Guangdong,C=CN
 * NSS error -8172 (SEC_ERROR_UNTRUSTED_ISSUER)
 * Peer's certificate issuer has been marked as not trusted by the user.
 * Closing connection 0

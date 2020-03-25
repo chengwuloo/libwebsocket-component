@@ -1495,14 +1495,17 @@ std::string ApiServer::OrderProcess(std::string const& reqStr, muduo::Timestamp 
 #else
 				/*std::string strURL*/paraValue = URL::Decode2(paraValue);
 #endif
+#if 1
 				//"\r\n"
 				boost::replace_all<std::string>(paraValue, "\r\n", "");
 				//"\r"
 				boost::replace_all<std::string>(paraValue, "\r", "");
 				//"\r\n"
 				boost::replace_all<std::string>(paraValue, "\n", "");
-
-				LOG_DEBUG << "--- *** " << "UrlDecode >>> " << paraValue/*strURL*/;
+#else
+				paraValue = boost::regex_replace(paraValue, boost::regex("\r\n|\r|\n"), "");
+#endif
+				LOG_DEBUG << "--- *** " << "URL::Decode[" << c << "] >>> " << paraValue/*strURL*/;
 
 				std::string const& strURL = paraValue;
 				decrypt = Crypto::AES_ECBDecrypt(strURL, p_agent_info->descode);

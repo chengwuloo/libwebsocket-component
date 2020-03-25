@@ -20,6 +20,11 @@
 
 #include "AES_Cipher.h"
 
+#include <boost/filesystem.hpp>
+#include <boost/algorithm/algorithm.hpp>
+#include <boost/algorithm/string.hpp>
+#include <boost/regex.hpp>
+
 #define KEYCODELENGTH 16
 
 namespace Crypto {
@@ -86,6 +91,28 @@ namespace Crypto {
 		delete[] pDest;
 		return strRet;
 	}
+	
+	static void ClearPadding(unsigned char* pSrc, int nSrcLen)
+	{
+		int nEnd = nSrcLen;
+		int nStart = ((nSrcLen / 16) - 1) * 16;
+		if (pSrc[nSrcLen - 1] != pSrc[nSrcLen - 2]) {
+			for (int i = 0; i < 16; ++i) {
+				if (pSrc[nSrcLen - 1] == i) {
+					pSrc[nSrcLen - 1] = '\0';
+					break;
+				}
+			}
+		}
+		else {
+			for (int i = 2; i <= nEnd - nStart; ++i) {
+				if (pSrc[nSrcLen - 1] != pSrc[nSrcLen - 1 - i]) {
+					pSrc[nSrcLen - i] = '\0';
+					break;
+				}
+			}
+		}
+	}
 
 	//AES_ECBDecrypt AES解密 ///
 	static std::string AES_ECBDecrypt(std::string const& data, std::string const& key)
@@ -101,7 +128,7 @@ namespace Crypto {
 		unsigned char buf[KEYCODELENGTH];
 		//unsigned char KEY[KEYCODELENGTH];
 		//StringToHex(key.c_str(), KEY, KEYCODELENGTH);
-		if (AES_set_decrypt_key((unsigned char const*)key.c_str(), 128, &ctx) < 0) {
+		if (AES_set_decrypt_key((unsigned char const*)key.c_str(), key.length() * 8/*128*/, &ctx) < 0) {
 			printf("AES_set_decrypt_key error\n");
 			return "";
 		}
@@ -130,19 +157,51 @@ namespace Crypto {
 		std::string strRet = (char*)pDest;
 		delete[] pDest;
 		return strRet;
-#else
+#elif 1
+		std::string strSrcHex = Base64::Decode(data);
+		if (!strSrcHex.empty()) {
+			AES_KEY ctx = { 0 };
+			if (AES_set_decrypt_key((unsigned char const*)key.c_str(), key.length() * 8/*128*/, &ctx) < 0) {
+				printf("AES_set_decrypt_key error\n");
+				return "";
+			}
+			//src
+			unsigned char const* src = (unsigned char const*)strSrcHex.data();
+			//dst
+			unsigned char dst[strSrcHex.length()];
+			memset(dst, 0, strSrcHex.length());
+			//AES_decrypt
+			int len = 0;
+			while (len < strSrcHex.length()) {
+				AES_decrypt(&src[len], dst + len, &ctx);
+				len += AES_BLOCK_SIZE;
+			}
+			ClearPadding((unsigned char*)dst, strSrcHex.length());
+			dst[len] = '\0';
+			//正则表达式 https://tool.oschina.net/uploads/apidocs/jquery/regexp.html
+			//ASCII码表 http://www.asciima.com/ascii/12.html
+			//ASCII 非打印控制字符   0~31 
+			//ASCII      打印字符  32~126 ^[ -~]+$  127-DEL
+			//ASCII   扩展打印字符 128~255 ^[\x80-\xff]+$
+			if (boost::regex_match(
+				std::string((char const*)dst), boost::regex("^[ -~\u4e00-\u9fa5]+$"))) {
+				return std::string((char const*)dst);
+			}
+		}
+		return "";
+#elif 0
 		unsigned char dst[1024] = { 0 };
 		uint32_t len = sizeof dst;
 		std::string strSrcHex = Base64::Decode(data);
 		if (!strSrcHex.empty()) {
 			cipher::AES_ECB_Cipher cipher((const unsigned char*)key.c_str(), false);
 			if (cipher.decrypt(
-				(const unsigned char*)strSrcHex.c_str(),
+				(unsigned char const*)strSrcHex.c_str(),
 				strSrcHex.length(), dst, len) < 0) {
 				return "";
 			}
 		}
-		return std::string((const char*)dst);
+		return std::string((char const*)dst);
 #endif
 	}
 
