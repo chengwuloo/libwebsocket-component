@@ -498,6 +498,12 @@ public:
 	//管理员挂维护/恢复服务
 	std::map<in_addr_t, ApiVisitE> adminList_;
 
+	//HTTP/IP访问白名单信息
+	std::map<in_addr_t, ApiVisitE> whiteList_;
+	
+	//websocket/TCP/IP访问黑名单信息
+	std::map<in_addr_t, ApiVisitE> BlackList_;
+
 	//是否调试
 	bool isdebug_;
 };
