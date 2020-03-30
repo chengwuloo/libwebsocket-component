@@ -1,0 +1,713 @@
+syntax = "proto3";
+package HallServer;
+
+import "Game.Common.proto";
+
+
+
+message LoginMessage
+{
+     Game.Common.Header     header                 = 1;     // ID
+     string                 session                = 2;     // 登录账号
+}
+message LoginMessageResponse
+{
+    enum LoginRetCode
+    {
+        LOGIN_OK                                            = 0;     // 登录成功
+        LOGIN_ACCOUNTS_NOT_EXIST                            = 1;     // 账号不存在
+        LOGIN_SEAL_ACCOUNTS                                 = 2;     // 账号被封号
+        LOGIN_NETBREAK                                      = 3;     // 网络错误
+
+        REGISTER_UNKNOWN                                    = 20;    // 未知错误
+    }
+
+     Game.Common.Header     header                  = 1;
+     int32                  retCode                 = 2;     // 返回错误代码
+     string                 errorMsg                = 3;     // 错误描述
+
+     int64                  userId                  = 4;     // 玩家ID.
+     string                 account                 = 5;
+     uint32                 agentId                 = 6;
+     string                 nickName                = 7;     // 昵称
+     uint32                 headId                  = 8;     // 头像ID
+     int64                  score                   = 9;     // 携带金币
+     bytes                  gamePass                = 10;    // 游戏服务器密钥
+}
+
+message GameRoomMessage
+{
+     uint32                 roomId                  = 1;  // 房间类型 初 中 高 房间
+     string                 roomName                = 2;  // 类型名称  初 中 高
+     uint32                 tableCount              = 3;  // 桌子数量 有几桌游戏在开启
+     int64                  floorScore              = 4;  // 底注
+     int64                  ceilScore               = 5;  // 顶注
+     int64                  enterMinScore           = 6;  // 进游戏需要的最低分
+     int64                  enterMaxScore           = 7;  // 进游戏最大分
+     uint32                 minPlayerNum            = 8;  // 房间里面最少数量玩家
+     uint32                 maxPlayerNum            = 9;  // 房间里面最大数量玩家
+     int64                  maxJettonScore          = 10; // 每区域最大下注
+     int32                  status                  = 11; // -1:关停 0:暂未开放 1：正常开启  2：敬请期待
+     repeated  int64        jettons                 = 12; // 筹码数组
+     int64                  playerNum               = 13; // 在游戏中人数
+}
+message GameMessage
+{
+     uint32                 gameId                  = 1;  // 游戏ID
+     string                 gameName                = 2;  // 游戏的名字
+     uint32                 gameSortId              = 3;  // 游戏排序0 1 2 3 4
+     uint32                 gameType                = 4;  // 0-百人场  1-对战类
+     uint32                 gameIsHot               = 5;  // 火爆 0 -正常 1-火爆 2-新
+     int32                  gameStatus              = 6;  // 游戏状态 -1:关停 0:暂未开放 1：正常开启  2：敬请期待
+     repeated GameRoomMessage  gameRoomMsg          = 7;
+}
+
+message GetGameMessage
+{
+     Game.Common.Header     header                  = 1;  // ID
+}
+message GetGameMessageResponse
+{
+     Game.Common.Header     header                  = 1;  // ID
+     int32                  retCode                 = 2;
+     string                 errorMsg                = 3;
+
+     repeated GameMessage   gameMessage             = 4;
+}
+
+message MatchMessage
+{
+     uint32                 gameId                  = 1;  // 游戏ID
+     string                 gameName                = 2;  // 游戏的名字
+     uint32                 gameSortId              = 3;  // 游戏排序0 1 2 3 4
+     uint32                 gameIsHot               = 4;  // 火爆 0 -正常 1-火爆 2-新
+     uint32                 roomId                  = 5;  // 比赛id跟房间一个概念
+     string                 matchName                = 6;  // 比赛名字
+     repeated uint32        awardScore              = 7;  //奖励金
+     uint32                 joinNeedScore           = 8;  //报名费
+     int32                  status                  = 9; // -1:关停 0:暂未开放 1：正常开启  2：敬请期待
+     repeated  int64        jettons                 = 10; // 筹码数组
+     int32                  playerNum               = 11; // 开赛人数
+     uint32                 mayNeedSeconds          = 12;  // 可能需要时长
+     uint32                 floorscore              = 13;  // 游戏底分
+     repeated  uint32       openTimes               = 14;  //比赛开始时间段 1024 = 10:24 偶数开始时间 奇数结束时间 0开始 1结束 2开始
+
+}
+message GetMatchMessage
+{
+     Game.Common.Header     header                  = 1;  // ID
+}
+
+message GetMatchMessageResponse
+{
+     Game.Common.Header     header                  = 1;  // ID
+     int32                  retCode                 = 2;
+     string                 errorMsg                = 3;
+
+     repeated MatchMessage   matchMessage           = 4;
+}
+
+
+message GetServerPlayerNum
+{
+     Game.Common.Header     header                  = 1;  // ID
+}
+
+message RoomPlayerNum
+{
+     uint32                 roomId                  = 1;  // 房间类型 初 中 高 房间
+     int64                  playerNum               = 2; // 在游戏中人数
+}
+
+message SimpleGameMessage
+{
+     uint32                 gameId                  = 1;  // 游戏ID
+     repeated  RoomPlayerNum roomPlayerNum          = 2;  // 房间具体人数
+}
+
+message GetServerPlayerNumResponse
+{
+     Game.Common.Header     header                  = 1;  // ID
+     int32                  retCode                 = 2;
+     string                 errorMsg                = 3;
+
+     repeated SimpleGameMessage   gamePlayerNumMessage  = 4;
+}
+
+
+message GetPlayingGameInfoMessage
+{
+     Game.Common.Header     header                  = 1;
+}
+message GetPlayingGameInfoMessageResponse
+{
+    Game.Common.Header     header                  = 1;
+    uint32                 gameId                  = 2; // 游戏ID
+    uint32                 roomId                  = 3; // 房间类型 初 中 高 房间
+
+    int32                  retCode                 = 4;
+    string                 errorMsg                = 5;
+}
+
+
+message GetGameServerMessage
+{
+     Game.Common.Header     header                  = 1;
+
+     uint32                 gameId                  = 2; // 游戏ID
+     uint32                 roomId                  = 3; // 房间类型 初 中 高 房间
+}
+
+message GetMatchServerMessage
+{
+     Game.Common.Header     header                  = 1;
+
+     uint32                 gameId                  = 2; // 游戏ID
+     uint32                 roomId                  = 3; // 房间类型 初 中 高 房间
+}
+
+message GetGameServerMessageResponse
+{
+     Game.Common.Header     header                  = 1;
+     int32                  retCode                 = 2;
+     string                 errorMsg                = 3;
+}
+
+
+message SetHeadIdMessage
+{
+     Game.Common.Header     header       = 1;  			// ID
+     int64                  userId       = 2;			// 玩家ID.
+     int32                  headId       = 3;			// 头像ID.
+}
+message SetHeadIdMessageResponse
+{
+     Game.Common.Header     header       = 1;  			// ID
+     int32                  retCode      = 2;			// 返回错误代码
+     string                 errorMsg     = 3;			// 错误描述
+     int64                  userId       = 4;			// 玩家ID.
+     int32                  headId       = 5;			// 头像ID.
+}
+
+message SetNickNameMessage
+{
+     Game.Common.Header     header       = 1;  			// 头信息
+     int64                  userId       = 2;			// 玩家ID.
+     int32                  nickNameId   = 3;                   // nickNameId
+     string                 nickName     = 4;			// nickname
+}
+message SetNickNameMessageResponse
+{
+     Game.Common.Header     header       = 1;  			// 头信息
+
+     int32                  retCode      = 2;			// 错误代码
+     string                 errorMsg     = 3;			// 错误信息
+
+     int64                  userId       = 4;			// 玩家ID.
+     int32                  nickNameId   = 5;                   // nickNameId
+     string                 nickName     = 6;			// nickname
+}
+
+message GetUserScoreMessage
+{
+     Game.Common.Header header	= 1;
+
+     int64	userId		= 2;
+}
+message GetUserScoreMessageResponse
+{
+     Game.Common.Header header	  = 1;
+     int32              retCode   = 2;
+     string             errorMsg  = 3;
+
+     int64	        userId	  = 4; // 玩家ID
+     int64              score     = 5; // 分值
+}
+
+message GetPlayRecordMessage
+{
+     Game.Common.Header         header          = 1;  			// 头信息.
+     int32                      gameId          = 2;
+}
+message GameRecordInfo
+{
+        string                  gameRoundNo     = 1;			//牌局编号
+        int32                   roomId          = 2;
+        int32			winLoseScore    = 3;			//输赢分数
+        int64			gameEndTime     = 4;			//游戏结束时间
+}
+message GetPlayRecordMessageResponse
+{
+        Game.Common.Header      header          = 1;  			// 头信息.
+        int32                   retCode         = 2;  			// 错误代码.
+        string                  errorMsg        = 3;  			// 错误信息.
+        int32                   gameId          = 4;
+        repeated GameRecordInfo detailInfo      = 5;			//详细的游戏记录
+}
+
+//当局游戏记录详情(点击某一局获取详情)
+message GetRecordDetailMessage
+{
+     Game.Common.Header         header          = 1;  			// 头信息.
+     string                     gameRoundNo     = 2;  			//牌局编号
+}
+
+//当局游戏记录详情
+message GetRecordDetailResponse
+{
+	Game.Common.Header      header          = 1;  			// 头信息.
+	int32                   retCode         = 2;  			// 错误代码.
+	string                  errorMsg        = 3;  			// 错误信息.
+	string             gameRoundNo          = 4;  			//牌局编号
+	bytes               detailInfo          = 5;            //座椅玩家记录详情，jsondata/二进制流
+}
+
+message GetMatchRecordMessage
+{
+        Game.Common.Header         header          = 1;  			// 头信息.
+        int32                      gameId          = 2;
+        int32                      roomId          = 3;
+}
+
+message MatchRecordInfo
+{
+        string                  matchRoundNo     = 1;			//比赛编号
+        string                  matchName        = 2;                   //比赛名
+        int32                   rank            = 3;                    //排名 0报名/-1退赛 1~n 排名
+        int32			winLoseScore    = 4;			//输赢分数
+        int64			recordTime     = 5;			//游戏结束时间
+}
+
+message GetMatchRecordResponse
+{
+        Game.Common.Header      header          = 1;  			// 头信息.
+        int32                   retCode         = 2;  			// 错误代码.
+        string                  errorMsg        = 3;  			// 错误信息.
+        int32                   gameId          = 4;
+        repeated MatchRecordInfo detailInfo      = 5;			//详细的比赛记录
+}
+
+message GetMatchBestRecordMessage
+{
+        Game.Common.Header         header          = 1;  			// 头信息.
+        int32                      gameId          = 2;
+        int32                      matchId         = 3;                         //同roomid
+}
+
+message GetMatchBestRecordResponse
+{
+        Game.Common.Header      header          = 1;  			// 头信息.
+        int32                   retCode         = 2;  			// 错误代码. 0/1 成功/暂无最佳成绩
+        int32                   bestRank        = 3;                    // 最佳排名
+        int32                   totalAward      = 4;                    // 所有盈利
+        int64			matchEndTime    = 5;			// 比赛最佳排名时间
+}
+
+
+message GetLuckyGameRequest
+{
+     Game.Common.Header         header            = 1;      // 头信息.
+     int32                      nBetIndex         = 2;      //押分下标
+}
+
+message GetLuckyGameResponse
+{
+     Game.Common.Header       header              = 1;  // 头信息.
+     int32                    nRetCode            = 2;  //返回错误码 3，玩家积分不够 4，游戏超出开放时间
+     int32                    nRetId              = 3;  //转盘数值类形下标
+     int64                    lScore 		      = 4;  //获奖多少金币
+     int64                    lUserScore 		  = 5;  //当前玩家金币 	 
+     int64                    lCurrentJiFen 	  = 6;  //当前玩家积分	
+     string                   cbRoundId		      = 7;  //牌局Id
+}
+
+message GetSwitchLuckyGameRequest
+{
+     Game.Common.Header         header            = 1;      // 头信息.
+     int32                      nOperateType      = 2;      //操作类型，0开启游戏；1退出游戏
+}
+
+message GetSwitchLuckyGameResponse
+{
+    Game.Common.Header          header            = 1;      // 头信息.
+    int32                       nIsOpen           = 2;      //是否开放
+    int32                       nRetCode          = 3;      //返回操作码，0请求成功；否则失败
+    int32                       nOperateType      = 4;      //操作类型，0开启游戏；1退出游戏（实际退出时不返回数据）
+    int64                       lUserScore        = 5;      //当前玩家金币  
+    int64                       lCurrentJiFen     = 6;      //玩家积分 
+    repeated    int32           tBetLists         = 7;     //押分项列表
+    repeated    int32           tIconLists        = 8;     //图标列表
+    repeated    int32           tGoldLists        = 9;     //金币列表
+    repeated    string          tRecords          = 10;     //Records
+}
+
+message TaskInfo
+{
+     int32 taskId = 1;
+     string taskName  = 2;
+     int32 taskType = 3;
+     int32 taskStatus = 4;
+     int64 taskTotal = 5;
+     int32 taskGameId = 6;
+     int32 taskRoomId = 7;
+     int32 taskOrder = 8;
+     int64 taskProgress = 9;
+     int64 taskAwardGold = 10;
+     int64 taskAwardScore = 11;
+}
+
+message ReqGetUserTask
+{
+     Game.Common.Header header = 1;
+}
+
+message ResGetUserTask
+{
+     Game.Common.Header header = 1;
+     int32 errCode            = 2;//1 成功，2 任务wei开启
+     repeated TaskInfo taskLIst = 3;
+}
+
+message ReqGetTaskRewards
+{
+     Game.Common.Header header = 1;
+     int32 taskId             = 2;
+}
+
+message ResGetTaskReward
+{
+     Game.Common.Header header = 1;
+     int32 errCode            = 2;//1 成功，2 任务未完成 3 任务奖励已领取 4 找不到此任务 5 找不到玩家信息
+     int32 taskId             = 3;
+     int32 taskStatus         = 4;
+     int64 userScore          = 5;
+     int64 userJifen          = 6;
+}
+
+
+
+
+
+
+
+
+
+
+//游戏回放子记录
+message GamePlaybackRecordItem
+{
+     int32            wMainCmdID= 1;							// 游戏主命令
+     int32            wSubCmdID = 2;							// 游戏子命令
+     bytes            MsgData   = 3;             				// 命令内容
+ int32			  userId    = 4;							// 玩家ID.
+ int32			  chairId   = 5;							// 椅子号.
+}
+
+//游戏回放记录
+message GamePlaybackRecord
+{
+        repeated GamePlaybackRecordItem recitem	= 1;						// 游戏命令
+}
+
+
+
+
+
+
+
+
+
+
+
+
+message HallGetGameServerIPMessage
+{
+     Game.Common.Header     header       = 1;
+
+     int32                  userId       = 2;
+     int32                  gameId       = 3; 			// 游戏ID
+     int32                  kindId       = 4; 			// 游戏类型
+     int32                  roomKindId   = 5; 			// 房间类型 初 中 高 房间区别
+     int32                  bReconnect   = 6;  			// 是否重连 0 是重新打开游戏登录 1 是在游戏中重连
+     string                 ip           = 7;           // 陪玩指定IP
+     int32                  configId     = 8;
+}
+message HallGetGameServerIPMessageResponse
+{
+     Game.Common.Header     header       = 1;
+     int32                  retCode      = 2;
+     string                 errorMsg     = 3;
+
+     int32                  userId       = 4;
+     int32                  gameId       = 5;
+     int32                  kindId   	 = 6;
+     int32                  roomKindId   = 7;
+
+    repeated string                 ip           = 8; 			// 游戏服务器IP
+     int32                  configId     = 9;           // configId
+}
+
+
+
+
+message HallNotifyGetChatMessageFromServer // 服务器通知有新消息
+{
+     Game.Common.Header     header       = 1;  			// ID
+     int32                  userId       = 2;			// 玩家ID.
+}
+
+message HallNotifyNewMailMessageFromServerMessage // 服务器gonggao
+{
+     Game.Common.Header     header       = 1;  			// ID
+     int32                  userId       = 2;			// 玩家ID.
+}
+
+message HallNotifyNoticeMessageFromServerMessage // 服务器通知有新消息
+{
+     Game.Common.Header     header       = 1;  			// ID
+     string                 message      = 2;
+}
+
+message ExchangeScoreToRMBMessage
+{
+     Game.Common.Header     header       = 1;  			// ID
+     int32                  userId       = 2;			// 玩家ID.
+     double                 exchangeScore = 3;          	// 兑换的积分
+     int32                  type         = 4;           	//type 2: alipay  3: network bank
+}
+message ExchangeScoreToRMBMessageResponse
+{
+     Game.Common.Header     header       = 1;  			// ID
+     int32                  retCode      = 2;			// 错误代码
+     string                 errorMsg     = 3;			// 错误信息
+
+     int32                  userId       = 4;			// ??ID.
+     int32                  result       = 5;            	// 结果 （0: 兑换成功请等待审核打款 1: 在游戏中不能进行兑换 2:还没有绑定支付宝 3: 还没有绑定银行卡 4:金币不足够 5:账号已冻结 6:TEMP User not Exchange more than two） 7:
+
+     int32                  type         = 6;           	//type 2: alipay  3: network bank
+     double                 exchangeScore = 7;          	// 兑换的积分
+     double                 score        = 8;               // current score
+}
+
+
+message GetExchangeRMBRecordMessage
+{
+     Game.Common.Header     header       = 1;  			// ID
+     int32                  userId       = 2;			// 玩家ID.
+     int32                  Id           = 3;           	// 请求大于ID的记录
+}
+message ExchangeRMBRecordMessage
+{
+     int32                  Id           = 1;  			//id
+     string                 orderId      = 2;  			//orderId 流水号
+     string                 account      = 3;  			//帐号 支付宝 或者银行账号
+     string                 name         = 4;  			//name 支付宝姓名 或者银行卡姓名
+     int32                  type         = 5;  			//type 2: alipay  3: network bank
+     double                 exchangeScore = 6;  		//兑换的积分
+     int32                  status       = 7;  			//状态：自动审核(4), 人工审核(6), 审核中(8), 已驳回(9), 准备兑换(10), 兑换失败(15), 兑换成功(18), 已拒绝(20), 退款成功(24), 退款中(25), 退款失败(26)
+     string                 time         = 8;  			//时间
+     string                 reason         = 9;  		//失败原因
+}
+message GetExchangeRMBRecordMessageResponse
+{
+     Game.Common.Header     header       = 1;  			// ID
+     int32                  retCode      = 2;			// 错误代码
+     string                 errorMsg     = 3;			// 错误信息
+     int32                  userId       = 4;			// ID.
+    repeated ExchangeRMBRecordMessage message    = 5;
+}
+
+
+message NotifyExchangeMessage
+{
+     Game.Common.Header     header       = 1;  			// ID
+     int32                  userId       = 2;			// 玩家ID.
+     int32                  id           = 3;
+     string                 orderId      = 4;
+     double                 realPay      = 5;                   //realPay Score
+     int32                  status       = 6;
+}
+
+
+message GetRandomNickNameMessage
+{
+     Game.Common.Header     header       = 1;  			// 头信息
+     int32                  userId       = 2;			// 玩家ID.
+}
+message GetRandomNickNameMessageResponse
+{
+     Game.Common.Header     header       = 1;  			// 头信息
+
+     int32                  retCode      = 2;			// 错误代码
+     string                 errorMsg     = 3;			// 错误信息
+
+     int32                  userId       = 4;			// 玩家ID.
+     int32                  nickNameId   = 5;                   // nickNameId
+     string                 nickName     = 6;			// nickname
+}
+
+
+
+
+message GetScoreRankMessage
+{
+     Game.Common.Header     header       = 1;  			// 头信息
+     int32                  userId       = 2;			// 玩家ID.
+}
+message RankMessage
+{
+     int32                  rankId       = 1;			// 记录序号.
+     int32                  userId       = 2;			// 玩家ID.
+     double                 score        = 3;			// 积分信息.
+     int32                  headId       = 4;			// 头像ID.
+     int32                  headboxId    = 5;
+     string                 nickName     = 6;			// 昵称.
+     int32                  gender       = 7;			// 性别.
+     int32                  vip1         = 8;			// vip等级
+}
+
+message GetScoreRankMessageResponse
+{
+     Game.Common.Header     header       = 1;  			// 头信息
+
+     int32                  retCode      = 2;			// 错误代码
+     string                 errorMsg     = 3;			// 错误信息
+
+     int32                  userId       = 4;			// 玩家ID.
+    repeated RankMessage            message      = 5;			// 排行信息
+}
+
+// online info.
+message OnlineMessage
+{
+     int32                  rankId       = 1;			// 记录序号  这个名字不要改 前端 需要同样的名字
+     int32                  userId       = 2;			// 玩家ID
+     string                 nickName     = 3;			// 玩家昵称
+     int32                  headId       = 4;			// 头像ID
+     int32                  headboxId    = 5;           // 头像框ID
+     int32                  gender       = 6;			// 玩家性别
+     int32                  totonlineTime= 7;			// 总在线时长
+     int32                  vip1         = 8;			// vip等级
+     int32                  vip2         = 9;			// vip等级2
+}
+
+message GetUserOnlineListMessage
+{
+     Game.Common.Header     header       = 1;                   // 头信息
+     int32                  userId       = 2;			// 玩家ID
+}
+
+message GetUserOnlineListResponse
+{
+     Game.Common.Header     header       = 1;                   // 头信息
+
+     int32                  retCode      = 2;                   // 错误代码.
+     string                 errorMsg     = 3;                   // 错误信息.
+
+    repeated OnlineMessage          message      = 4;			// 在线列表.
+}
+
+// get the user status info now.
+message GetUpdateUserScoreMessage
+{
+     Game.Common.Header     header       = 1;  			// ID
+     int64		    userId	 = 2;
+}
+
+// get special status info reponse.
+message GetUpdateUserScoreResponse
+{
+     Game.Common.Header     header       = 1;  			// 头信息
+     int32                  retCode      = 2;  			// 错误代码.
+     string                 errorMsg     = 3;  			// 错误信息.
+
+     int64                  userId	     = 4;			// 玩家ID.
+     int64                  score        = 5;			// 玩家分值.
+}
+
+
+message HallOnUserOfflineMessage
+{
+     Game.Common.Header     header       = 1;  			// 头信息.
+     int64                  userId       = 2;			// 玩家ID.
+}
+
+
+
+message GetDialogBoxNoticeMessage
+{
+     Game.Common.Header header	= 1;
+     uint32	 userId		        = 2; // 玩家ID
+}
+
+message GetDialogBoxNoticeMessageResponse
+{
+     Game.Common.Header header	= 1;
+     int32             retCode  = 2;
+     string           errorMsg  = 3;
+
+     uint32             userId  = 4; // 玩家ID
+     string             message = 5;
+}
+
+// user record item data now.
+message GamePlaybackUserItem
+{
+         uint32 userid = 1;			// 玩家用户ID.
+         double changed_score = 3;		// 玩家金币变化值.
+}
+
+// playback collect item data now.
+message GamePlaybackCollectItem
+{
+         uint32 banker_userid = 1;		// 庄家ID
+         string record_uuid   = 2;		// 记录唯一ID
+         string record_datetime = 3;		// 记录生成时间
+	repeated GamePlaybackUserItem user = 4;		// 五个玩家金币变化列表
+         uint32 config_id    = 5;		// config id.
+         uint32 record_id    = 6;		// 表唯一ID.
+         string room_name    = 7;		// room_name.
+         uint32 process_state    = 8;		// 处理状态 ,0无 ,1处理完成,2处理中
+}
+
+// 获取列表信息
+message GamePlaybackCollectRequest
+{
+     Game.Common.Header header	= 1;
+	
+     uint32             userId  = 2; // 玩家ID
+     uint32             gameId  = 3; // 游戏ID
+     uint32         limitCount  = 4; // 只查询多少条记录.
+}
+
+// 列表返回
+message GamePlaybackCollectResponse
+{
+     Game.Common.Header header	= 1;
+     int32             retCode  = 2;	// 返回错误代码
+     uint32             userId  = 3; 	// 玩家ID
+	repeated GamePlaybackCollectItem item = 4;	// 回放描述数组.
+}
+
+// 获取明细信息
+message GamePlaybackDetailRequest
+{
+     Game.Common.Header header	= 1;
+         string record_uuid         = 2;	// 记录唯一ID
+     int32 record_id            = 3;	// 超端用户使用牌局ID查询明细记录
+     uint32             gameId  = 4;    // 游戏ID
+}
+
+// 明细信息返回
+message GamePlaybackDetailResponse
+{
+     Game.Common.Header header	= 1;
+     int32             retCode  = 2;	// 返回错位代码
+         bytes content 				= 3;	// 回放数据,使用GamePlaybackRecord解析.
+         uint32             gameId  = 4; // 游戏ID
+         uint32             report_userid  = 5; // 举报人ID
+}
+
+
+
+
