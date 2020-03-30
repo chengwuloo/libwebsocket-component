@@ -111,6 +111,7 @@ bool Gateway::initRedisCluster() {
 
 //RedisLock
 bool Gateway::initRedisLock() {
+#if 0
 	for (std::vector<std::string>::const_iterator it = redlockVec_.begin();
 		it != redlockVec_.end(); ++it) {
 		std::vector<std::string> vec;
@@ -118,26 +119,31 @@ bool Gateway::initRedisLock() {
 		LOG_INFO << __FUNCTION__ << " --- *** " << "\nredisLock " << vec[0].c_str() << ":" << vec[1].c_str();
 		REDISLOCK.AddServerUrl(vec[0].c_str(), atol(vec[1].c_str()));
 	}
+#endif
 	return true;
 }
 
 //MongoDB
 bool Gateway::initMongoDB(std::string url) {
+#if 0
 	//http://mongocxx.org/mongocxx-v3/tutorial/
 	LOG_INFO << __FUNCTION__ << " --- *** " << url;
 	mongocxx::instance instance{};
 	mongoDBUrl_ = url;
+#endif
 	return true;
 }
 
 //MongoDB
 bool Gateway::initMongoDB() {
+#if 0
 	//http://mongocxx.org/mongocxx-v3/tutorial/
 	//mongodb://admin:6pd1SieBLfOAr5Po@192.168.0.171:37017,192.168.0.172:37017,192.168.0.173:37017/?connect=replicaSet;slaveOk=true&w=1&readpreference=secondaryPreferred&maxPoolSize=50000&waitQueueMultiple=5
 	MongoDBClient::ThreadLocalSingleton::setUri(mongoDBUrl_);
 	static __thread mongocxx::database db = MONGODBCLIENT["gamemain"];
 	static __thread mongocxx::database* dbgamemain_;
 	dbgamemain_ = &db;
+#endif
 	return true;
 }
 
