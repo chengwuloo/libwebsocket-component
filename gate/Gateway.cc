@@ -28,14 +28,19 @@ using std::placeholders::_3;
 
 Gateway::Gateway(muduo::net::EventLoop* loop,
 	const muduo::net::InetAddress& listenAddr,
-	const muduo::net::InetAddress& listenAddrInner,
+	const muduo::net::InetAddress& listenAddrInn,
+	const muduo::net::InetAddress& listenAddrHttp,
 	std::string const& cert_path, std::string const& private_key_path,
 	std::string const& client_ca_cert_file_path,
 	std::string const& client_ca_cert_dir_path)
     : server_(loop, listenAddr, "Gateway", cert_path, private_key_path, client_ca_cert_file_path, client_ca_cert_dir_path)
-	, innServer_(loop, listenAddrInner, "GatewayInner")
+	, innServer_(loop, listenAddrInn, "GatewayInner")
 	, hallConector_(loop)
-	, gameConnector_(loop) {
+	, gameConnector_(loop)
+	, kTimeoutSeconds_(3)
+	, kMaxConnections_(15000)
+	, serverState_(ServiceRunning)
+	, isdebug_(false) {
 
 	//网络I/O线程池，处理网络I/O读写：数据收/发 recv(read)send(write)
 	muduo::net::ReactorSingleton::inst(loop, "RWIOThreadPool");
@@ -65,6 +70,11 @@ Gateway::Gateway(muduo::net::EventLoop* loop,
 Gateway::~Gateway() {
 }
 
+void Gateway::quit() {
+
+}
+
+//zookeeper
 bool Gateway::initZookeeper(std::string const& ipaddr) {
 	zkclient_.reset(new ZookeeperClient(ipaddr));
 	zkclient_->SetConnectedWatcherHandler(
@@ -76,15 +86,7 @@ bool Gateway::initZookeeper(std::string const& ipaddr) {
 	return true;
 }
 
-bool Gateway::initRedisCluster() {
-
-	if (!REDISCLIENT.initRedisCluster(redisIpaddr_, redisPasswd_)) {
-		abort();
-		return false;
-	}
-	return true;
-}
-
+//RedisCluster
 bool Gateway::initRedisCluster(std::string const& ipaddr, std::string const& passwd) {
 	
 	redisClient_.reset(new RedisClient());
@@ -95,6 +97,55 @@ bool Gateway::initRedisCluster(std::string const& ipaddr, std::string const& pas
 	redisPasswd_ = passwd;
 	redisClient_->startSubThread();
 	return true;
+}
+
+//RedisCluster
+bool Gateway::initRedisCluster() {
+
+	if (!REDISCLIENT.initRedisCluster(redisIpaddr_, redisPasswd_)) {
+		abort();
+		return false;
+	}
+	return true;
+}
+
+//RedisLock
+bool Gateway::initRedisLock() {
+	for (std::vector<std::string>::const_iterator it = redlockVec_.begin();
+		it != redlockVec_.end(); ++it) {
+		std::vector<std::string> vec;
+		boost::algorithm::split(vec, *it, boost::is_any_of(":"));
+		LOG_INFO << __FUNCTION__ << " --- *** " << "\nredisLock " << vec[0].c_str() << ":" << vec[1].c_str();
+		REDISLOCK.AddServerUrl(vec[0].c_str(), atol(vec[1].c_str()));
+	}
+	return true;
+}
+
+//MongoDB
+bool Gateway::initMongoDB(std::string url) {
+	//http://mongocxx.org/mongocxx-v3/tutorial/
+	LOG_INFO << __FUNCTION__ << " --- *** " << url;
+	mongocxx::instance instance{};
+	mongoDBUrl_ = url;
+	return true;
+}
+
+//MongoDB
+bool Gateway::initMongoDB() {
+	//http://mongocxx.org/mongocxx-v3/tutorial/
+	//mongodb://admin:6pd1SieBLfOAr5Po@192.168.0.171:37017,192.168.0.172:37017,192.168.0.173:37017/?connect=replicaSet;slaveOk=true&w=1&readpreference=secondaryPreferred&maxPoolSize=50000&waitQueueMultiple=5
+	MongoDBClient::ThreadLocalSingleton::setUri(mongoDBUrl_);
+	static __thread mongocxx::database db = MONGODBCLIENT["gamemain"];
+	static __thread mongocxx::database* dbgamemain_;
+	dbgamemain_ = &db;
+	return true;
+}
+
+//MongoDB/RedisCluster/RedisLock
+void Gateway::threadInit() {
+	initRedisCluster();
+	initMongoDB();
+	initRedisLock();
 }
 
 void Gateway::ZookeeperConnectedHandler() {
@@ -268,21 +319,16 @@ void Gateway::GetHallChildrenWatcherHandler(
 	}
 }
 
-//MongoDB/redis与线程池关联
-void Gateway::threadInit()
-{
-}
-
 //启动websocket(TCP)业务线程
 //启动websocket(TCP)监听，客户端交互
-void Gateway::start(int numThreads, int workerNumThreads, int maxSize)
+void Gateway::start(int numThreads, int numWorkerThreads, int maxSize)
 {
 	//网络I/O线程数
 	numThreads_ = numThreads;
 	/*server_.*/muduo::net::ReactorSingleton::setThreadNum(numThreads);
 	
 	//创建若干worker线程，启动线程池
-	for (int i = 0; i < workerNumThreads; ++i) {
+	for (int i = 0; i < numWorkerThreads; ++i) {
 		std::shared_ptr<muduo::ThreadPool> threadPool = std::make_shared<muduo::ThreadPool>("ThreadPool:" + std::to_string(i));
 		threadPool->setThreadInitCallback(std::bind(&Gateway::threadInit, this));
 		threadPool->setMaxQueueSize(maxSize);
@@ -290,15 +336,15 @@ void Gateway::start(int numThreads, int workerNumThreads, int maxSize)
 		threadPool_.push_back(threadPool);
 	}
 
-	//worker线程数，最好 workerNumThreads = n * numThreads
-	workerNumThreads_ = workerNumThreads;
+	//worker线程数，最好 numWorkerThreads = n * numThreads
+	numWorkerThreads_ = numWorkerThreads;
 
 	LOG_INFO << __FUNCTION__ << " --- *** "
 		<< "\nGateway = " << server_.server_.ipPort()
 		<< " 网络I/O线程数 = " << numThreads
-		<< " worker线程数 = " << workerNumThreads;
+		<< " worker线程数 = " << numWorkerThreads;
 
-	//启动网络I/O线程池，处理网络I/O读写：数据收/发
+	//启动网络I/O线程池，I/O收发读写 recv(read)/send(write)
 	muduo::net::ReactorSingleton::start();
 
 	//启动TCP监听客户端，websocket

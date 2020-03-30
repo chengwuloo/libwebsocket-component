@@ -6,11 +6,24 @@
 #endif
 
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <string>
+#include <assert.h>
+#include <time.h>
+
+#include <sstream>
+#include <fstream>
+
+#include <sys/time.h>
+#include <sys/timeb.h>
 #include <sys/types.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-#include <assert.h>
-#include <string>
+#include <sys/ioctl.h>
+#include <dlfcn.h>
+
+#include <linux/if.h>
 
 //转换IP
 static void toIp_c(char *buf, size_t size, sockaddr const* addr)

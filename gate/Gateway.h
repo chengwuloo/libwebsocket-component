@@ -47,9 +47,8 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
-#include "packet.h"
 #include "connector.h"
-
+#include "public/packet.h"
 #include "public/zookeeperclient/zookeeperclient.h"
 #include "public/zookeeperclient/zookeeperlocker.h"
 #include "public/redLock/redlock.h"
@@ -57,7 +56,27 @@
 #include "public/MongoDB/MongoDBClient.h"
 #include "public/traceMsg/traceMsg.h"
 #include "public/StdRandom.h"
+
 //#define NDEBUG
+
+//@@ ServiceStateE 服务状态
+enum ServiceStateE {
+	ServiceRepairing = 0,//维护中
+	ServiceRunning   = 1,//服务中
+};
+
+//@@ ApiVisitE
+enum ApiVisitE {
+	Enable  = 0,//IP允许访问
+	Disable = 1,//IP禁止访问
+};
+
+//@@ servTyE
+enum servTyE {
+	kHallTy    = 0,//大厅服
+	kGameTy    = 1,//游戏服
+	kMaxServTy,
+};
 
 //@@ Gateway
 class Gateway : public muduo::noncopyable {
@@ -72,14 +91,7 @@ public:
 	//typedef std::map<std::string, TcpClientPtr> MapTcpClientPtr;
 	
 	typedef std::shared_ptr<muduo::net::Buffer> BufferPtr;
-
-	//@@ servTyE
-	enum servTyE {
-		kHallTy  = 0,
-		kGameTy  = 1,
-		kMaxServTy,
-	};
-
+	
 	//@@ Entry 避免恶意连接占用系统sockfd资源不请求处理也不关闭fd情况，超时强行关闭连接
 	struct Entry : public muduo::noncopyable {
 	public:
@@ -315,19 +327,30 @@ public:
 	//Gateway ctor
 	Gateway(muduo::net::EventLoop* loop,
 		const muduo::net::InetAddress& listenAddr,
-		const muduo::net::InetAddress& listenAddrInner,
+		const muduo::net::InetAddress& listenAddrInn,
+		const muduo::net::InetAddress& listenAddrHttp,
 		std::string const& cert_path, std::string const& private_key_path,
 		std::string const& client_ca_cert_file_path = "",
 		std::string const& client_ca_cert_dir_path = "");
 	//Gateway dctor
 	~Gateway();
-
-	//MongoDB/redis与线程池关联
+	void quit();
+	//zookeeper
+	bool initZookeeper(std::string const& ipaddr);
+	//RedisCluster
+	bool initRedisCluster(std::string const& ipaddr, std::string const& passwd);
+	bool initRedisCluster();
+	//RedisLock
+	bool initRedisLock();
+	//MongoDB
+	bool initMongoDB(std::string url);
+	bool initMongoDB();
+	//MongoDB/RedisCluster/RedisLock
 	void threadInit();
 
 	//启动websocket(TCP)业务线程
 	//启动websocket(TCP)监听，客户端交互
-	void start(int numThreads, int workerNumThreads, int maxSize);
+	void start(int numThreads, int numWorkerThreads, int maxSize);
 
 	//网关服[S]端 <- 客户端[C]端，websocket
 private:
@@ -389,27 +412,18 @@ private:
 	muduo::AtomicInt32 numConnected_;
 	
 	//网络I/O线程数，worker线程数
-	int numThreads_, workerNumThreads_;
+	int numThreads_, numWorkerThreads_;
 	
-	//最大连接数限制
-	int kMaxConnections_;
-	
-	//指定时间轮盘大小(bucket桶大小)
-	//即环形数组大小(size) >=
-	//心跳超时清理时间(timeout) >
-	//心跳间隔时间(interval)
-	int kTimeoutSeconds_;
-
 	//Bucket池处理超时conn连接对象
 	std::vector<ConnectionBucket> bucketsPool_;
 	
 	//累计接收请求数，累计未处理请求数
 	muduo::AtomicInt64 numTotalReq_, numTotalBadReq_;
 	
-	//主线程EventLoop，处理网络I/O读写：监听/连接 accept(read)/connect(write)
+	//主线程EventLoop，I/O监听/连接读写 accept(read)/connect(write)
 	//muduo::net::EventLoop* loop_;
 
-	//网络I/O线程池，处理网络I/O读写：数据收/发 recv(read)send(write)
+	//网络I/O线程，I/O收发读写 recv(read)/send(write)
 	//std::shared_ptr<muduo::net::EventLoopThreadPool> threadPool_io_;
 
 	//worker线程池，内部任务消息队列
@@ -431,9 +445,6 @@ private:
 	//玩家session哈希散列
 	std::hash<std::string> hash_session_;
 
-	//绑定网卡IPPORT
-	std::string strIpAddr_;
-
 	STD::Random randomHall_;
 private:
 	void connectHallServer(std::string const& ipaddr);
@@ -446,10 +457,6 @@ private:
 	std::vector<std::string> hallIps_;
 	muduo::MutexLock hallIps_mutex_;
 
-	bool initZookeeper(std::string const& ipaddr);
-	bool initRedisCluster();
-	bool initRedisCluster(std::string const& ipaddr, std::string const& passwd);
-	
 	void ZookeeperConnectedHandler();
 	void GetHallChildrenWatcherHandler(
 		int type, int state,
@@ -464,6 +471,35 @@ private:
 	std::shared_ptr<RedisClient>  redisClient_;
 	std::string redisIpaddr_;
 	std::string redisPasswd_;
+	
+	//MongoDB
+	std::string mongoDBUrl_;
+
+	//服务状态
+	volatile long serverState_;
+
+public:
+
+	//绑定网卡ipport
+	std::string strIpAddr_;
+
+	//最大连接数限制
+	int kMaxConnections_;
+	
+	//指定时间轮盘大小(bucket桶大小)
+	//即环形数组大小(size) >=
+	//心跳超时清理时间(timeout) >
+	//心跳间隔时间(interval)
+	int kTimeoutSeconds_;
+	
+	//redisLock
+	std::vector<std::string> redlockVec_;
+	
+	//管理员挂维护/恢复服务
+	std::map<in_addr_t, ApiVisitE> adminList_;
+
+	//是否调试
+	bool isdebug_;
 };
 
 #endif
