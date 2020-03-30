@@ -1,5 +1,5 @@
-#ifndef MY_HTMLCODE
-#define MY_HTMLCODE
+#ifndef HTMLCODE_INCLUDE_H
+#define HTMLCODE_INCLUDE_H
 	
 #include <algorithm>
 #include <iostream>
@@ -277,7 +277,7 @@ namespace HTML {
 	static size_t const codes_size = array_length(codes);
 
 	//return value.replace("&", "&amp;").replace(">", "&gt;").replace("<", "&lt;").replace("\"", "&quot;");
-	std::string Encode(const std::string& s)
+	static std::string Encode(const std::string& s)
 	{
 		std::string rs(s);
 #if 0
@@ -301,7 +301,7 @@ namespace HTML {
 		return rs;
 	}
 	//value.replace("&gt;", ">").replace("&lt;", "<").replace("&quot;", '"').replace("&amp;", "&");
-	std::string Decode(const std::string& s)
+	static std::string Decode(const std::string& s)
 	{
 		std::string rs(s);
 #if 0

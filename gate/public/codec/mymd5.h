@@ -1,5 +1,5 @@
-#ifndef MYMD5_H  
-#define MYMD5_H  
+#ifndef MYMD5_INCLUDE_H  
+#define MYMD5_INCLUDE_H  
 
 // #ifdef __cplusplus
 // extern "C"
@@ -12,34 +12,34 @@ typedef struct {
 	unsigned char buffer[64];
 }MY_MD5_CTX;
 
-#define F(x,y,z) ((x & y) | (~x & z))  
-#define G(x,y,z) ((x & z) | (y & ~z))  
-#define H(x,y,z) (x^y^z)  
-#define I(x,y,z) (y ^ (x | ~z))  
+#define F__(x,y,z) ((x & y) | (~x & z))  
+#define G__(x,y,z) ((x & z) | (y & ~z))  
+#define H__(x,y,z) (x^y^z)  
+#define I__(x,y,z) (y ^ (x | ~z))  
 #define ROTATE_LEFT(x,n) ((x << n) | (x >> (32-n)))  
-#define FF(a,b,c,d,x,s,ac) \
+#define FF__(a,b,c,d,x,s,ac) \
 	{ \
-		a += F(b, c, d) + x + ac; \
+		a += F__(b, c, d) + x + ac; \
 		a = ROTATE_LEFT(a, s); \
 		a += b; \
 	}
 
-#define GG(a,b,c,d,x,s,ac) \
+#define GG__(a,b,c,d,x,s,ac) \
 	{ \
-		a += G(b, c, d) + x + ac; \
+		a += G__(b, c, d) + x + ac; \
 		a = ROTATE_LEFT(a, s); \
 		a += b; \
 	}
 
-#define HH(a,b,c,d,x,s,ac) \
+#define HH__(a,b,c,d,x,s,ac) \
 	{ \
-		a += H(b, c, d) + x + ac; \
+		a += H__(b, c, d) + x + ac; \
 		a = ROTATE_LEFT(a, s); \
 		a += b; \
 	}
-#define II(a,b,c,d,x,s,ac) \
+#define II__(a,b,c,d,x,s,ac) \
 	{ \
-		a += I(b, c, d) + x + ac; \
+		a += I__(b, c, d) + x + ac; \
 		a = ROTATE_LEFT(a, s); \
 		a += b; \
 	}

@@ -20,6 +20,15 @@
 #include "proto/HallServer.Message.pb.h"
 #include "proto/GameServer.Message.pb.h"
 
+#include "public/SubNetIP.h"
+#include "public/NetCardIP.h"
+
+#include "public/codec/aes.h"
+#include "public/codec/mymd5.h"
+#include "public/codec/base64.h"
+#include "public/codec/htmlcodec.h"
+#include "public/codec/urlcodec.h"
+
 #include "Gateway.h"
 
 using std::placeholders::_1;
@@ -33,16 +42,18 @@ Gateway::Gateway(muduo::net::EventLoop* loop,
 	std::string const& cert_path, std::string const& private_key_path,
 	std::string const& client_ca_cert_file_path,
 	std::string const& client_ca_cert_dir_path)
-    : server_(loop, listenAddr, "Gateway", cert_path, private_key_path, client_ca_cert_file_path, client_ca_cert_dir_path)
-	, innServer_(loop, listenAddrInn, "GatewayInner")
+    : server_(loop, listenAddr, "Gateway[client]", cert_path, private_key_path, client_ca_cert_file_path, client_ca_cert_dir_path)
+	, innServer_(loop, listenAddrInn, "Gateway[inner]")
+	, httpServer_(loop, listenAddrHttp, "Gateway[http]")
 	, hallConector_(loop)
 	, gameConnector_(loop)
 	, kTimeoutSeconds_(3)
+	, kHttpTimeoutSeconds_(3)
 	, kMaxConnections_(15000)
 	, serverState_(kRunning)
 	, isdebug_(false) {
 
-	//网络I/O线程池，处理网络I/O读写：数据收/发 recv(read)send(write)
+	//网络I/O线程池，I/O收发读写 recv(read)/send(write)
 	muduo::net::ReactorSingleton::inst(loop, "RWIOThreadPool");
 
 	//网关服[S]端 <- 客户端[C]端，websocket
@@ -53,13 +64,22 @@ Gateway::Gateway(muduo::net::EventLoop* loop,
 	server_.setWsMessageCallback(
 		std::bind(&Gateway::onMessage, this,
 			std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4));
+	
 	//网关服[S]端 <- 推送服[C]端，通知服
 	innServer_.setConnectionCallback(
 		std::bind(&Gateway::onInnConnection, this, std::placeholders::_1));
 	innServer_.setMessageCallback(
 		std::bind(&Gateway::onInnMessage, this,
 			std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
-	//网关服[C]端 -> 大厅服[S]端
+	
+	//网关服[S]端 <- HTTP客户端[C]端，WEB前端
+	httpServer_.setConnectionCallback(
+		std::bind(&Gateway::onHttpConnection, this, std::placeholders::_1));
+	httpServer_.setMessageCallback(
+		std::bind(&Gateway::onHttpMessage, this,
+			std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+	
+	//网关服[C]端 -> 大厅服[S]端，内部交互
 	hallConector_.setConnectionCallback(
 		std::bind(&Gateway::onHallConnection, this, std::placeholders::_1));
 	hallConector_.setMessageCallback(
@@ -183,6 +203,8 @@ void Gateway::ZookeeperConnectedHandler() {
 		nodePath_ = "/GAME/ProxyServers/" + nodeValue_;
 		//启动时自注册自身节点
 		zkclient_->createNode(nodePath_, nodeValue_, true);
+		//挂维护中的节点
+		invalidNodePath_ = "/GAME/ProxyServersInvalid/" + nodeValue_;
 	}
 	{
 		//大厅服 ip:port
@@ -232,22 +254,6 @@ void Gateway::connectHallServer(std::string const& ipaddr) {
 	//muduo::net::EventLoop* ioLoop = threadPool->getNextLoop();
 	hallConector_.check(ipaddr, false);
 	hallConector_.create(ipaddr, serverAddr);
-}
-
-void Gateway::onHallConnection(const muduo::net::TcpConnectionPtr& conn)
-{
-	if (conn->connected()) {
-		int32_t num = numConnected_.incrementAndGet();
-		LOG_INFO << __FUNCTION__ << " --- *** " << "网关服[" << conn->localAddress().toIpPort() << "] -> 大厅服["
-			<< conn->peerAddress().toIpPort() << "] "
-			<< (conn->connected() ? "UP" : "DOWN") << " " << num;
-	}
-	else {
-		int32_t num = numConnected_.decrementAndGet();
-		LOG_INFO << __FUNCTION__ << " --- *** " << "网关服[" << conn->localAddress().toIpPort() << "] -> 大厅服["
-			<< conn->peerAddress().toIpPort() << "] "
-			<< (conn->connected() ? "UP" : "DOWN") << " " << num;
-	}
 }
 
 void Gateway::ProcessHallIps(std::vector<std::string> const& newIps)
@@ -325,8 +331,10 @@ void Gateway::GetHallChildrenWatcherHandler(
 	}
 }
 
-//启动websocket(TCP)业务线程
-//启动websocket(TCP)监听，客户端交互
+//启动worker线程
+//启动TCP监听客户端，websocket
+//启动TCP监听客户端，内部服务器之间交互
+//启动TCP监听客户端，HTTP
 void Gateway::start(int numThreads, int numWorkerThreads, int maxSize)
 {
 	//网络I/O线程数
@@ -353,12 +361,27 @@ void Gateway::start(int numThreads, int numWorkerThreads, int maxSize)
 	//启动网络I/O线程池，I/O收发读写 recv(read)/send(write)
 	muduo::net::ReactorSingleton::start();
 
+	//Accept时候判断，socket底层控制，否则开启异步检查
+	if (blackListControl_ == IpVisitCtrlE::kOpenAccept) {
+		server_.server_.setConditionCallback(std::bind(&Gateway::onCondition, this, std::placeholders::_1));
+	}
+
+	//Accept时候判断，socket底层控制，否则开启异步检查
+	if (whiteListControl_ == IpVisitCtrlE::kOpenAccept) {
+		httpServer_.setConditionCallback(std::bind(&Gateway::onHttpCondition, this, std::placeholders::_1));
+	}
+
 	//启动TCP监听客户端，websocket
 	//使用ET模式accept/read/write
 	server_.start(true);
 
 	//启动TCP监听客户端，内部服务器之间交互
+	//使用ET模式accept/read/write
 	innServer_.start(true);
+
+	//启动TCP监听客户端，HTTP
+	//使用ET模式accept/read/write
+	httpServer_.start(true);
 
 	//等server_所有的网络I/O线程都启动起来
 	//sleep(2);
@@ -520,19 +543,720 @@ void Gateway::asyncInnHandler(
 	LOG_ERROR << __FUNCTION__ << " --- *** " << "entry(weakEntry.lock()) failed";
 }
 
+//网关服[S]端 <- HTTP客户端[C]端，WEB前端
+bool Gateway::onHttpCondition(const muduo::net::InetAddress& peerAddr) {
+	//Accept时候判断，socket底层控制，否则开启异步检查
+	assert(whiteListControl_ == IpVisitCtrlE::kOpenAccept);
+	//安全断言
+	httpServer_.getLoop()->assertInLoopThread();
+	{
+		//管理员挂维护/恢复服务
+		std::map<in_addr_t, IpVisitE>::const_iterator it = adminList_.find(peerAddr.ipNetEndian());
+		if (it != adminList_.end()) {
+			return true;
+		}
+	}
+	{
+		//192.168.2.21:3640 192.168.2.21:3667
+		std::map<in_addr_t, IpVisitE>::const_iterator it = whiteList_.find(peerAddr.ipNetEndian());
+		return (it != whiteList_.end()) && (IpVisitE::kEnable == it->second);
+	}
+#if 0
+	//节点维护中
+	if (serverState_ == ServiceStateE::kRepairing) {
+		return false;
+	}
+#endif
+	return true;
+}
+
+//网关服[S]端 <- HTTP客户端[C]端，WEB前端
+void Gateway::onHttpConnection(const muduo::net::TcpConnectionPtr& conn) {
+	if (conn->connected()) {
+		int32_t num = numConnected_.incrementAndGet();
+		LOG_INFO << __FUNCTION__ << " --- *** " << "WEB前端[" << conn->peerAddress().toIpPort() << "] -> 网关服["
+			<< conn->localAddress().toIpPort() << "] "
+			<< (conn->connected() ? "UP" : "DOWN") << " " << num;
+
+		//累计接收请求数
+		numTotalReq_.incrementAndGet();
+
+		//最大连接数限制
+		if (num > kMaxConnections_) {
+#if 0
+			//不再发送数据
+			conn->shutdown();
+#elif 0
+			//直接强制关闭连接
+			conn->forceClose();
+#else
+			//HTTP应答包(header/body)
+			muduo::net::HttpResponse rsp(false);
+			setFailedResponse(rsp,
+				muduo::net::HttpResponse::k404NotFound,
+				"HTTP/1.1 600 访问量限制(" + std::to_string(kMaxConnections_) + ")\r\n\r\n");
+			muduo::net::Buffer buf;
+			rsp.appendToBuffer(&buf);
+			conn->send(&buf);
+
+			//延迟0.2s强制关闭连接
+			conn->forceCloseWithDelay(0.2f);
+#endif
+			//会调用onHttpMessage函数
+			assert(conn->getContext().empty());
+
+			//累计未处理请求数
+			numTotalBadReq_.incrementAndGet();
+			return;
+		}
+		EventLoopContext* context = boost::any_cast<EventLoopContext>(conn->getLoop()->getMutableContext());
+		assert(context);
+#ifndef NDEBUG
+		EntryPtr entry(new Entry(muduo::net::WeakTcpConnectionPtr(conn), Entry::Context(muduo::net::HttpContext())));
+#else
+		EntryPtr entry(new Entry(muduo::net::WeakTcpConnectionPtr(conn), Entry::Context(context->allocWorkerIndex(), muduo::net::HttpContext())));
+#endif
+		{
+			Entry::Context* entryContext = boost::any_cast<Entry::Context>(entry->getMutableContext());
+			assert(entryContext);
+#ifndef NDEBUG
+			//给新conn绑定一个worker线程，之后所有conn相关逻辑业务都在该worker线程中处理
+			int index = context->allocWorkerIndex();
+			assert(index >= 0 && index < threadPool_.size());
+
+			//对于HTTP请求来说，每一个conn都应该是独立的，指定一个独立线程处理即可，避免锁开销与多线程竞争抢占共享资源带来的性能损耗
+			entryContext->setWorkerIndex(index);
+#endif
+		}
+		{
+			//获取EventLoop关联的Bucket
+			int index = context->getBucketIndex();
+			assert(index >= 0 && index < bucketsPool_.size());
+			//连接成功，压入桶元素
+			conn->getLoop()->runInLoop(
+				std::bind(&ConnectionBucket::pushBucket, &bucketsPool_[index], entry));
+		}
+		{
+			//指定conn上下文信息
+			conn->setContext(WeakEntryPtr(entry));
+		}
+		{
+			//TCP_NODELAY
+			conn->setTcpNoDelay(true);
+		}
+	}
+	else {
+		int32_t num = numConnected_.decrementAndGet();
+		LOG_INFO << __FUNCTION__ << " --- *** " << "WEB前端[" << conn->peerAddress().toIpPort() << "] -> 网关服["
+			<< conn->localAddress().toIpPort() << "] "
+			<< (conn->connected() ? "UP" : "DOWN") << " " << num;
+	}
+}
+
+//网关服[S]端 <- HTTP客户端[C]端，WEB前端
+void Gateway::onHttpMessage(const muduo::net::TcpConnectionPtr& conn, muduo::net::Buffer* buf, muduo::Timestamp receiveTime) {
+	//超过最大连接数限制
+	if (!conn || conn->getContext().empty()) {
+		//LOG_ERROR << __FUNCTION__ << " --- *** " << "TcpConnectionPtr.conn max";
+		return;
+	}
+
+	//LOG_ERROR << __FUNCTION__ << " --- *** ";
+	//printf("----------------------------------------------\n");
+	//printf("%.*s\n", buf->readableBytes(), buf->peek());
+
+	//先确定是HTTP数据报文，再解析 ///
+	//assert(buf->readableBytes() > 4 && buf->findCRLFCRLF());
+
+	WeakEntryPtr weakEntry(boost::any_cast<WeakEntryPtr>(conn->getContext()));
+	EntryPtr entry(weakEntry.lock());
+	if (likely(entry)) {
+		Entry::Context* entryContext = boost::any_cast<Entry::Context>(entry->getMutableContext());
+		assert(entryContext);
+		muduo::net::HttpContext* httpContext = boost::any_cast<muduo::net::HttpContext>(entryContext->getMutableContext());
+		assert(httpContext);
+		//解析HTTP数据包
+		if (!httpContext->parseRequest(buf, receiveTime)) {
+			//发生错误
+		}
+		else if (httpContext->gotAll()) {
+			//Accept时候判断，socket底层控制，否则开启异步检查
+			if (whiteListControl_ == IpVisitCtrlE::kOpen) {
+				std::string ipaddr;
+				{
+					std::string ipaddrs = httpContext->request().getHeader("X-Forwarded-For");
+					if (ipaddrs.empty()) {
+						ipaddr = conn->peerAddress().toIp();
+					}
+					else {
+#if 0
+						//第一个IP为客户端真实IP，可伪装，第二个IP为一级代理IP，第三个IP为二级代理IP
+						std::string::size_type spos = ipaddrs.find_first_of(',');
+						if (spos == std::string::npos) {
+						}
+						else {
+							ipaddr = ipaddrs.substr(0, spos);
+						}
+#else
+						boost::replace_all<std::string>(ipaddrs, " ", "");
+						std::vector<std::string> vec;
+						boost::algorithm::split(vec, ipaddrs, boost::is_any_of(","));
+						for (std::vector<std::string>::const_iterator it = vec.begin();
+							it != vec.end(); ++it) {
+							if (!it->empty() &&
+								boost::regex_match(*it, boost::regex(
+									"^(1\\d{2}|2[0-4]\\d|25[0-5]|[1-9]\\d|[1-9])\\." \
+									"(1\\d{2}|2[0-4]\\d|25[0-5]|[1-9]\\d|\\d)\\." \
+									"(1\\d{2}|2[0-4]\\d|25[0-5]|[1-9]\\d|\\d)\\." \
+									"(1\\d{2}|2[0-4]\\d|25[0-5]|[1-9]\\d|\\d)$"))) {
+
+								if (strncasecmp(it->c_str(), "10.", 3) != 0 &&
+									strncasecmp(it->c_str(), "192.168", 7) != 0 &&
+									strncasecmp(it->c_str(), "172.16.", 7) != 0) {
+									ipaddr = *it;
+									break;
+								}
+							}
+						}
+#endif
+					}
+				}
+				muduo::net::InetAddress peerAddr(muduo::StringArg(ipaddr), 0, false);
+				bool is_ip_allowed = false;
+				{
+					//管理员挂维护/恢复服务
+					std::map<in_addr_t, IpVisitE>::const_iterator it = adminList_.find(peerAddr.ipNetEndian());
+					is_ip_allowed = (it != adminList_.end());
+				}
+				if (!is_ip_allowed) {
+					READ_LOCK(whiteList_mutex_);
+					std::map<in_addr_t, IpVisitE>::const_iterator it = whiteList_.find(peerAddr.ipNetEndian());
+					is_ip_allowed = ((it != whiteList_.end()) && (IpVisitE::kEnable == it->second));
+				}
+				if (!is_ip_allowed) {
+#if 0
+					//不再发送数据
+					conn->shutdown();
+#elif 1
+					//直接强制关闭连接
+					conn->forceClose();
+#else
+					//HTTP应答包(header/body)
+					muduo::net::HttpResponse rsp(false);
+					setFailedResponse(rsp,
+						muduo::net::HttpResponse::k404NotFound,
+						"HTTP/1.1 500 IP访问限制\r\n\r\n");
+					muduo::net::Buffer buf;
+					rsp.appendToBuffer(&buf);
+					conn->send(&buf);
+
+					//延迟0.2s强制关闭连接
+					conn->forceCloseWithDelay(0.2f);
+#endif
+					//累计未处理请求数
+					numTotalBadReq_.incrementAndGet();
+					return;
+				}
+			}
+			{
+				EventLoopContext* context = boost::any_cast<EventLoopContext>(conn->getLoop()->getMutableContext());
+				assert(context);
+				int index = context->getBucketIndex();
+				assert(index >= 0 && index < bucketsPool_.size());
+				//收到消息包，更新桶元素
+				conn->getLoop()->runInLoop(std::bind(&ConnectionBucket::updateBucket, &bucketsPool_[index], entry));
+			}
+			{
+				//获取绑定的worker线程
+				int index = entryContext->getWorkerIndex();
+				assert(index >= 0 && index < threadPool_.size());
+				//扔给任务消息队列处理
+				threadPool_[index]->run(
+					std::bind(&Gateway::asyncHttpHandler, this, weakEntry, receiveTime));
+			}
+			return;
+		}
+		//发生错误
+		//HTTP应答包(header/body)
+		muduo::net::HttpResponse rsp(false);
+		setFailedResponse(rsp,
+			muduo::net::HttpResponse::k404NotFound,
+			"HTTP/1.1 400 Bad Request\r\n\r\n");
+		muduo::net::Buffer buf;
+		rsp.appendToBuffer(&buf);
+		conn->send(&buf);
+		//释放HttpContext资源
+		httpContext->reset();
+#if 0
+		//不再发送数据
+		conn->shutdown();
+#elif 0
+		//直接强制关闭连接
+		conn->forceClose();
+#else
+		//延迟0.2s强制关闭连接
+		conn->forceCloseWithDelay(0.2f);
+#endif
+		//累计未处理请求数
+		numTotalBadReq_.incrementAndGet();
+		return;
+	}
+	//累计未处理请求数
+	numTotalBadReq_.incrementAndGet();
+	//LOG_ERROR << __FUNCTION__ << " --- *** " << "entry invalid";
+}
+
+//网关服[S]端 <- HTTP客户端[C]端，WEB前端
+void Gateway::asyncHttpHandler(const WeakEntryPtr& weakEntry, muduo::Timestamp receiveTime) {
+	//锁定conn操作
+	//刚开始还在想，会不会出现超时conn被异步关闭释放掉，而业务逻辑又被处理了，却发送不了的尴尬情况，
+	//假如因为超时entry弹出bucket，引用计数减1，处理业务之前这里使用shared_ptr，持有entry引用计数(加1)，
+	//如果持有失败，说明弹出bucket计数减为0，entry被析构释放，conn被关闭掉了，也就不会执行业务逻辑处理，
+	//如果持有成功，即使超时entry弹出bucket，引用计数减1，但并没有减为0，entry也就不会被析构释放，conn也不会被关闭，
+	//直到业务逻辑处理完并发送，entry引用计数减1变为0，析构被调用关闭conn(如果conn还存在的话，业务处理完也会主动关闭conn)
+	EntryPtr entry(weakEntry.lock());
+	if (likely(entry)) {
+		muduo::net::TcpConnectionPtr conn(entry->getWeakConnPtr().lock());
+		if (conn) {
+#if 1
+			//Accept时候判断，socket底层控制，否则开启异步检查
+			if (whiteListControl_ == IpVisitCtrlE::kOpen) {
+				bool is_ip_allowed = false;
+				{
+					READ_LOCK(whiteList_mutex_);
+					std::map<in_addr_t, IpVisitE>::const_iterator it = whiteList_.find(conn->peerAddress().ipNetEndian());
+					is_ip_allowed = ((it != whiteList_.end()) && (IpVisitE::kEnable == it->second));
+				}
+				if (!is_ip_allowed) {
+#if 0
+					//不再发送数据
+					conn->shutdown();
+#elif 0
+					//直接强制关闭连接
+					conn->forceClose();
+#else
+					//HTTP应答包(header/body)
+					muduo::net::HttpResponse rsp(false);
+					setFailedResponse(rsp,
+						muduo::net::HttpResponse::k404NotFound,
+						"HTTP/1.1 500 IP访问限制\r\n\r\n");
+					muduo::net::Buffer buf;
+					rsp.appendToBuffer(&buf);
+					conn->send(&buf);
+
+					//延迟0.2s强制关闭连接
+					conn->forceCloseWithDelay(0.2f);
+#endif
+					return;
+				}
+			}
+#endif
+			Entry::Context* entryContext = boost::any_cast<Entry::Context>(entry->getMutableContext());
+			assert(entryContext);
+			muduo::net::HttpContext* httpContext = boost::any_cast<muduo::net::HttpContext>(entryContext->getMutableContext());
+			assert(httpContext);
+			assert(httpContext->gotAll());
+			const string& connection = httpContext->request().getHeader("Connection");
+			//是否保持HTTP长连接
+			bool close = (connection == "close") ||
+				(httpContext->request().getVersion() == muduo::net::HttpRequest::kHttp10 && connection != "Keep-Alive");
+			//HTTP应答包(header/body)
+			muduo::net::HttpResponse rsp(close);
+			//请求处理回调，但非线程安全的
+			processHttpRequest(httpContext->request(), rsp, conn->peerAddress(), receiveTime);
+			//应答消息
+			{
+				muduo::net::Buffer buf;
+				rsp.appendToBuffer(&buf);
+				conn->send(&buf);
+			}
+			//非HTTP长连接则关闭
+			if (rsp.closeConnection()) {
+#if 0
+				//不再发送数据
+				conn->shutdown();
+#elif 0
+				//直接强制关闭连接
+				conn->forceClose();
+#else
+				//延迟0.2s强制关闭连接
+				conn->forceCloseWithDelay(0.2f);
+#endif
+			}
+			//释放HttpContext资源
+			httpContext->reset();
+		}
+		else {
+			//累计未处理请求数
+			numTotalBadReq_.incrementAndGet();
+			//LOG_ERROR << __FUNCTION__ << " --- *** " << "TcpConnectionPtr.conn invalid";
+		}
+	}
+	else {
+		//累计未处理请求数
+		numTotalBadReq_.incrementAndGet();
+		//LOG_ERROR << __FUNCTION__ << " --- *** " << "entry invalid";
+	}
+}
+
+//网关服[S]端 <- HTTP客户端[C]端，WEB前端
+std::string Gateway::getRequestStr(muduo::net::HttpRequest const& req) {
+	std::string headers;
+	for (std::map<string, string>::const_iterator it = req.headers().begin();
+		it != req.headers().end(); ++it) {
+		headers += it->first + ": " + it->second + "\n";
+	}
+	std::stringstream ss;
+	ss << "<?xml version=\"1.0\" encoding=\"utf-8\" ?>"
+		<< "<xs:root xmlns:xs=\"http://www.w3.org/2001/XMLSchema\">"
+		<< "<xs:head>" << headers << "</xs:head>"
+		<< "<xs:body>"
+		<< "<xs:method>" << req.methodString() << "</xs:method>"
+		<< "<xs:path>" << req.path() << "</xs:path>"
+		<< "<xs:query>" << HTML::Encode(req.query()) << "</xs:query>"
+		<< "</xs:body>"
+		<< "</xs:root>";
+	return ss.str();
+}
+
+//网关服[S]端 <- HTTP客户端[C]端，WEB前端
+bool Gateway::parseQuery(std::string const& queryStr, HttpParams& params, std::string& errmsg) {
+	params.clear();
+	LOG_DEBUG << "--- *** " << "\n" << queryStr;
+	do {
+		std::string subStr;
+		std::string::size_type npos = queryStr.find_first_of('?');
+		if (npos != std::string::npos) {
+			//skip '?' ///
+			subStr = queryStr.substr(npos + 1, std::string::npos);
+		}
+		else {
+			subStr = queryStr;
+		}
+		if (subStr.empty()) {
+			break;
+		}
+		for (;;) {
+			//key value separate ///
+			std::string::size_type kpos = subStr.find_first_of('=');
+			if (kpos == std::string::npos) {
+				break;
+			}
+			//next start ///
+			std::string::size_type spos = subStr.find_first_of('&');
+			if (spos == std::string::npos) {
+				std::string key = subStr.substr(0, kpos);
+				//skip '=' ///
+				std::string val = subStr.substr(kpos + 1, std::string::npos);
+				params[key] = val;
+				break;
+			}
+			else if (kpos < spos) {
+				std::string key = subStr.substr(0, kpos);
+				//skip '=' ///
+				std::string val = subStr.substr(kpos + 1, spos - kpos - 1);
+				params[key] = val;
+				//skip '&' ///
+				subStr = subStr.substr(spos + 1, std::string::npos);
+			}
+			else {
+				break;
+			}
+		}
+	} while (0);
+	std::string keyValues;
+	for (auto param : params) {
+		keyValues += "\n--- **** " + param.first + "=" + param.second;
+	}
+	//LOG_DEBUG << "--- *** " << keyValues;
+	return true;
+}
+
+//网关服[S]端 <- HTTP客户端[C]端，WEB前端
+void Gateway::processHttpRequest(
+	const muduo::net::HttpRequest& req, muduo::net::HttpResponse& rsp,
+	muduo::net::InetAddress const& peerAddr,
+	muduo::Timestamp receiveTime) {
+	//LOG_INFO << __FUNCTION__ << " --- *** " << getRequestStr(req);
+	rsp.setStatusCode(muduo::net::HttpResponse::k200Ok);
+	rsp.setStatusMessage("OK");
+	//注意要指定connection状态
+	rsp.setCloseConnection(true);
+	rsp.addHeader("Server", "MUDUO");
+	if (req.path() == "/") {
+#if 0
+		rsp.setContentType("text/html;charset=utf-8");
+		std::string now = muduo::Timestamp::now().toFormattedString();
+		rsp.setBody("<html><body>Now is " + now + "</body></html>");
+#else
+		//HTTP应答包(header/body)
+		setFailedResponse(rsp,
+			muduo::net::HttpResponse::k404NotFound,
+			"HTTP/1.1 404 Not Found\r\n\r\n");
+#endif
+	}
+	else if (req.path() == "/GameHandle") {
+		rsp.setContentType("application/xml;charset=utf-8");
+		rsp.setBody(getRequestStr(req));
+	}
+	//刷新客户端访问IP黑名单信息
+	else if (req.path() == "/refreshBlackList") {
+		//管理员挂维护/恢复服务
+		std::map<in_addr_t, IpVisitE>::const_iterator it = adminList_.find(peerAddr.ipNetEndian());
+		if (it != adminList_.end()) {
+			rsp.setContentType("text/plain;charset=utf-8");
+			refreshBlackList();
+			rsp.setBody("success");
+		}
+		else {
+			//HTTP应答包(header/body)
+			setFailedResponse(rsp,
+				muduo::net::HttpResponse::k404NotFound,
+				"HTTP/1.1 504 权限不够\r\n\r\n");
+		}
+	}
+	//刷新HTTP访问IP白名单信息
+	else if (req.path() == "/refreshWhiteList") {
+		//管理员挂维护/恢复服务
+		std::map<in_addr_t, IpVisitE>::const_iterator it = adminList_.find(peerAddr.ipNetEndian());
+		if (it != adminList_.end()) {
+			rsp.setContentType("text/plain;charset=utf-8");
+			refreshWhiteList();
+			rsp.setBody("success");
+		}
+		else {
+			//HTTP应答包(header/body)
+			setFailedResponse(rsp,
+				muduo::net::HttpResponse::k404NotFound,
+				"HTTP/1.1 504 权限不够\r\n\r\n");
+		}
+	}
+	//请求挂维护/恢复服务 status=0挂维护 status=1恢复服务
+	else if (req.path() == "/repairServer") {
+		//管理员挂维护/恢复服务
+		std::map<in_addr_t, IpVisitE>::const_iterator it = adminList_.find(peerAddr.ipNetEndian());
+		if (it != adminList_.end()) {
+			rsp.setContentType("text/plain;charset=utf-8");
+			if (!repairServer(req.query())) {
+				rsp.setBody("failed");
+			}
+			else {
+				rsp.setBody("success");
+			}
+		}
+		else {
+			//HTTP应答包(header/body)
+			setFailedResponse(rsp,
+				muduo::net::HttpResponse::k404NotFound,
+				"HTTP/1.1 504 权限不够\r\n\r\n");
+		}
+	}
+	else if (req.path() == "/help") {
+		//管理员挂维护/恢复服务
+		std::map<in_addr_t, IpVisitE>::const_iterator it = adminList_.find(peerAddr.ipNetEndian());
+		if (it != adminList_.end()) {
+			rsp.setContentType("text/html;charset=utf-8");
+			rsp.setBody("<html>"
+				"<head><title>help</title></head>"
+				"<body>"
+				"<h4>/refreshAgentInfo</h4>"
+				"<h4>/refreshWhiteList</h4>"
+				"<h4>/repairServer?status=0|1(status=0挂维护 status=1恢复服务)</h4>"
+				"</body>"
+				"</html>");
+		}
+		else {
+			//HTTP应答包(header/body)
+			setFailedResponse(rsp,
+				muduo::net::HttpResponse::k404NotFound,
+				"HTTP/1.1 504 权限不够\r\n\r\n");
+		}
+	}
+	else {
+#if 1
+		//HTTP应答包(header/body)
+		setFailedResponse(rsp,
+			muduo::net::HttpResponse::k404NotFound,
+			"HTTP/1.1 404 Not Found\r\n\r\n");
+#else
+		rsp.setBody("<html><head><title>httpServer</title></head>"
+			"<body><h1>Not Found</h1>"
+			"</body></html>");
+		//rsp.setStatusCode(muduo::net::HttpResponse::k404NotFound);
+#endif
+	}
+}
+
+//网关服[S]端 <- HTTP客户端[C]端，WEB前端
+void Gateway::refreshWhiteList() {
+	if (whiteListControl_ == IpVisitCtrlE::kOpenAccept) {
+		//Accept时候判断，socket底层控制，否则开启异步检查
+		httpServer_.getLoop()->runInLoop(std::bind(&Gateway::refreshWhiteListInLoop, this));
+	}
+	else if (whiteListControl_ == IpVisitCtrlE::kOpen) {
+		//同步刷新IP访问白名单
+		refreshWhiteListSync();
+	}
+}
+
+//网关服[S]端 <- HTTP客户端[C]端，WEB前端
+bool Gateway::refreshWhiteListSync() {
+	//Accept时候判断，socket底层控制，否则开启异步检查
+	assert(whiteListControl_ == IpVisitCtrlE::kOpen);
+	{
+		WRITE_LOCK(whiteList_mutex_);
+		whiteList_.clear();
+	}
+	for (std::map<in_addr_t, IpVisitE>::const_iterator it = whiteList_.begin();
+		it != whiteList_.end(); ++it) {
+		LOG_DEBUG << "--- *** " << "IP访问白名单\n"
+			<< "--- *** ipaddr[" << Inet2Ipstr(it->first) << "] status[" << it->second << "]";
+	}
+	return false;
+}
+
+//网关服[S]端 <- HTTP客户端[C]端，WEB前端
+bool Gateway::refreshWhiteListInLoop() {
+	//Accept时候判断，socket底层控制，否则开启异步检查
+	assert(whiteListControl_ == IpVisitCtrlE::kOpenAccept);
+	httpServer_.getLoop()->assertInLoopThread();
+	whiteList_.clear();
+	for (std::map<in_addr_t, IpVisitE>::const_iterator it = whiteList_.begin();
+		it != whiteList_.end(); ++it) {
+		LOG_DEBUG << "--- *** " << "IP访问白名单\n"
+			<< "--- *** ipaddr[" << Inet2Ipstr(it->first) << "] status[" << it->second << "]";
+	}
+ 	return false;
+}
+
+//网关服[S]端 <- HTTP客户端[C]端，WEB前端
+bool Gateway::repairServer(std::string const& queryStr) {
+	std::string errmsg;
+	int status;
+	do {
+		//解析参数
+		HttpParams params;
+		if (!parseQuery(queryStr, params, errmsg)) {
+			break;
+		}
+		HttpParams::const_iterator statusKey = params.find("status");
+		if (statusKey == params.end() || statusKey->second.empty() ||
+			(status = atol(statusKey->second.c_str())) < 0) {
+			break;
+		}
+		//请求挂维护
+		if (status == ServiceStateE::kRepairing) {
+			/* 如果之前服务中, 尝试挂维护中, 并返回之前状态
+			* 如果返回服务中, 说明刚好挂维护成功, 否则说明之前已被挂维护 */
+			if (ServiceStateE::kRunning == __sync_val_compare_and_swap(&serverState_, ServiceStateE::kRunning, ServiceStateE::kRepairing)) {
+				//添加 "/GAME/ProxyServersInvalid/192.168.2.93:8080"
+				if (ZNONODE == zkclient_->existsNode(invalidNodePath_)) {
+					zkclient_->createNode(invalidNodePath_, nodeValue_, true);
+					LOG_ERROR << __FUNCTION__ << " --- *** " << "创建节点 " << invalidNodePath_;
+				}
+				//删除 "/GAME/ProxyServersInvalid/192.168.2.93:8080"
+				if (ZNONODE != zkclient_->existsNode(nodePath_)) {
+					zkclient_->deleteNode(nodePath_);
+					LOG_ERROR << __FUNCTION__ << " --- *** " << "删除节点 " << nodePath_;
+				}
+			}
+			return true;
+		}
+		//请求恢复服务
+		else if (status == ServiceStateE::kRunning) {
+			/* 如果之前挂维护中, 尝试恢复服务, 并返回之前状态
+			* 如果返回挂维护中, 说明刚好恢复服务成功, 否则说明之前已恢复服务 */
+			if (ServiceStateE::kRepairing == __sync_val_compare_and_swap(&serverState_, ServiceStateE::kRepairing, ServiceStateE::kRunning)) {
+				//添加 "/GAME/ProxyServersInvalid/192.168.2.93:8080"
+				if (ZNONODE == zkclient_->existsNode(nodePath_)) {
+					zkclient_->createNode(nodePath_, nodeValue_, true);
+					LOG_ERROR << __FUNCTION__ << " --- *** " << "创建节点 " << nodePath_;
+				}
+				//删除 "/GAME/ProxyServersInvalid/192.168.2.93:8080"
+				if (ZNONODE != zkclient_->existsNode(invalidNodePath_)) {
+					zkclient_->deleteNode(invalidNodePath_);
+					LOG_ERROR << __FUNCTION__ << " --- *** " << "删除节点 " << invalidNodePath_;
+				}
+			}
+			return true;
+		}
+	} while (0);
+	return false;
+}
+
+//网关服[S]端 <- HTTP客户端[C]端，WEB前端
+void Gateway::repairServerNotify(std::string const& msg) {
+	int status;
+	do {
+		if (msg.empty() || (status = atol(msg.c_str())) < 0) {
+			break;
+		}
+		//请求挂维护
+		if (status == ServiceStateE::kRepairing) {
+			/* 如果之前服务中, 尝试挂维护中, 并返回之前状态
+			* 如果返回服务中, 说明刚好挂维护成功, 否则说明之前已被挂维护 */
+			if (ServiceStateE::kRunning == __sync_val_compare_and_swap(&serverState_, ServiceStateE::kRunning, ServiceStateE::kRepairing)) {
+				//添加 "/GAME/ProxyServersInvalid/192.168.2.93:8080"
+				if (ZNONODE == zkclient_->existsNode(invalidNodePath_)) {
+					zkclient_->createNode(invalidNodePath_, nodeValue_, true);
+					LOG_ERROR << __FUNCTION__ << " --- *** " << "创建节点 " << invalidNodePath_;
+				}
+				//删除 "/GAME/ProxyServersInvalid/192.168.2.93:8080"
+				if (ZNONODE != zkclient_->existsNode(nodePath_)) {
+					zkclient_->deleteNode(nodePath_);
+					LOG_ERROR << __FUNCTION__ << " --- *** " << "删除节点 " << nodePath_;
+				}
+			}
+		}
+		//请求恢复服务
+		else if (status == ServiceStateE::kRunning) {
+			/* 如果之前挂维护中, 尝试恢复服务, 并返回之前状态
+			* 如果返回挂维护中, 说明刚好恢复服务成功, 否则说明之前已恢复服务 */
+			if (ServiceStateE::kRepairing == __sync_val_compare_and_swap(&serverState_, ServiceStateE::kRepairing, ServiceStateE::kRunning)) {
+				//添加 "/GAME/ProxyServersInvalid/192.168.2.93:8080"
+				if (ZNONODE == zkclient_->existsNode(nodePath_)) {
+					zkclient_->createNode(nodePath_, nodeValue_, true);
+					LOG_ERROR << __FUNCTION__ << " --- *** " << "创建节点 " << nodePath_;
+				}
+				//删除 "/GAME/ProxyServersInvalid/192.168.2.93:8080"
+				if (ZNONODE != zkclient_->existsNode(invalidNodePath_)) {
+					zkclient_->deleteNode(invalidNodePath_);
+					LOG_ERROR << __FUNCTION__ << " --- *** " << "删除节点 " << invalidNodePath_;
+				}
+			}
+		}
+	} while (0);
+}
+
+//网关服[C]端 -> 大厅服[S]端
+void Gateway::onHallConnection(const muduo::net::TcpConnectionPtr& conn) {
+
+	if (conn->connected()) {
+		int32_t num = numConnected_.incrementAndGet();
+		LOG_INFO << __FUNCTION__ << " --- *** " << "网关服[" << conn->localAddress().toIpPort() << "] -> 大厅服["
+			<< conn->peerAddress().toIpPort() << "] "
+			<< (conn->connected() ? "UP" : "DOWN") << " " << num;
+	}
+	else {
+		int32_t num = numConnected_.decrementAndGet();
+		LOG_INFO << __FUNCTION__ << " --- *** " << "网关服[" << conn->localAddress().toIpPort() << "] -> 大厅服["
+			<< conn->peerAddress().toIpPort() << "] "
+			<< (conn->connected() ? "UP" : "DOWN") << " " << num;
+	}
+}
+
 //网关服[C]端 -> 大厅服[S]端
 void Gateway::onHallMessage(const muduo::net::TcpConnectionPtr& conn,
 	muduo::net::Buffer* buf,
 	muduo::Timestamp receiveTime) {
-
 	//解析TCP数据包，先解析包头(header)，再解析包体(body)，避免粘包出现
 	while (buf->readableBytes() >= packet::kMinPacketSZ) {
-		
+
 		const uint16_t len = buf->peekInt16();
 
 		//数据包太大或太小
 		if (likely(len > packet::kMaxPacketSZ ||
-				   len < packet::kMinPacketSZ)) {
+			len < packet::kMinPacketSZ)) {
 			if (conn) {
 #if 0
 				//不再发送数据
@@ -559,7 +1283,7 @@ void Gateway::onHallMessage(const muduo::net::TcpConnectionPtr& conn,
 			//session -> hash(session) -> index
 			//////////////////////////////////////////////////////////////////////////
 			int index = hash_session_(session) % threadPool_.size();
-			
+
 			//扔给任务消息队列处理
 			threadPool_[index]->run(
 				std::bind(
@@ -597,6 +1321,7 @@ void Gateway::onHallMessage(const muduo::net::TcpConnectionPtr& conn,
 		}
 	}
 }
+
 //网关服[C]端 -> 大厅服[S]端
 void Gateway::asyncHallHandler(
 	const muduo::net::TcpConnectionPtr& conn,
@@ -722,6 +1447,11 @@ static std::string buffer2HexStr(unsigned char const* buf, size_t len)
 		oss << std::setw(2) << (unsigned int)(buf[i]);
 	}
 	return oss.str();
+}
+
+//网关服[S]端 <- 客户端[C]端，websocket
+bool Gateway::onCondition(const muduo::net::InetAddress& peerAddr) {
+	return true;
 }
 
 //网关服[S]端 <- 客户端[C]端，websocket
@@ -1072,4 +1802,46 @@ void Gateway::asyncClientHandler(
 	}
 	//累计未处理请求数
 	numTotalBadReq_.incrementAndGet();
+}
+
+//网关服[S]端 <- 客户端[C]端，websocket
+void Gateway::refreshBlackList() {
+	if (blackListControl_ == IpVisitCtrlE::kOpenAccept) {
+		//Accept时候判断，socket底层控制，否则开启异步检查
+		server_.server_.getLoop()->runInLoop(std::bind(&Gateway::refreshBlackListInLoop, this));
+	}
+	else if (blackListControl_ == IpVisitCtrlE::kOpen) {
+		//同步刷新IP访问黑名单
+		refreshBlackListSync();
+	}
+}
+
+//网关服[S]端 <- 客户端[C]端，websocket
+bool Gateway::refreshBlackListSync() {
+	//Accept时候判断，socket底层控制，否则开启异步检查
+	assert(blackListControl_ == IpVisitCtrlE::kOpen);
+	{
+		WRITE_LOCK(blackList_mutex_);
+		blackList_.clear();
+	}
+	for (std::map<in_addr_t, IpVisitE>::const_iterator it = blackList_.begin();
+		it != blackList_.end(); ++it) {
+		LOG_DEBUG << "--- *** " << "IP访问黑名单\n"
+			<< "--- *** ipaddr[" << Inet2Ipstr(it->first) << "] status[" << it->second << "]";
+	}
+	return false;
+}
+
+//网关服[S]端 <- 客户端[C]端，websocket
+bool Gateway::refreshBlackListInLoop() {
+	//Accept时候判断，socket底层控制，否则开启异步检查
+	assert(blackListControl_ == IpVisitCtrlE::kOpenAccept);
+	server_.server_.getLoop()->assertInLoopThread();
+	blackList_.clear();
+	for (std::map<in_addr_t, IpVisitE>::const_iterator it = blackList_.begin();
+		it != blackList_.end(); ++it) {
+		LOG_DEBUG << "--- *** " << "IP访问黑名单\n"
+			<< "--- *** ipaddr[" << Inet2Ipstr(it->first) << "] status[" << it->second << "]";
+	}
+	return false;
 }

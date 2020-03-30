@@ -1,5 +1,5 @@
-#ifndef URLCODEC_H
-#define URLCODEC_H
+#ifndef URLCODEC_INCLUDE_H
+#define URLCODEC_INCLUDE_H
 
 #include <stdio.h>
 #include <stdlib.h>

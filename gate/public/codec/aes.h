@@ -1,5 +1,5 @@
-#ifndef MYAESECB_H
-#define MYAESECB_H
+#ifndef MYAESECB_INCLUDE_H
+#define MYAESECB_INCLUDE_H
 
 #include <openssl/rsa.h>
 #include <openssl/aes.h>
@@ -205,7 +205,7 @@ namespace Crypto {
 #endif
 	}
 
-	char* PKCS5Padding(std::vector<char>& buf, std::string const& data, uint32_t unBlockSize)
+	static char* PKCS5Padding(std::vector<char>& buf, std::string const& data, uint32_t unBlockSize)
 	{
 		int nRaw_size = data.size();
 		int i = 0, j = nRaw_size / 8 + 1, k = nRaw_size % 8;
@@ -220,7 +220,7 @@ namespace Crypto {
 		}
 	}
 
-	std::string Des_Encrypt(std::string const& data, char* key)
+	static std::string Des_Encrypt(std::string const& data, char* key)
 	{
 		char szCommand[1024] = { 0 };
 		memset(szCommand, 0, 1024);
@@ -248,7 +248,7 @@ namespace Crypto {
 		return Base64::Encode(reinterpret_cast<const unsigned char*>(szCommand), nLen);
 	}
 
-	std::string Des_Decrypt(std::string const& data, const char* key)
+	static std::string Des_Decrypt(std::string const& data, const char* key)
 	{
 		//base64解码
 		std::string strSrcHex = Base64::Decode(data);

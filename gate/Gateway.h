@@ -21,6 +21,10 @@
 #include <muduo/net/libwebsocket/server.h>
 #include <muduo/net/Reactor.h>
 
+#include "muduo/net/http/HttpContext.h"
+#include "muduo/net/http/HttpRequest.h"
+#include "muduo/net/http/HttpResponse.h"
+
 #include <boost/filesystem.hpp>
 #include <boost/circular_buffer.hpp>
 #include <boost/unordered_set.hpp>
@@ -48,14 +52,15 @@
 #include <arpa/inet.h>
 
 #include "connector.h"
+
 #include "public/packet.h"
+#include "public/StdRandom.h"
 #include "public/zookeeperclient/zookeeperclient.h"
 #include "public/zookeeperclient/zookeeperlocker.h"
 #include "public/redLock/redlock.h"
 #include "public/RedisClient/RedisClient.h"
 #include "public/MongoDB/MongoDBClient.h"
 #include "public/traceMsg/traceMsg.h"
-#include "public/StdRandom.h"
 
 //#define NDEBUG
 
@@ -63,6 +68,13 @@
 enum ServiceStateE {
 	kRepairing = 0,//维护中
 	kRunning   = 1,//服务中
+};
+
+//@@ IpVisitCtrlE IP访问黑白名单控制
+enum IpVisitCtrlE {
+	kClose      = 0,
+	kOpen       = 1,//应用层IP截断
+	kOpenAccept = 2,//网络底层IP截断
 };
 
 //@@ IpVisitE
@@ -78,20 +90,72 @@ enum servTyE {
 	kMaxServTy,
 };
 
+/*
+	HTTP/1.1 400 Bad Request\r\n\r\n
+	HTTP/1.1 404 Not Found\r\n\r\n
+	HTTP/1.1 405 服务维护中\r\n\r\n
+	HTTP/1.1 500 IP访问限制\r\n\r\n
+	HTTP/1.1 504 权限不够\r\n\r\n
+	HTTP/1.1 505 timeout\r\n\r\n
+	HTTP/1.1 600 访问量限制(1500)\r\n\r\n
+*/
+
+#define MY_TRY()	\
+	try {
+
+#define MY_CATCH() \
+	} \
+catch (const bsoncxx::exception & e) { \
+	LOG_ERROR << __FUNCTION__ << " --- *** " << "exception caught " << e.what(); \
+	abort(); \
+} \
+catch (const muduo::Exception & e) { \
+	LOG_ERROR << __FUNCTION__ << " --- *** " << "exception caught " << e.what(); \
+	abort(); \
+	} \
+catch (const std::exception & e) { \
+	LOG_ERROR << __FUNCTION__ << " --- *** " << "exception caught " << e.what(); \
+	abort(); \
+} \
+catch (...) { \
+	LOG_ERROR << __FUNCTION__ << " --- *** " << "exception caught "; \
+	throw; \
+} \
+
+static void setFailedResponse(muduo::net::HttpResponse& rsp,
+	muduo::net::HttpResponse::HttpStatusCode code = muduo::net::HttpResponse::k200Ok,
+	std::string const& msg = "") {
+	rsp.setStatusCode(code);
+	rsp.setStatusMessage("OK");
+	rsp.addHeader("Server", "MUDUO");
+#if 0
+	rsp.setContentType("text/html;charset=utf-8");
+	rsp.setBody("<html><body>" + msg + "</body></html>");
+#elif 0
+	rsp.setContentType("application/xml;charset=utf-8");
+	rsp.setBody(msg);
+#else
+	rsp.setContentType("text/plain;charset=utf-8");
+	rsp.setBody(msg);
+#endif
+}
+
 //@@ Gateway
 class Gateway : public muduo::noncopyable {
 public:
-	//@@
+	//@@ CmdCallback
 	typedef std::function<
 		void(const muduo::net::TcpConnectionPtr&, muduo::net::Buffer&)> CmdCallback;
+	//@@ CmdCallbacks
 	typedef std::map<uint32_t, CmdCallback> CmdCallbacks;
 	
 	//typedef std::shared_ptr<muduo::net::TcpClient> TcpClientPtr;
 	//typedef std::weak_ptr<muduo::net::TcpClient> WeakTcpClientPtr;
-	//typedef std::map<std::string, TcpClientPtr> MapTcpClientPtr;
+	//typedef std::map<std::string, TcpClientPtr> TcpClientMap;
 	
 	typedef std::shared_ptr<muduo::net::Buffer> BufferPtr;
-	
+	typedef std::map<std::string, std::string> HttpParams;
+
 	//@@ Entry 避免恶意连接占用系统sockfd资源不请求处理也不关闭fd情况，超时强行关闭连接
 	struct Entry : public muduo::noncopyable {
 	public:
@@ -212,7 +276,6 @@ public:
 	typedef boost::unordered_set<EntryPtr> Bucket;
 	typedef boost::circular_buffer<Bucket> WeakConnList;
 
-	//typedef std::map<std::string, muduo::net::WeakTcpConnectionPtr> SessionInfosMap;
 	typedef std::map<std::string, WeakEntryPtr> SessionInfosMap;
 	//@@ EventLoopContext
 	class EventLoopContext : public muduo::copyable {
@@ -348,12 +411,17 @@ public:
 	//MongoDB/RedisCluster/RedisLock
 	void threadInit();
 
-	//启动websocket(TCP)业务线程
-	//启动websocket(TCP)监听，客户端交互
+	//启动worker线程
+	//启动TCP监听客户端，websocket server_
+	//启动TCP监听客户端，内部服务器之间交互 innServer_
+	//启动TCP监听客户端，HTTP httpServer_
 	void start(int numThreads, int numWorkerThreads, int maxSize);
 
 	//网关服[S]端 <- 客户端[C]端，websocket
 private:
+	//客户端访问IP黑名单检查
+	bool onCondition(const muduo::net::InetAddress& peerAddr);
+
 	void onConnection(const muduo::net::TcpConnectionPtr& conn);
 
 	void onConnected(
@@ -370,6 +438,14 @@ private:
 		BufferPtr& buf,
 		muduo::Timestamp receiveTime);
 
+	//刷新客户端访问IP黑名单信息
+	//1.web后台更新黑名单通知刷新
+	//2.游戏启动刷新一次
+	//3.redis广播通知刷新一次
+	void refreshBlackList();
+	bool refreshBlackListSync();
+	bool refreshBlackListInLoop();
+
 	//网关服[S]端 <- 推送服[C]端，通知服
 private:
 	void onInnConnection(const muduo::net::TcpConnectionPtr& conn);
@@ -383,6 +459,40 @@ private:
 		WeakEntryPtr const& weakEntry,
 		BufferPtr& buf,
 		muduo::Timestamp receiveTime);
+
+	//网关服[S]端 <- HTTP客户端[C]端，WEB前端
+private:
+	//HTTP访问IP白名单检查
+	bool onHttpCondition(const muduo::net::InetAddress& peerAddr);
+
+	void onHttpConnection(const muduo::net::TcpConnectionPtr& conn);
+
+	void onHttpMessage(const muduo::net::TcpConnectionPtr& conn, muduo::net::Buffer* buf, muduo::Timestamp receiveTime);
+
+	void asyncHttpHandler(const WeakEntryPtr& weakEntry, muduo::Timestamp receiveTime);
+	
+	static std::string getRequestStr(muduo::net::HttpRequest const& req);
+	
+	static bool parseQuery(std::string const& queryStr, HttpParams& params, std::string& errmsg);
+
+	void processHttpRequest(
+		const muduo::net::HttpRequest& req, muduo::net::HttpResponse& rsp,
+		muduo::net::InetAddress const& peerAddr,
+		muduo::Timestamp receiveTime);
+
+	//刷新HTTP访问IP白名单信息
+	//1.web后台更新白名单通知刷新
+	//2.游戏启动刷新一次
+	//3.redis广播通知刷新一次
+	void refreshWhiteList();
+	bool refreshWhiteListSync();
+	bool refreshWhiteListInLoop();
+
+	//请求挂维护/恢复服务 status=0挂维护 status=1恢复服务
+	bool repairServer(std::string const& queryStr);
+
+	//请求挂维护/恢复服务 status=0挂维护 status=1恢复服务
+	void repairServerNotify(std::string const& msg);
 
 	//网关服[C]端 -> 大厅服[S]端
 private:
@@ -407,6 +517,9 @@ private:
 	
 	//监听客户端TCP请求(内部服务器交互)
 	muduo::net::TcpServer innServer_;
+
+	//监听客户端TCP请求(HTTP，管理员维护)，WEB前端
+	muduo::net::TcpServer httpServer_;
 
 	//当前TCP连接数
 	muduo::AtomicInt32 numConnected_;
@@ -465,7 +578,7 @@ private:
 
 	//zk节点/服务注册/发现
 	std::shared_ptr<ZookeeperClient> zkclient_;
-	std::string nodePath_, nodeValue_;
+	std::string nodePath_, nodeValue_, invalidNodePath_;
 	
 	//redis订阅/发布
 	std::shared_ptr<RedisClient>  redisClient_;
@@ -479,6 +592,8 @@ private:
 	volatile long serverState_;
 
 public:
+	//是否调试
+	bool isdebug_;
 
 	//绑定网卡ipport
 	std::string strIpAddr_;
@@ -490,7 +605,7 @@ public:
 	//即环形数组大小(size) >=
 	//心跳超时清理时间(timeout) >
 	//心跳间隔时间(interval)
-	int kTimeoutSeconds_;
+	int kTimeoutSeconds_, kHttpTimeoutSeconds_;
 	
 	//redisLock
 	std::vector<std::string> redlockVec_;
@@ -498,14 +613,19 @@ public:
 	//管理员挂维护/恢复服务
 	std::map<in_addr_t, IpVisitE> adminList_;
 
-	//HTTP/IP访问白名单信息
-	std::map<in_addr_t, IpVisitE> whiteList_;
-	
-	//websocket/TCP/IP访问黑名单信息
-	std::map<in_addr_t, IpVisitE> BlackList_;
+	//HTTP访问IP白名单控制
+	IpVisitCtrlE whiteListControl_;
 
-	//是否调试
-	bool isdebug_;
+	//HTTP访问IP白名单信息
+	std::map<in_addr_t, IpVisitE> whiteList_;
+	mutable boost::shared_mutex whiteList_mutex_;
+
+	//客户端访问IP黑名单控制，websocket
+	IpVisitCtrlE blackListControl_;
+
+	//客户端访问IP黑名单信息，websocket
+	std::map<in_addr_t, IpVisitE> blackList_;
+	mutable boost::shared_mutex blackList_mutex_;
 };
 
 #endif
