@@ -1,4 +1,5 @@
-#ifndef _PACKET_H_
+#ifndef PACKET_INCLUDE_H
+#define PACKET_INCLUDE_H
 
 #include <stdint.h>
 #include "global.h"
