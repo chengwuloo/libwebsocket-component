@@ -166,7 +166,7 @@ int main() {
 						"(1\\d{2}|2[0-4]\\d|25[0-5]|[1-9]\\d|\\d)\\." \
 						"(1\\d{2}|2[0-4]\\d|25[0-5]|[1-9]\\d|\\d)$"))) {
 				muduo::net::InetAddress addr(muduo::StringArg(ipaddr), 0, false);
-				server.adminList_[addr.ipNetEndian()] = ApiVisitE::Enable;
+				server.adminList_[addr.ipNetEndian()] = IpVisitE::kEnable;
 				LOG_INFO << __FUNCTION__ << " --- *** " << "¹ÜÀíÔ±IP[" << ipaddr << "]";
 			}
 		}

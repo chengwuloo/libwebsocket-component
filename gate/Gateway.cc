@@ -39,7 +39,7 @@ Gateway::Gateway(muduo::net::EventLoop* loop,
 	, gameConnector_(loop)
 	, kTimeoutSeconds_(3)
 	, kMaxConnections_(15000)
-	, serverState_(ServiceRunning)
+	, serverState_(kRunning)
 	, isdebug_(false) {
 
 	//网络I/O线程池，处理网络I/O读写：数据收/发 recv(read)send(write)

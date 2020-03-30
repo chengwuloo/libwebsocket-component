@@ -61,14 +61,14 @@
 
 //@@ ServiceStateE 服务状态
 enum ServiceStateE {
-	ServiceRepairing = 0,//维护中
-	ServiceRunning   = 1,//服务中
+	kRepairing = 0,//维护中
+	kRunning   = 1,//服务中
 };
 
-//@@ ApiVisitE
-enum ApiVisitE {
-	Enable  = 0,//IP允许访问
-	Disable = 1,//IP禁止访问
+//@@ IpVisitE
+enum IpVisitE {
+	kEnable  = 0,//IP允许访问
+	kDisable = 1,//IP禁止访问
 };
 
 //@@ servTyE
@@ -496,13 +496,13 @@ public:
 	std::vector<std::string> redlockVec_;
 	
 	//管理员挂维护/恢复服务
-	std::map<in_addr_t, ApiVisitE> adminList_;
+	std::map<in_addr_t, IpVisitE> adminList_;
 
 	//HTTP/IP访问白名单信息
-	std::map<in_addr_t, ApiVisitE> whiteList_;
+	std::map<in_addr_t, IpVisitE> whiteList_;
 	
 	//websocket/TCP/IP访问黑名单信息
-	std::map<in_addr_t, ApiVisitE> BlackList_;
+	std::map<in_addr_t, IpVisitE> BlackList_;
 
 	//是否调试
 	bool isdebug_;
