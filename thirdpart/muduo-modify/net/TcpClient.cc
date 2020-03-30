@@ -47,6 +47,33 @@ void removeConnector(const ConnectorPtr& connector)
   //connector->
 }
 
+void removeAllInLoop(EventLoop* loop_, TcpConnectionPtr connection_, ConnectorPtr connector_) {
+    loop_->assertInLoopThread();
+	TcpConnectionPtr conn;
+	bool unique = false;
+	{
+		//MutexLockGuard lock(mutex_);
+		unique = connection_.unique();
+		conn = connection_;
+	}
+	if (conn) {
+		assert(loop_ == conn->getLoop());
+		// FIXME: not 100% safe, if we are in different thread
+		CloseCallback cb = std::bind(&detail::removeConnection, loop_, _1);
+		loop_->runInLoop(
+			std::bind(&TcpConnection::setCloseCallback, conn, cb));
+		if (unique)
+		{
+			conn->forceClose();
+		}
+	}
+	else {
+		connector_->stop();
+		// FIXME: HACK
+		loop_->runAfter(1, std::bind(&detail::removeConnector, connector_));
+	}
+}
+
 }  // namespace detail
 }  // namespace net
 }  // namespace muduo
@@ -74,31 +101,33 @@ TcpClient::~TcpClient()
 {
   LOG_INFO << "TcpClient::~TcpClient[" << name_
            << "] - connector " << get_pointer(connector_);
-  TcpConnectionPtr conn;
-  bool unique = false;
-  {
-    MutexLockGuard lock(mutex_);
-    unique = connection_.unique();
-    conn = connection_;
-  }
-  if (conn)
-  {
-    assert(loop_ == conn->getLoop());
-    // FIXME: not 100% safe, if we are in different thread
-    CloseCallback cb = std::bind(&detail::removeConnection, loop_, _1);
-    loop_->runInLoop(
-        std::bind(&TcpConnection::setCloseCallback, conn, cb));
-    if (unique)
-    {
-      conn->forceClose();
-    }
-  }
-  else
-  {
-    connector_->stop();
-    // FIXME: HACK
-    loop_->runAfter(1, std::bind(&detail::removeConnector, connector_));
-  }
+  loop_->runInLoop(
+      std::bind(&detail::removeAllInLoop, loop_, connection_, connector_));
+//  TcpConnectionPtr conn;
+//   bool unique = false;
+//   {
+//     //MutexLockGuard lock(mutex_);
+//     unique = connection_.unique();
+//     conn = connection_;
+//   }
+//   if (conn)
+//   {
+//     assert(loop_ == conn->getLoop());
+//     // FIXME: not 100% safe, if we are in different thread
+//     CloseCallback cb = std::bind(&detail::removeConnection, loop_, _1);
+//     loop_->runInLoop(
+//         std::bind(&TcpConnection::setCloseCallback, conn, cb));
+//     if (unique)
+//     {
+//       conn->forceClose();
+//     }
+//   }
+//   else
+//   {
+//     connector_->stop();
+//     // FIXME: HACK
+//     loop_->runAfter(1, std::bind(&detail::removeConnector, connector_));
+//   }
 }
 
 void TcpClient::connect()
@@ -110,12 +139,17 @@ void TcpClient::connect()
   connector_->start();
 }
 
-void TcpClient::disconnect()
-{
+void TcpClient::disconnect() {
+	loop_->runInLoop(
+		std::bind(&TcpClient::disconnectInLoop, this));
+}
+
+void TcpClient::disconnectInLoop() {
+  loop_->assertInLoopThread();
   connect_ = false;
 
   {
-    MutexLockGuard lock(mutex_);
+    //MutexLockGuard lock(mutex_);
     if (connection_)
     {
       connection_->shutdown();
@@ -132,6 +166,7 @@ void TcpClient::stop()
 void TcpClient::newConnection(int sockfd)
 {
   loop_->assertInLoopThread();
+  EventLoop* ioLoop = ReactorSingleton::getNextLoop();
   InetAddress peerAddr(sockets::getPeerAddr(sockfd));
   char buf[32];
   snprintf(buf, sizeof buf, ":%s#%d", peerAddr.toIpPort().c_str(), nextConnId_);
@@ -141,36 +176,43 @@ void TcpClient::newConnection(int sockfd)
   InetAddress localAddr(sockets::getLocalAddr(sockfd));
   // FIXME poll with zero timeout to double confirm the new connection
   // FIXME use make_shared if necessary
-  TcpConnectionPtr conn(new TcpConnection(loop_,
+  TcpConnectionPtr conn(new TcpConnection(ioLoop/*loop_*/,
                                           connName,
                                           sockfd,
                                           localAddr,
                                           peerAddr));
-
+  {
+	  //MutexLockGuard lock(mutex_);
+	  connection_ = conn;
+  }
   conn->setConnectionCallback(connectionCallback_);
   conn->setMessageCallback(messageCallback_);
   conn->setWriteCompleteCallback(writeCompleteCallback_);
   conn->setCloseCallback(
       std::bind(&TcpClient::removeConnection, this, _1)); // FIXME: unsafe
-  {
-    MutexLockGuard lock(mutex_);
-    connection_ = conn;
-  }
-  conn->connectEstablished();
+  //conn->connectEstablished();
+  ioLoop->runInLoop(std::bind(&TcpConnection::connectEstablished, conn));
 }
 
 void TcpClient::removeConnection(const TcpConnectionPtr& conn)
 {
+	// FIXME: unsafe
+	loop_->runInLoop(std::bind(&TcpClient::removeConnectionInLoop, this, conn));
+}
+
+void TcpClient::removeConnectionInLoop(const TcpConnectionPtr& conn)
+{
   loop_->assertInLoopThread();
-  assert(loop_ == conn->getLoop());
+  //assert(loop_ == conn->getLoop());
 
   {
-    MutexLockGuard lock(mutex_);
+    //MutexLockGuard lock(mutex_);
     assert(connection_ == conn);
     connection_.reset();
   }
-
-  loop_->queueInLoop(std::bind(&TcpConnection::connectDestroyed, conn));
+  EventLoop* ioLoop = conn->getLoop();
+  /*loop_*/ioLoop->queueInLoop(
+      std::bind(&TcpConnection::connectDestroyed, conn));
   if (retry_ && connect_)
   {
     //LOG_INFO << "TcpClient::connect[" << name_ << "] - Reconnecting to "

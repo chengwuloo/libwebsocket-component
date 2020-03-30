@@ -13,6 +13,7 @@
 
 #include "muduo/base/Mutex.h"
 #include "muduo/net/TcpConnection.h"
+#include "muduo/net/Reactor.h"
 
 namespace muduo
 {
@@ -38,7 +39,7 @@ class TcpClient : noncopyable
 
   TcpConnectionPtr connection() const
   {
-    MutexLockGuard lock(mutex_);
+    //MutexLockGuard lock(mutex_);
     return connection_;
   }
 
@@ -69,6 +70,10 @@ class TcpClient : noncopyable
   void newConnection(int sockfd);
   /// Not thread safe, but in loop
   void removeConnection(const TcpConnectionPtr& conn);
+  /// Not thread safe, but in loop
+  void removeConnectionInLoop(const TcpConnectionPtr& conn);
+
+  void disconnectInLoop();
 
   EventLoop* loop_;
   ConnectorPtr connector_; // avoid revealing Connector
@@ -80,8 +85,8 @@ class TcpClient : noncopyable
   bool connect_; // atomic
   // always in loop thread
   int nextConnId_;
-  mutable MutexLock mutex_;
-  TcpConnectionPtr connection_ GUARDED_BY(mutex_);
+  //mutable MutexLock mutex_;
+  TcpConnectionPtr connection_ /*GUARDED_BY(mutex_)*/;
 };
 
 }  // namespace net

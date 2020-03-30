@@ -27,7 +27,7 @@ TcpServer::TcpServer(EventLoop* loop,
     ipPort_(listenAddr.toIpPort()),
     name_(nameArg),
     acceptor_(new Acceptor(loop, listenAddr, option == kReusePort)),
-    threadPool_(new EventLoopThreadPool(loop, name_)),
+    //threadPool_(new EventLoopThreadPool(loop, name_)),
     connectionCallback_(defaultConnectionCallback),
     messageCallback_(defaultMessageCallback),
     nextConnId_(1),
@@ -35,6 +35,7 @@ TcpServer::TcpServer(EventLoop* loop,
     enableWebsocket_(false),
     isWebsocketSupport_(false)
 {
+  ReactorSingleton::inst(loop, name_);
   acceptor_->setNewConnectionCallback(
       std::bind(&TcpServer::newConnection, this, _1, _2));
 }
@@ -56,14 +57,14 @@ TcpServer::~TcpServer()
 void TcpServer::setThreadNum(int numThreads)
 {
   assert(0 <= numThreads);
-  threadPool_->setThreadNum(numThreads);
+  ReactorSingleton::setThreadNum(numThreads);//threadPool_->setThreadNum(numThreads);
 }
 
 void TcpServer::start(bool et)
 {
   if (started_.getAndSet(1) == 0)
   {
-    threadPool_->start(threadInitCallback_);
+    ReactorSingleton::start(threadInitCallback_);//threadPool_->start(threadInitCallback_);
 
     assert(!acceptor_->listenning());
     if (conditionCallback_)
@@ -79,7 +80,7 @@ void TcpServer::start(bool et)
 void TcpServer::newConnection(int sockfd, const InetAddress& peerAddr)
 {
   loop_->assertInLoopThread();
-  EventLoop* ioLoop = threadPool_->getNextLoop();
+  EventLoop* ioLoop = ReactorSingleton::getNextLoop();//threadPool_->getNextLoop();
   char buf[64];
   snprintf(buf, sizeof buf, "-%s#%d", ipPort_.c_str(), nextConnId_);
   ++nextConnId_;

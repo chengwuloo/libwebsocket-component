@@ -14,6 +14,7 @@
 #include "muduo/base/Atomic.h"
 #include "muduo/base/Types.h"
 #include "muduo/net/TcpConnection.h"
+#include "muduo/net/Reactor.h"
 
 #include <map>
 #include <openssl/ssl.h>
@@ -92,7 +93,7 @@ class TcpServer : noncopyable
   bool enableWebsocket_, isWebsocketSupport_;
   /// valid after calling start()
   std::shared_ptr<EventLoopThreadPool> threadPool()
-  { return threadPool_; }
+  { return ReactorSingleton::threadPool();/*threadPool_;*/ }
 
   /// Starts the server if it's not listenning.
   ///
@@ -135,7 +136,7 @@ class TcpServer : noncopyable
   const string ipPort_;
   const string name_;
   std::unique_ptr<Acceptor> acceptor_; // avoid revealing Acceptor
-  std::shared_ptr<EventLoopThreadPool> threadPool_;
+  //std::shared_ptr<EventLoopThreadPool> threadPool_;
   ConnectionCallback connectionCallback_;
   MessageCallback messageCallback_;
   WriteCompleteCallback writeCompleteCallback_;
