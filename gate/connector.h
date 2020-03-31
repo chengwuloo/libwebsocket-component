@@ -86,7 +86,7 @@ public:
 	void check(std::string const& name, bool exist);
 
 	//getAll
-	void getAll(ClientConnList& clients, bool& bok);
+	void getAll(ClientConnList& clients);
 protected:
 	void quit();
 	void closeAll();

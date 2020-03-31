@@ -1425,10 +1425,8 @@ void Gateway::sendHallMessage(WeakEntryPtr const& weakEntry, BufferPtr& buf, int
 			//用户大厅服无效，重新分配
 			bool bok = false;
 			ClientConnList clients;
-			//异步函数
-			hallConector_.getAll(clients, bok);
-			//自旋锁
-			while (!bok);
+			//异步获取全部有效大厅连接
+			hallConector_.getAll(clients);
 			if (clients.size() > 0) {
 				int index = randomHall_.betweenInt(0, clients.size() - 1).randInt_mt();
 				assert(index >= 0 && index < hallIps_.size());

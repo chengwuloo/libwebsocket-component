@@ -92,9 +92,12 @@ void Connector::check(std::string const& name, bool exist) {
 }
 
 //getAll
-void Connector::getAll(ClientConnList& clients, bool& bok) {
+void Connector::getAll(ClientConnList& clients) {
+	bool bok = false;
 	loop_->runInLoop(
 		std::bind(&Connector::getAllInLoop, this, clients, bok));
+	//spin lock until getAllInLoop return
+	while (!bok);
 }
 
 void Connector::getAllInLoop(ClientConnList& clients, bool& bok) {
