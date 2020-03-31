@@ -118,45 +118,48 @@ namespace Crypto {
 	static std::string AES_ECBDecrypt(std::string const& data, std::string const& key)
 	{
 #if 0
-		AES_KEY ctx = { 0 };
-		const char* pSrc = 0;
-		const char* pTmpSrc = 0;
-		unsigned char* pDest = 0;
-		unsigned char* pTmpDest = 0;
-		int nSrcLen = 0;
-		int nDestLen = 0;
-		unsigned char buf[KEYCODELENGTH];
-		//unsigned char KEY[KEYCODELENGTH];
-		//StringToHex(key.c_str(), KEY, KEYCODELENGTH);
-		if (AES_set_decrypt_key((unsigned char const*)key.c_str(), key.length() * 8/*128*/, &ctx) < 0) {
-			printf("AES_set_decrypt_key error\n");
-			return "";
-		}
 		std::string strSrcHex = Base64::Decode(data);
-		pSrc = strSrcHex.data();
-		nDestLen = strSrcHex.length();
-		pDest = new unsigned char[nDestLen];
-		memset(pDest, 0, nDestLen);
-		pTmpSrc = pSrc;
-		pTmpDest = pDest;
-		while ((pTmpSrc - pSrc) < strSrcHex.length()) {
-			memcpy(buf, pTmpSrc, KEYCODELENGTH);
-			AES_decrypt((const unsigned char*)buf, buf, &ctx);
-			memcpy(pTmpDest, buf, KEYCODELENGTH);
-			pTmpSrc += KEYCODELENGTH;
-			pTmpDest += KEYCODELENGTH;
+		if (!strSrcHex.empty()) {
+			AES_KEY ctx = { 0 };
+			//unsigned char KEY[KEYCODELENGTH];
+			//StringToHex(key.c_str(), KEY, KEYCODELENGTH);
+			if (AES_set_decrypt_key((unsigned char const*)key.c_str(), key.length() * 8/*128*/, &ctx) < 0) {
+				printf("AES_set_decrypt_key error\n");
+				return "";
+			}
+			unsigned char buf[KEYCODELENGTH];
+			char const* src = strSrcHex.data();
+			size_t dstlen = strSrcHex.length();
+			unsigned char dst[dstlen];
+			memset(dst, 0, dstlen);
+			char const* psrc = src;
+			unsigned char* pdst = dst;
+			while ((psrc - src) < dstlen) {
+				memcpy(buf, psrc, KEYCODELENGTH);
+				AES_decrypt((const unsigned char*)buf, buf, &ctx);
+				memcpy(pdst, buf, KEYCODELENGTH);
+				psrc += KEYCODELENGTH;
+				pdst += KEYCODELENGTH;
+			}
+			unsigned char uc = 0;
+			while (uc = *(pdst - 1)) {
+				if (uc > 0 && uc <= 0x10)
+					*(pdst - 1) = 0;
+				else
+					break;
+				--pdst;
+			}
+			//正则表达式 https://tool.oschina.net/uploads/apidocs/jquery/regexp.html
+			//ASCII码表 http://www.asciima.com/ascii/12.html
+			//ASCII 非打印控制字符   0~31 
+			//ASCII      打印字符  32~126 ^[ -~]+$  127-DEL
+			//ASCII   扩展打印字符 128~255 ^[\x80-\xff]+$
+			if (boost::regex_match(
+				std::string((char const*)dst), boost::regex("^[ -~\u4e00-\u9fa5]+$"))) {
+				return std::string((char const*)dst);
+			}
 		}
-		unsigned char ucTest = 0;
-		while (ucTest = *(pTmpDest - 1)) {
-			if (ucTest > 0 && ucTest <= 0x10)
-				*(pTmpDest - 1) = 0;
-			else
-				break;
-			pTmpDest--;
-		}
-		std::string strRet = (char*)pDest;
-		delete[] pDest;
-		return strRet;
+		return "";
 #elif 1
 		std::string strSrcHex = Base64::Decode(data);
 		if (!strSrcHex.empty()) {
@@ -168,15 +171,16 @@ namespace Crypto {
 			//src
 			unsigned char const* src = (unsigned char const*)strSrcHex.data();
 			//dst
-			unsigned char dst[strSrcHex.length()];
-			memset(dst, 0, strSrcHex.length());
+			size_t dstlen = strSrcHex.length();
+			unsigned char dst[dstlen];
+			memset(dst, 0, dstlen);
 			//AES_decrypt
-			int len = 0;
-			while (len < strSrcHex.length()) {
+			size_t len = 0;
+			while (len < dstlen) {
 				AES_decrypt(&src[len], dst + len, &ctx);
 				len += AES_BLOCK_SIZE;
 			}
-			ClearPadding((unsigned char*)dst, strSrcHex.length());
+			ClearPadding((unsigned char*)dst, dstlen);
 			dst[len] = '\0';
 			//正则表达式 https://tool.oschina.net/uploads/apidocs/jquery/regexp.html
 			//ASCII码表 http://www.asciima.com/ascii/12.html
@@ -205,7 +209,7 @@ namespace Crypto {
 #endif
 	}
 
-	static char* PKCS5Padding(std::vector<char>& buf, std::string const& data, uint32_t unBlockSize)
+	static void PKCS5Padding(std::vector<char>& buf, std::string const& data, size_t unBlockSize)
 	{
 		int nRaw_size = data.size();
 		int i = 0, j = nRaw_size / 8 + 1, k = nRaw_size % 8;
@@ -213,8 +217,7 @@ namespace Crypto {
 		buf.clear();
 		buf.resize(nRaw_size + nPidding_size);
 		memcpy(&buf.front(), data.c_str(), nRaw_size);
-		for (int i = nRaw_size; i < (nRaw_size + nPidding_size); i++)
-		{
+		for (int i = nRaw_size; i < (nRaw_size + nPidding_size); ++i) {
 			// PKCS5Padding 算法：
 			buf[i] = nPidding_size;
 		}
