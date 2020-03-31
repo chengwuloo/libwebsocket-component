@@ -88,6 +88,12 @@ void Connector::create(
 		std::bind(&Connector::createInLoop, this, name, serverAddr));
 }
 
+//remove
+void Connector::remove(std::string const& name) {
+	loop_->runInLoop(
+		std::bind(&Connector::removeInLoop, this, name));
+}
+
 //check
 void Connector::check(std::string const& name, bool exist) {
 	loop_->runInLoop(
@@ -122,7 +128,7 @@ void Connector::createInLoop(
 	
 	TcpClientMap::iterator it = clients_.find(name);
 	if (it == clients_.end()) {
-		//nameÐÂ½Úµã
+		//nameæ–°èŠ‚ç‚¹
 		TcpClientState state(TcpClientPtr(new TcpClient(loop_, serverAddr, name, this)), false);
 		TcpClientPtr const& client = state.first;
 		clients_[client->name()] = state;
@@ -130,11 +136,11 @@ void Connector::createInLoop(
 		client->connect();
 	}
 	else {
-		//nameÒÑ´æÔÚ
+		//nameå·²å­˜åœ¨
 		TcpClientState& state = it->second;
 		TcpClientPtr& client = state.first;
 		if (client) {
-			//Á¬½Ó¶Ï¿ªÔòÖØÁ¬
+			//è¿žæŽ¥æ–­å¼€åˆ™é‡è¿ž
 			if (!CONNECTED(state)) {
 				assert(
 					!client->connection() ||
@@ -161,13 +167,13 @@ void Connector::checkInLoop(std::string const& name, bool exist) {
 
 	TcpClientMap::const_iterator it = clients_.find(name);
 	if (it == clients_.end()) {
-		//name²»´æÔÚ
+		//nameä¸å­˜åœ¨
 		if (exist) {
 			assert(false);
 		}
 	}
 	else {
-		//nameÒÑ´æÔÚ
+		//nameå·²å­˜åœ¨
 		TcpClientState const& state = it->second;
 		TcpClientPtr const& client = state.first;
 		if (exist) {
@@ -178,7 +184,7 @@ void Connector::checkInLoop(std::string const& name, bool exist) {
 				client->connection()->connected());
 		}
 		else {
-			//Á¬½Ó¶Ï¿ª
+			//è¿žæŽ¥æ–­å¼€
 			assert(!CONNECTED(state));
 			if (client) {
 				assert(
@@ -244,15 +250,19 @@ void Connector::removeConnection(const muduo::net::TcpConnectionPtr& conn, const
 	
 	loop_->assertInLoopThread();
 	{
-#if 0
-		TcpClientMap::const_iterator it = clients_.find(name);
-		assert(it != clients_.end());
-		clients_.erase(it);
-#elif 1
-		TcpClientMap::iterator it = clients_.find(name);
-		assert(it != clients_.end());
-		TcpClientState& state = it->second;
-		state.second = false;
+#if 1
+		if (1 == removes_.erase(name)) {
+			TcpClientMap::const_iterator it = clients_.find(name);
+			assert(it != clients_.end());
+			clients_.erase(it);
+		}
+		else {
+			TcpClientMap::iterator it = clients_.find(name);
+			assert(it != clients_.end());
+			TcpClientState& state = it->second;
+			state.second = false;
+			//state.first.reset();
+		}
 #else
 		size_t n = clients_.erase(name);
 		(void)n;
@@ -269,6 +279,12 @@ void Connector::connectionCallback(const muduo::net::TcpConnectionPtr& conn) {
 	if (connectionCallback_) {
 		connectionCallback_(conn);
 	}
+}
+
+void Connector::removeInLoop(std::string const& name) {
+	
+	loop_->assertInLoopThread();
+	removes_[name] = true;
 }
 
 void Connector::onMessage(

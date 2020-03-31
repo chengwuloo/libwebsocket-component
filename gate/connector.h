@@ -86,6 +86,9 @@ public:
 		std::string const& name,
 		const muduo::net::InetAddress& serverAddr);
 
+	//remove
+	void remove(std::string const& name);
+
 	//check
 	void check(std::string const& name, bool exist);
 
@@ -111,9 +114,11 @@ protected:
 
 	void checkInLoop(std::string const& name, bool exist);
 	void getAllInLoop(ClientConnList& clients, bool& bok);
+	void removeInLoop(std::string const& name);
 private:
 	muduo::net::EventLoop* loop_;
 	TcpClientMap clients_;
+	std::map<std::string, bool> removes_;
 	muduo::AtomicInt32 numConnected_;
 	muduo::net::ConnectionCallback connectionCallback_;
 	muduo::net::MessageCallback messageCallback_;
