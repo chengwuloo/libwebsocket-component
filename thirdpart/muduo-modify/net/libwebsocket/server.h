@@ -18,10 +18,10 @@ namespace muduo {
             public:
                 Server(muduo::net::EventLoop* loop,
                     const muduo::net::InetAddress& listenAddr,
-                    const std::string& name,
+                    const std::string& name /*,
                     std::string const& cert_path, std::string const& private_key_path,
                     std::string const& client_ca_cert_file_path = "",
-                    std::string const& client_ca_cert_dir_path = "");
+                    std::string const& client_ca_cert_dir_path = ""*/);
                 ~Server();
                 
                 //getLoop

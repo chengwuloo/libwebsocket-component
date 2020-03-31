@@ -7,6 +7,9 @@
 #include <functional>
 #include <sys/types.h>
 
+#include <muduo/net/Reactor.h>
+#include <muduo/net/libwebsocket/ssl.h>
+
 #include <boost/uuid/uuid.hpp>
 #include <boost/uuid/uuid_generators.hpp>
 #include <boost/uuid/uuid_io.hpp>
@@ -42,7 +45,7 @@ Gateway::Gateway(muduo::net::EventLoop* loop,
 	std::string const& cert_path, std::string const& private_key_path,
 	std::string const& client_ca_cert_file_path,
 	std::string const& client_ca_cert_dir_path)
-    : server_(loop, listenAddr, "Gateway[client]", cert_path, private_key_path, client_ca_cert_file_path, client_ca_cert_dir_path)
+    : server_(loop, listenAddr, "Gateway[client]")
 	, innServer_(loop, listenAddrInn, "Gateway[inner]")
 	, httpServer_(loop, listenAddrHttp, "Gateway[http]")
 	, hallConector_(loop)
@@ -50,7 +53,7 @@ Gateway::Gateway(muduo::net::EventLoop* loop,
 	, kTimeoutSeconds_(3)
 	, kHttpTimeoutSeconds_(3)
 	, kMaxConnections_(15000)
-	, serverState_(kRunning)
+	, serverState_(ServiceStateE::kRunning)
 	, isdebug_(false) {
 
 	//网络I/O线程池，I/O收发读写 recv(read)/send(write)
@@ -85,6 +88,16 @@ Gateway::Gateway(muduo::net::EventLoop* loop,
 	hallConector_.setMessageCallback(
 		std::bind(&Gateway::onHallMessage, this,
 			std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+
+	//添加OpenSSL认证支持 httpServer_&server_共享证书
+	muduo::net::ssl::SSL_CTX_Init(
+		cert_path,
+		private_key_path,
+		client_ca_cert_file_path, client_ca_cert_dir_path);
+
+	//指定SSL_CTX
+	server_.server_.set_SSL_CTX(muduo::net::ssl::SSL_CTX_Get());
+	httpServer_.set_SSL_CTX(muduo::net::ssl::SSL_CTX_Get());
 }
 
 Gateway::~Gateway() {

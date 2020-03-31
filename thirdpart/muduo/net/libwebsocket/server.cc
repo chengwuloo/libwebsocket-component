@@ -4,7 +4,7 @@
 /************************************************************************/
 #include <muduo/base/Logging.h>
 #include <muduo/net/libwebsocket/websocket.h>
-#include <muduo/net/libwebsocket/ssl.h>
+//#include <muduo/net/libwebsocket/ssl.h>
 #include <muduo/net/libwebsocket/server.h>
 
 namespace muduo {
@@ -14,10 +14,10 @@ namespace muduo {
 			//@@ Server ctor
 			Server::Server(muduo::net::EventLoop* loop,
 				const muduo::net::InetAddress& listenAddr,
-				const std::string& name,
+				const std::string& name /*,
 				std::string const& cert_path, std::string const& private_key_path,
 				std::string const& client_ca_cert_file_path,
-				std::string const& client_ca_cert_dir_path)
+				std::string const& client_ca_cert_dir_path*/)
 				: server_(loop, listenAddr, name) {
 				//注册TCP消息回调
 				server_.setMessageCallback(
@@ -30,6 +30,7 @@ namespace muduo {
 					std::bind(
 						&Server::onWebSocketClosed, this,
 						std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+#if 0
 				//添加OpenSSL认证支持
 				muduo::net::ssl::SSL_CTX_Init(
 					cert_path,
@@ -37,6 +38,7 @@ namespace muduo {
 					client_ca_cert_file_path, client_ca_cert_dir_path);
 				//指定SSL_CTX
 				server_.set_SSL_CTX(muduo::net::ssl::SSL_CTX_Get());
+#endif
 			}
 			
 			//@@ Server dtor

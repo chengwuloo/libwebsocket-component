@@ -19,7 +19,6 @@
 #include <muduo/base/ThreadPool.h>
 #include <muduo/base/ThreadLocalSingleton.h>
 #include <muduo/net/libwebsocket/server.h>
-#include <muduo/net/Reactor.h>
 
 #include "muduo/net/http/HttpContext.h"
 #include "muduo/net/http/HttpRequest.h"
