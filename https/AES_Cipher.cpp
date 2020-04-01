@@ -202,7 +202,7 @@ namespace cipher
 
 		// input been padded well with pkcs5padding
 		uint8_t pading_size = AES_ECB_Cipher::KEYLEN - encode_buf_size % AES_ECB_Cipher::KEYLEN;
-		// PKCS5Padding rules: ²¹(16-len)¸ö(16-len)
+		// PKCS5Padding rulesï¼šè¡¥(16-len)ä¸ª(16-len)
 		for (uint8_t pading = 0; pading < pading_size; pading++)
 		{
 			encode_buf[encode_buf_size + pading] = pading_size;
