@@ -343,7 +343,7 @@ public:
 #ifdef _DEBUG_BUCKETS_
 			LOG_INFO << __FUNCTION__ << " --- *** [" << index_ << "]";
 #endif
-			//重启定时器超时检查
+			//重启连接超时定时器检查，间隔1s
 			loop_.runAfter(1.0f, std::bind(&ConnectionBucket::onTimer, this));
 		}
 		//连接成功，压入桶元素
@@ -412,7 +412,7 @@ public:
 
 	//启动worker线程
 	//启动TCP监听客户端，websocket server_
-	//启动TCP监听客户端，内部服务器之间交互 innServer_
+	//启动TCP监听客户端，内部推送通知服务 innServer_
 	//启动TCP监听客户端，HTTP httpServer_
 	void start(int numThreads, int numWorkerThreads, int maxSize);
 
@@ -514,7 +514,7 @@ private:
 	//监听客户端TCP请求(websocket)
 	muduo::net::websocket::Server server_;
 	
-	//监听客户端TCP请求(内部服务器交互)
+	//监听客户端TCP请求，内部推送通知服务
 	muduo::net::TcpServer innServer_;
 
 	//监听客户端TCP请求(HTTP，管理员维护)，WEB前端

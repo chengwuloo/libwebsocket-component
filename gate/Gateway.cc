@@ -89,7 +89,7 @@ Gateway::Gateway(muduo::net::EventLoop* loop,
 		std::bind(&Gateway::onHallMessage, this,
 			std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
 
-	//添加OpenSSL认证支持 httpServer_&server_共享证书
+	//添加OpenSSL认证支持 httpServer_&server_ 共享证书
 	muduo::net::ssl::SSL_CTX_Init(
 		cert_path,
 		private_key_path,
@@ -346,15 +346,19 @@ void Gateway::GetHallChildrenWatcherHandler(
 
 //启动worker线程
 //启动TCP监听客户端，websocket
-//启动TCP监听客户端，内部服务器之间交互
+//启动TCP监听客户端，内部推送通知服务
 //启动TCP监听客户端，HTTP
 void Gateway::start(int numThreads, int numWorkerThreads, int maxSize)
 {
 	//网络I/O线程数
 	numThreads_ = numThreads;
-	/*server_.*/muduo::net::ReactorSingleton::setThreadNum(numThreads);
-	
-	//创建若干worker线程，启动线程池
+	muduo::net::ReactorSingleton::setThreadNum(numThreads);
+	//启动网络I/O线程池，I/O收发读写 recv(read)/send(write)
+	muduo::net::ReactorSingleton::start();
+
+	//worker线程数，最好 numWorkerThreads = n * numThreads
+	numWorkerThreads_ = numWorkerThreads;
+	//创建若干worker线程，启动worker线程池
 	for (int i = 0; i < numWorkerThreads; ++i) {
 		std::shared_ptr<muduo::ThreadPool> threadPool = std::make_shared<muduo::ThreadPool>("ThreadPool:" + std::to_string(i));
 		threadPool->setThreadInitCallback(std::bind(&Gateway::threadInit, this));
@@ -363,16 +367,10 @@ void Gateway::start(int numThreads, int numWorkerThreads, int maxSize)
 		threadPool_.push_back(threadPool);
 	}
 
-	//worker线程数，最好 numWorkerThreads = n * numThreads
-	numWorkerThreads_ = numWorkerThreads;
-
 	LOG_INFO << __FUNCTION__ << " --- *** "
 		<< "\nGateway = " << server_.server_.ipPort()
 		<< " 网络I/O线程数 = " << numThreads
 		<< " worker线程数 = " << numWorkerThreads;
-
-	//启动网络I/O线程池，I/O收发读写 recv(read)/send(write)
-	muduo::net::ReactorSingleton::start();
 
 	//Accept时候判断，socket底层控制，否则开启异步检查
 	if (blackListControl_ == IpVisitCtrlE::kOpenAccept) {
@@ -388,7 +386,7 @@ void Gateway::start(int numThreads, int numWorkerThreads, int maxSize)
 	//使用ET模式accept/read/write
 	server_.start(true);
 
-	//启动TCP监听客户端，内部服务器之间交互
+	//启动TCP监听客户端，内部推送通知服务
 	//使用ET模式accept/read/write
 	innServer_.start(true);
 
@@ -421,7 +419,7 @@ void Gateway::start(int numThreads, int numWorkerThreads, int maxSize)
 		}
 	}
 	
-	//定时器超时检查，间隔1s
+	//启动连接超时定时器检查，间隔1s
 	for (size_t index = 0; index < loops.size(); ++index) {
 		loops[index]->runAfter(1.0f, std::bind(&ConnectionBucket::onTimer, &bucketsPool_[index]));
 	}
