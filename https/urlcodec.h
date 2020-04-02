@@ -9,11 +9,12 @@
 #include <iconv.h>
 
 namespace URL {
+
 	std::string Encode(const std::string& str);
 	std::string Decode(const std::string& str);
 
-	std::string Encode2(const std::string& str);
-	std::string Decode2(const std::string& str);
+	std::string MultipleEncode(const std::string& str);
+	std::string MultipleDecode(const std::string& str);
 }
 
 #endif

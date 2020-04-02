@@ -299,7 +299,7 @@ private:
 	//主线程EventLoop，I/O监听/连接读写 accept(read)/connect(write)
 	//muduo::net::EventLoop* loop_;
 
-	//网络I/O线程，I/O收发读写 recv(read)/send(write)
+	//网络I/O线程池，I/O收发读写 recv(read)/send(write)
 	//std::shared_ptr<muduo::net::EventLoopThreadPool> threadPool_io_;
 
 	//worker线程池，内部任务消息队列

@@ -1488,13 +1488,10 @@ std::string ApiServer::OrderProcess(std::string const& reqStr, muduo::Timestamp 
 			paraValue = HTML::Decode(paraValue);
 			LOG_DEBUG << "--- *** " << "HTML::Decode >>> " << paraValue;
 
-			//UrlDecode 1次或2次解码 ///
+			//URL::Decode 1次或2次解码 ///
 			for (int c = 1; c < 3; ++c) {
-#if 1
-				/*std::string strURL*/paraValue = URL::Decode(paraValue);
-#else
-				/*std::string strURL*/paraValue = URL::Decode2(paraValue);
-#endif
+				//URL::MultipleDecode
+				paraValue = URL::MultipleDecode(paraValue);
 #if 1
 				//"\r\n"
 				boost::replace_all<std::string>(paraValue, "\r\n", "");
