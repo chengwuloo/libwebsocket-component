@@ -24,7 +24,7 @@
 #include "global.h"
 #include "ConsoleClr.h"
 
-static const int            kRoolSize = 1024*1024*1024;
+static const int            kRollSize = 1024*1024*1024;
 static const int            gEastUTC  = 60*60*8;
 static muduo::AsyncLogging* gAsyncLog = NULL;
 
@@ -77,7 +77,7 @@ static bool SetRLIMIT() {
 	return true;
 }
 
-static void SetLibraryPathEnv() {
+static void SetLibraryPath() {
 	char const* old_library_path = getenv("LD_LIBRARY_PATH");
 	std::string path = ".";
 	setenv("LD_LIBRARY_PATH", path.c_str(), false);
@@ -119,7 +119,7 @@ static int setEnv(std::string const& logdir, std::string const& logname) {
 	//if (!SetRLIMIT()) {
 	//	return -1;
 	//}
-	SetLibraryPathEnv();
+	SetLibraryPath();
 	muduo::TimeZone beijing(gEastUTC, "CST");
 	muduo::Logger::setTimeZone(beijing);
 	muduo::Logger::setLogLevel(muduo::Logger::ERROR);
@@ -127,7 +127,7 @@ static int setEnv(std::string const& logdir, std::string const& logname) {
 	if (!boost::filesystem::exists(logdir)) {
 		boost::filesystem::create_directories(logdir);
 	}
-	muduo::AsyncLogging log(::basename(logname.c_str()), kRoolSize);
+	muduo::AsyncLogging log(::basename(logname.c_str()), kRollSize);
 	log.start();
 	gAsyncLog = &log;
 	return 0;

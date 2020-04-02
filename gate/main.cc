@@ -112,11 +112,11 @@ int main() {
 	//MongoDB
 	std::string strMongoDBUrl = pt.get<std::string>("MongoDB.Url");
 
-	//server_ tcp websocket
+	//TCP监听客户端，websocket server_
 	int16_t tcpPort = pt.get<int>("Gateway.port", 8010);
-	//innServer_ tcp
+	//TCP监听客户端，内部推送通知服务 innServer_
 	int16_t innPort = pt.get<int>("Gateway.innPort", 9010);
-	//httpServer_ tcp
+	//TCP监听客户端，HTTP httpServer_
 	uint16_t httpPort = pt.get<int>("Gateway.httpPort", 8120);
 	//网络I/O线程数
 	int16_t numThreads = pt.get<int>("Gateway.numThreads", 10);
@@ -136,7 +136,6 @@ int main() {
 	std::string private_key = pt.get<std::string>("Gateway.private_key", "");
 	//是否调试
 	bool isdebug = pt.get<int>("Gateway.debug", 1);
-	//////////////////////////////////////////////////////////////////////////
 	//主线程EventLoop，I/O监听/连接读写 accept(read)/connect(write)
 	muduo::net::EventLoop loop;
 	muduo::net::InetAddress listenAddr(tcpPort);
@@ -178,8 +177,7 @@ int main() {
 		server.initRedisCluster(strRedisClusterIps, redisPasswd)) {
 		registerSignalHandler(SIGTERM, StopService);
 		registerSignalHandler(SIGINT, StopService);
-		//////////////////////////////////////////////////////////////////////////
-		//网络I/O线程，I/O收发读写 recv(read)/send(write)，worker线程，处理游戏业务逻辑
+		//网络I/O线程池，I/O收发读写 recv(read)/send(write)，worker线程池，处理游戏业务逻辑
 		server.start(numThreads, numWorkerThreads, kMaxQueueSize);
 		loop.loop();
 	}
