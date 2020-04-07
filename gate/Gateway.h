@@ -52,6 +52,7 @@
 
 #include "connector.h"
 #include "EntryPtr.h"
+#include "SessInfos.h"
 
 #include "public/packet.h"
 #include "public/StdRandom.h"
@@ -145,7 +146,7 @@ public:
 	//typedef std::shared_ptr<muduo::net::TcpClient> TcpClientPtr;
 	//typedef std::weak_ptr<muduo::net::TcpClient> WeakTcpClientPtr;
 	//typedef std::map<std::string, TcpClientPtr> TcpClientMap;
-	typedef std::map<std::string, WeakEntryPtr> SessionInfosMap;
+	//typedef std::map<std::string, WeakEntryPtr> SessInfosMap;
 	
 	typedef std::shared_ptr<muduo::net::Buffer> BufferPtr;
 	typedef std::map<std::string, std::string> HttpParams;
@@ -306,8 +307,7 @@ private:
 	std::vector<std::shared_ptr<muduo::ThreadPool>> threadPool_;
 
 	//保存玩家会话信息[session] = conn，entry超时/session过期/玩家离线清理
-	SessionInfosMap sessInfos_;
-	mutable boost::shared_mutex sessInfos_mutex_;
+	SessInfos sessInfos_;
 
 	//命令消息回调处理函数
 	CmdCallbacks handlers_;

@@ -485,14 +485,7 @@ void Gateway::onInnMessage(
 			//////////////////////////////////////////////////////////////////////////
 			//session -> entry -> entryContext -> index
 			//////////////////////////////////////////////////////////////////////////
-			WeakEntryPtr weakEntry;
-			{
-				READ_LOCK(sessInfos_mutex_);
-				SessionInfosMap::const_iterator it = sessInfos_.find(session);
-				if (it != sessInfos_.end()) {
-					weakEntry = it->second;
-				}
-			}
+			WeakEntryPtr weakEntry = sessInfos_.getSessInfo(session);
 			EntryPtr entry(weakEntry.lock());
 			if (likely(entry)) {
 				Entry::Context* entryContext = boost::any_cast<Entry::Context>(entry->getMutableContext());
@@ -1306,14 +1299,7 @@ void Gateway::onHallMessage(const muduo::net::TcpConnectionPtr& conn,
 			//////////////////////////////////////////////////////////////////////////
 			//session -> entry -> entryContext -> index
 			//////////////////////////////////////////////////////////////////////////
-			WeakEntryPtr weakEntry;
-			{
-				READ_LOCK(sessInfos_mutex_);
-				SessionInfosMap::const_iterator it = sessInfos_.find(session);
-				if (it != sessInfos_.end()) {
-					weakEntry = it->second;
-				}
-			}
+			WeakEntryPtr weakEntry = sessInfos_.getSessInfo(session);
 			EntryPtr entry(weakEntry.lock());
 			if (likely(entry)) {
 				Entry::Context* entryContext = boost::any_cast<Entry::Context>(entry->getMutableContext());
@@ -1599,8 +1585,7 @@ void Gateway::onConnected(
 		}
 		{
 			//添加玩家session
-			WRITE_LOCK(sessInfos_mutex_);
-			sessInfos_[session] = weakEntry;
+			sessInfos_.addSessInfo(session, weakEntry);
 		}
 	}
 }
