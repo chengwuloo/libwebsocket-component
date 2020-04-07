@@ -3,6 +3,7 @@
 /*    @Date		   03.18.2020                                           */
 /************************************************************************/
 #include "connector.h"
+#include  <assert.h>
 
 //@@ TcpClient
 TcpClient::TcpClient(
@@ -101,23 +102,24 @@ void Connector::check(std::string const& name, bool exist) {
 }
 
 //getAll
-void Connector::getAll(ClientConnList& clients) {
+void Connector::getAll(ClientConnList* clients) {
+	assert(clients && clients->size() == 0);
 	bool bok = false;
 	loop_->runInLoop(
-		std::bind(&Connector::getAllInLoop, this, clients, bok));
+		std::bind(&Connector::getAllInLoop, this, clients, &bok));
 	//spin lock until getAllInLoop return
 	while (!bok);
 }
 
-void Connector::getAllInLoop(ClientConnList& clients, bool& bok) {
+void Connector::getAllInLoop(ClientConnList* clients, bool* bok) {
 	loop_->assertInLoopThread();
 	for (TcpClientMap::const_iterator it = clients_.begin();
 		it != clients_.end(); ++it) {
 		TcpClientState const& state = it->second;
 		TcpClientPtr const& client = state.first;
-		clients.emplace_back(ClientConn(it->first, client->connection()));
+		clients->emplace_back(ClientConn(it->first, client->connection()));
 	}
-	bok = true;
+	*bok = true;
 }
 
 void Connector::createInLoop(

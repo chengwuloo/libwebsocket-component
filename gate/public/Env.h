@@ -127,7 +127,7 @@ static int setEnv(std::string const& logdir, std::string const& logname) {
 	if (!boost::filesystem::exists(logdir)) {
 		boost::filesystem::create_directories(logdir);
 	}
-	muduo::AsyncLogging log(::basename(logname.c_str()), kRollSize);
+	static muduo::AsyncLogging log(::basename(logname.c_str()), kRollSize);
 	log.start();
 	gAsyncLog = &log;
 	return 0;

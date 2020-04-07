@@ -1260,6 +1260,7 @@ void Gateway::onHallConnection(const muduo::net::TcpConnectionPtr& conn) {
 void Gateway::onHallMessage(const muduo::net::TcpConnectionPtr& conn,
 	muduo::net::Buffer* buf,
 	muduo::Timestamp receiveTime) {
+	LOG_ERROR << __FUNCTION__;
 	//解析TCP数据包，先解析包头(header)，再解析包体(body)，避免粘包出现
 	while (buf->readableBytes() >= packet::kMinPacketSZ) {
 
@@ -1328,6 +1329,9 @@ void Gateway::onHallMessage(const muduo::net::TcpConnectionPtr& conn,
 						this,
 						conn, weakEntry, buffer, receiveTime));
 			}
+			else {
+				assert(false);
+			}
 #endif
 		}
 	}
@@ -1339,6 +1343,7 @@ void Gateway::asyncHallHandler(
 	WeakEntryPtr const& weakEntry,
 	BufferPtr& buf,
 	muduo::Timestamp receiveTime) {
+	LOG_ERROR << __FUNCTION__;
 	//内部消息头internal_prev_header_t + 命令消息头header_t
 	if (buf->readableBytes() < packet::kPrevHeaderLen + packet::kHeaderLen) {
 		return;
@@ -1361,8 +1366,8 @@ void Gateway::asyncHallHandler(
 			//命令消息头header_t
 			packet::header_t /*const*/* header = (packet::header_t /*const*/*)(buf->peek() + packet::kPrevHeaderLen);
 			//校验CRC
-			uint16_t crc = packet::getCheckSum((uint8_t const*)header->ver, packet::kHeaderLen - 4);
-			assert(header->crc == crc);
+			//uint16_t crc = packet::getCheckSum((uint8_t const*)header->ver, packet::kHeaderLen - 4);
+			//assert(header->crc == crc);
 			TraceMessageID(header->mainID, header->subID);
 			if (
 				header->mainID == ::Game::Common::MAINID::MAIN_MESSAGE_CLIENT_TO_HALL &&
@@ -1411,26 +1416,35 @@ void Gateway::sendHallMessage(WeakEntryPtr const& weakEntry, BufferPtr& buf, int
 		if (hallConn) {
 			//用户大厅服有效
 			assert(hallConn->connected());
-			assert(
-				std::find(
-				std::begin(hallIps_),
-				std::end(hallIps_),
-				clientConn.first) == hallIps_.end());
+			//assert(
+			//	std::find(
+			//	std::begin(hallIps_),
+			//	std::end(hallIps_),
+			//	clientConn.first) != hallIps_.end());
 			hallConector_.check(clientConn.first, true);
 			hallConn->send(buf.get());
 		}
 		else {
+			LOG_ERROR << __FUNCTION__ << " --- *** " << "用户大厅服无效，重新分配";
 			//用户大厅服无效，重新分配
 			bool bok = false;
 			ClientConnList clients;
 			//异步获取全部有效大厅连接
-			hallConector_.getAll(clients);
+			hallConector_.getAll(&clients);
 			if (clients.size() > 0) {
 				int index = randomHall_.betweenInt(0, clients.size() - 1).randInt_mt();
 				assert(index >= 0 && index < hallIps_.size());
 				ClientConn const& clientConn = clients[index];
-				entryContext->setClientConn(servTyE::kHallTy, clientConn);
-				hallConn->send(buf.get());
+				muduo::net::TcpConnectionPtr hallConn(clientConn.second.lock());
+				if (hallConn) {
+					entryContext->setClientConn(servTyE::kHallTy, clientConn);
+					hallConn->send(buf.get());
+				}
+				else {
+
+				}
+			}
+			else {
 			}
 		}
 		return;
@@ -1585,8 +1599,8 @@ void Gateway::onConnected(
 		}
 		{
 			//添加玩家session
-			//WRITE_LOCK(sessions_mutex_);
-			//sessions_[session] = muduo::net::WeakTcpConnectionPtr(conn);
+			WRITE_LOCK(sessInfos_mutex_);
+			sessInfos_[session] = weakEntry;
 		}
 	}
 }

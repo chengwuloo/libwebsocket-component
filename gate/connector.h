@@ -93,7 +93,7 @@ public:
 	void check(std::string const& name, bool exist);
 
 	//getAll
-	void getAll(ClientConnList& clients);
+	void getAll(ClientConnList* clients);
 protected:
 	void quit();
 	void closeAll();
@@ -113,7 +113,7 @@ protected:
 	void connectionCallback(const muduo::net::TcpConnectionPtr& conn);
 
 	void checkInLoop(std::string const& name, bool exist);
-	void getAllInLoop(ClientConnList& clients, bool& bok);
+	void getAllInLoop(ClientConnList* clients, bool* bok);
 	void removeInLoop(std::string const& name);
 private:
 	muduo::net::EventLoop* loop_;

@@ -52,7 +52,7 @@ int main() {
 	std::string strIpAddr;
 	std::string netcardName = pt.get<std::string>("Global.netcardName", "eth0");
 	IpByNetCardName(netcardName, strIpAddr);
-	LOG_INFO << __FUNCTION__ << " --- *** " << "网卡名称 = " << netcardName;
+	LOG_INFO << __FUNCTION__ << " --- *** " << "网卡名称 = " << netcardName << " - " << strIpAddr;
 
 	//////////////////////////////////////////////////////////////////////////
 	//zookeeper
@@ -138,9 +138,9 @@ int main() {
 	bool isdebug = pt.get<int>("Gateway.debug", 1);
 	//主线程EventLoop，I/O监听/连接读写 accept(read)/connect(write)
 	muduo::net::EventLoop loop;
-	muduo::net::InetAddress listenAddr(tcpPort);
-	muduo::net::InetAddress serverAddrInn(innPort);
-	muduo::net::InetAddress listenAddrHttp(httpPort);
+	muduo::net::InetAddress listenAddr(strIpAddr, tcpPort);
+	muduo::net::InetAddress serverAddrInn(strIpAddr, innPort);
+	muduo::net::InetAddress listenAddrHttp(strIpAddr, httpPort);
 	//server
 	Gateway server(
 		&loop,
@@ -175,8 +175,8 @@ int main() {
 		server.initZookeeper(strZookeeperIps) &&
 		server.initMongoDB(strMongoDBUrl) &&
 		server.initRedisCluster(strRedisClusterIps, redisPasswd)) {
-		registerSignalHandler(SIGTERM, StopService);
-		registerSignalHandler(SIGINT, StopService);
+		//registerSignalHandler(SIGTERM, StopService);
+		//registerSignalHandler(SIGINT, StopService);
 		//网络I/O线程池，I/O收发读写 recv(read)/send(write)，worker线程池，处理游戏业务逻辑
 		server.start(numThreads, numWorkerThreads, kMaxQueueSize);
 		loop.loop();
