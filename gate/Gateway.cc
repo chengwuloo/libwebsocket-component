@@ -1431,6 +1431,7 @@ void Gateway::sendHallMessage(WeakEntryPtr const& weakEntry, BufferPtr& buf, int
 				}
 			}
 			else {
+				LOG_ERROR << __FUNCTION__ << " --- *** " << "clients.size() = 0";
 			}
 		}
 		return;

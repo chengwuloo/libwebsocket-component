@@ -145,7 +145,7 @@ public:
 		muduo::net::TcpConnectionPtr conn(weakConn_.lock());
 		if (conn) {
 #ifdef _DEBUG_BUCKETS_
-			LOG_ERROR << __FUNCTION__ << " --- *** " << "客户端[" << conn->peerAddress().toIpPort() << "] -> 网关服["
+			LOG_INFO << __FUNCTION__ << " --- *** " << "客户端[" << conn->peerAddress().toIpPort() << "] -> 网关服["
 				<< conn->localAddress().toIpPort() << "] timeout closing";
 #endif
 #if 0
@@ -237,7 +237,7 @@ struct ConnectionBucket {
 	void onTimer() {
 		buckets_.push_back(Bucket());
 #ifdef _DEBUG_BUCKETS_
-		LOG_INFO << __FUNCTION__ << " --- *** [" << index_ << "]";
+		LOG_INFO << __FUNCTION__ << " --- *** loop[" << index_ << "] timeout[" << buckets_.size() << "]";
 #endif
 		//重启连接超时定时器检查，间隔1s
 		loop_.runAfter(1.0f, std::bind(&ConnectionBucket::onTimer, this));
@@ -245,15 +245,15 @@ struct ConnectionBucket {
 	//连接成功，压入桶元素
 	void pushBucket(EntryPtr const entry) {
 		if (likely(entry)) {
-			//muduo::net::TcpConnectionPtr conn(entry->weakConn_.lock());
-			//if (likely(conn)) {
+			muduo::net::TcpConnectionPtr conn(entry->weakConn_.lock());
+			if (likely(conn)) {
 				//必须使用shared_ptr，持有entry引用计数(加1)
 				buckets_.back().insert(entry);
 #ifdef _DEBUG_BUCKETS_
-				LOG_INFO << __FUNCTION__ << " --- *** [" << index_ << "]客户端[" << conn->peerAddress().toIpPort() << "] -> 网关服["
+				LOG_INFO << __FUNCTION__ << " --- *** loop[" << index_ << "] timeout[" << buckets_.size() << "] 客户端[" << conn->peerAddress().toIpPort() << "] -> 网关服["
 					<< conn->localAddress().toIpPort() << "]";
 #endif
-			//}
+			}
 		}
 		else {
 			//assert(false);
@@ -262,15 +262,15 @@ struct ConnectionBucket {
 	//收到消息包，更新桶元素
 	void updateBucket(EntryPtr const entry) {
 		if (likely(entry)) {
-			//muduo::net::TcpConnectionPtr conn(entry->weakConn_.lock());
-			//if (likely(conn)) {
+			muduo::net::TcpConnectionPtr conn(entry->weakConn_.lock());
+			if (likely(conn)) {
 				//必须使用shared_ptr，持有entry引用计数(加1)
 				buckets_.back().insert(entry);
 #ifdef _DEBUG_BUCKETS_
-				LOG_INFO << __FUNCTION__ << " --- *** [" << index_ << "]客户端[" << conn->peerAddress().toIpPort() << "] -> 网关服["
+				LOG_INFO << __FUNCTION__ << " --- *** loop[" << index_ << "] timeout[" << buckets_.size() << "] 客户端[" << conn->peerAddress().toIpPort() << "] -> 网关服["
 					<< conn->localAddress().toIpPort() << "]";
 #endif
-			//}
+			}
 		}
 		else {
 			//assert(false);
