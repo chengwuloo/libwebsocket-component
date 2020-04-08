@@ -35,6 +35,7 @@ public:
 	muduo::net::EventLoop* getLoop() const;
 
 	void connect();
+	void reconnect();
 	void disconnect();
 	void stop();
 

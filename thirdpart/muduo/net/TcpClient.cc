@@ -139,6 +139,12 @@ void TcpClient::connect()
   connector_->start();
 }
 
+void TcpClient::reconnect() {
+	connect_ = true;
+	loop_->runInLoop(
+		std::bind(&Connector::restart, get_pointer(connector_)));
+}
+
 void TcpClient::disconnect() {
 	loop_->runInLoop(
 		std::bind(&TcpClient::disconnectInLoop, this));

@@ -36,6 +36,14 @@ void TcpClient::connect() {
 	client_.connect();
 }
 
+void TcpClient::reconnect() {
+#if 0
+	client_.connect();
+#else
+	client_.reconnect();
+#endif
+}
+
 void TcpClient::disconnect() {
 	client_.disconnect();
 }
@@ -142,11 +150,12 @@ void Connector::createInLoop(
 		TcpClientState& state = it->second;
 		TcpClientPtr& client = state.first;
 		if (client) {
-			//连接断开则重连
 			if (!CONNECTED(state)) {
 				assert(
 					!client->connection() ||
 					!client->connection()->connected());
+				//连接断开则重连
+				client->reconnect();
 			}
 			else {
 				assert(
@@ -256,12 +265,16 @@ void Connector::removeConnection(const muduo::net::TcpConnectionPtr& conn, const
 		if (1 == removes_.erase(name)) {
 			TcpClientMap::const_iterator it = clients_.find(name);
 			assert(it != clients_.end());
+			//reset connector state
+			it->second.first->stop();
 			clients_.erase(it);
 		}
 		else {
 			TcpClientMap::iterator it = clients_.find(name);
 			assert(it != clients_.end());
 			TcpClientState& state = it->second;
+			//reset connector state
+			it->second.first->stop();
 			state.second = false;
 			//state.first.reset();
 		}
@@ -286,7 +299,16 @@ void Connector::connectionCallback(const muduo::net::TcpConnectionPtr& conn) {
 void Connector::removeInLoop(std::string const& name) {
 	
 	loop_->assertInLoopThread();
-	removes_[name] = true;
+	
+	TcpClientMap::const_iterator it = clients_.find(name);
+	if (it != clients_.end()) {
+		if (!CONNECTED(it->second)) {
+			clients_.erase(it);
+		}
+		else {
+			removes_[name] = true;
+		}
+	}
 }
 
 void Connector::onMessage(

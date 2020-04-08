@@ -34,6 +34,7 @@ class TcpClient : noncopyable
   ~TcpClient();  // force out-line dtor, for std::unique_ptr members.
 
   void connect();
+  void reconnect();
   void disconnect();
   void stop();
 
