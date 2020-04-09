@@ -53,6 +53,7 @@
 #include "connector.h"
 #include "EntryPtr.h"
 #include "SessInfos.h"
+#include "Context.h"
 
 #include "public/packet.h"
 #include "public/StdRandom.h"
@@ -318,21 +319,14 @@ private:
 	//连接到所有游戏服
 	Connector gameConnector_;
 
+	//所有大厅服/游戏服节点
+	ContextConnector iptable_[kMaxServTy];
+
 	//玩家session哈希散列
 	std::hash<std::string> hash_session_;
 
 	STD::Random randomHall_;
 private:
-	void connectHallServer(std::string const& ipaddr);
-
-	void connectHallServers();
-	
-	void ProcessHallIps(std::vector<std::string> const& newIps);
-
-	//所有大厅服节点
-	std::vector<std::string> hallIps_;
-	muduo::MutexLock hallIps_mutex_;
-
 	void ZookeeperConnectedHandler();
 	void GetHallChildrenWatcherHandler(
 		int type, int state,

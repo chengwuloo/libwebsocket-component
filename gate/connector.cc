@@ -298,6 +298,7 @@ void Connector::removeInLoop(std::string const& name, bool lazy) {
 		//连接已经无效直接删除
 		if (!it->second->connection() ||
 			!it->second->connection()->connected()) {
+			LOG_ERROR << __FUNCTION__ << " 清理节点 = " << it->first;
 			it->second->stop();
 			clients_.erase(it);
 		}

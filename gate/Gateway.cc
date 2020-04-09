@@ -88,6 +88,7 @@ Gateway::Gateway(muduo::net::EventLoop* loop,
 	hallConector_.setMessageCallback(
 		std::bind(&Gateway::onHallMessage, this,
 			std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+	iptable_[servTyE::kHallTy].connector_ = &hallConector_;
 
 	//添加OpenSSL认证支持 httpServer_&server_ 共享证书
 	muduo::net::ssl::SSL_CTX_Init(
@@ -238,84 +239,9 @@ void Gateway::ZookeeperConnectedHandler() {
 			for (std::string const& ip : ipaddrs) {
 				LOG_ERROR << __FUNCTION__ << " connect to hall[" << i++ << "][" << ip << "]";
 			}
-			
-			muduo::MutexLockGuard lock(hallIps_mutex_);
-			hallIps_.assign(ipaddrs.begin(), ipaddrs.end());
+			iptable_[servTyE::kHallTy].assign(ipaddrs);
 		}
-	}
-
-	connectHallServers();
-}
-
-void Gateway::connectHallServers() {
-	for (std::vector<std::string>::const_iterator it = hallIps_.begin();
-		it != hallIps_.end(); ++it) {
-		connectHallServer(*it);
-	}
-}
-
-void Gateway::connectHallServer(std::string const& ipaddr) {
-	//获取网络I/O模型EventLoop池
-	//std::shared_ptr<muduo::net::EventLoopThreadPool> threadPool = server_.server_.threadPool();
-	//std::vector<muduo::net::EventLoop*> loops = threadPool->getAllLoops();
-
-	std::vector<std::string> vec;
-	boost::algorithm::split(vec, ipaddr, boost::is_any_of(":"));
-
-	//vec：ip:port
-	muduo::net::InetAddress serverAddr(vec[0], stoi(vec[1]));
-	//muduo::net::EventLoop* ioLoop = threadPool->getNextLoop();
-	//hallConector_.check(ipaddr, false);
-	hallConector_.create(ipaddr, serverAddr);
-}
-
-void Gateway::ProcessHallIps(std::vector<std::string> const& newIps)
-{
-	std::set<std::string> oldset, newset(newIps.begin(), newIps.end());
-	{
-		muduo::MutexLockGuard lock(hallIps_mutex_);
-		for (std::string const& ip : hallIps_) {
-			oldset.emplace(ip);
-		}
-	}
-	//失效节点：hallIps_中有，而newIps中没有
-	std::vector<std::string> diff(oldset.size());
-	std::vector<std::string>::iterator it;
-	it = set_difference(oldset.begin(), oldset.end(), newset.begin(), newset.end(), diff.begin());
-	diff.resize(it - diff.begin());
-	for (std::string const& ip : diff) {
-		//hallIps_中有
-		assert(std::find(
-			std::begin(hallIps_),
-			std::end(hallIps_), ip) != hallIps_.end());
-		//newIps中没有
-		assert(std::find(
-			std::begin(newIps),
-			std::end(newIps), ip) == newIps.end());
-		//清理无效连接
-		hallConector_.remove(ip, false);
-	}
-	//新生节点：newIps中有，而hallIps_中没有
-	diff.clear();
-	diff.resize(newset.size());
-	it = set_difference(newset.begin(), newset.end(), oldset.begin(), oldset.end(), diff.begin());
-	diff.resize(it - diff.begin());
-	for (std::string const& ip : diff) {
-		//hallIps_中没有
-		assert(std::find(
-			std::begin(hallIps_),
-			std::end(hallIps_), ip) == hallIps_.end());
-		//newIps中有
-		assert(std::find(
-			std::begin(newIps),
-			std::end(newIps), ip) != newIps.end());
-		//连接大厅服
-		connectHallServer(ip);
-	}
-	{
-		//添加newIps到hallIps_
-		muduo::MutexLockGuard lock(hallIps_mutex_);
-		hallIps_.assign(newIps.begin(), newIps.end());
+		iptable_[servTyE::kHallTy].connectAll();
 	}
 }
 
@@ -341,7 +267,7 @@ void Gateway::GetHallChildrenWatcherHandler(
 		for (std::string const& ip : ipaddrs) {
 			LOG_ERROR << __FUNCTION__ << " connect to hall[" << i++ << "][" << ip << "]";
 		}
-		ProcessHallIps(ipaddrs);
+		iptable_[servTyE::kHallTy].processIps(ipaddrs);
 	}
 }
 
@@ -1254,7 +1180,7 @@ void Gateway::onHallConnection(const muduo::net::TcpConnectionPtr& conn) {
 void Gateway::onHallMessage(const muduo::net::TcpConnectionPtr& conn,
 	muduo::net::Buffer* buf,
 	muduo::Timestamp receiveTime) {
-	LOG_ERROR << __FUNCTION__;
+	//LOG_ERROR << __FUNCTION__;
 	//解析TCP数据包，先解析包头(header)，再解析包体(body)，避免粘包出现
 	while (buf->readableBytes() >= packet::kMinPacketSZ) {
 
@@ -1330,7 +1256,7 @@ void Gateway::asyncHallHandler(
 	WeakEntryPtr const& weakEntry,
 	BufferPtr& buf,
 	muduo::Timestamp receiveTime) {
-	LOG_ERROR << __FUNCTION__;
+	//LOG_ERROR << __FUNCTION__;
 	//内部消息头internal_prev_header_t + 命令消息头header_t
 	if (buf->readableBytes() < packet::kPrevHeaderLen + packet::kHeaderLen) {
 		return;
@@ -1401,26 +1327,24 @@ void Gateway::sendHallMessage(WeakEntryPtr const& weakEntry, BufferPtr& buf, int
 		ClientConn const& clientConn = entryContext->getClientConn(servTyE::kHallTy);
 		muduo::net::TcpConnectionPtr hallConn(clientConn.second.lock());
 		if (hallConn) {
-			//用户大厅服有效
 			assert(hallConn->connected());
-			//assert(
-			//	std::find(
-			//	std::begin(hallIps_),
-			//	std::end(hallIps_),
-			//	clientConn.first) != hallIps_.end());
-			hallConector_.check(clientConn.first, true);
+			assert(
+				std::find(
+				std::begin(iptable_[servTyE::kHallTy].ips_),
+				std::end(iptable_[servTyE::kHallTy].ips_),
+				clientConn.first) != iptable_[servTyE::kHallTy].ips_.end());
+			iptable_[servTyE::kHallTy].connector_->check(clientConn.first, true);
 			hallConn->send(buf.get());
 		}
 		else {
 			LOG_ERROR << __FUNCTION__ << " --- *** " << "用户大厅服无效，重新分配";
 			//用户大厅服无效，重新分配
-			bool bok = false;
 			ClientConnList clients;
 			//异步获取全部有效大厅连接
-			hallConector_.getAll(&clients);
+			iptable_[servTyE::kHallTy].connector_->getAll(&clients);
 			if (clients.size() > 0) {
 				int index = randomHall_.betweenInt(0, clients.size() - 1).randInt_mt();
-				assert(index >= 0 && index < hallIps_.size());
+				assert(index >= 0 && index < clients.size());
 				ClientConn const& clientConn = clients[index];
 				muduo::net::TcpConnectionPtr hallConn(clientConn.second.lock());
 				if (hallConn) {
