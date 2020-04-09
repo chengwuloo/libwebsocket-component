@@ -155,7 +155,9 @@ void Connector::createInLoop(
 					!client->connection() ||
 					!client->connection()->connected());
 				//连接断开则重连
-				client->reconnect();
+				if (!client->retry()) {
+					client->reconnect();
+				}
 			}
 			else {
 				assert(
@@ -274,7 +276,7 @@ void Connector::removeConnection(const muduo::net::TcpConnectionPtr& conn, const
 			assert(it != clients_.end());
 			TcpClientState& state = it->second;
 			//reset connector state
-			it->second.first->stop();
+			//it->second.first->stop();
 			state.second = false;
 			//state.first.reset();
 		}

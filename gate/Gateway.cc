@@ -236,7 +236,7 @@ void Gateway::ZookeeperConnectedHandler() {
 			
 			int i = 0;
 			for (std::string const& ip : ipaddrs) {
-				LOG_ERROR << __FUNCTION__ << " --- *** " << "zkclient_->getClildren hallIps[" << i++ << "] " << ip;
+				LOG_ERROR << __FUNCTION__ << " connect to hall[" << i++ << "][" << ip << "]";
 			}
 			
 			muduo::MutexLockGuard lock(hallIps_mutex_);
@@ -265,7 +265,7 @@ void Gateway::connectHallServer(std::string const& ipaddr) {
 	//vec：ip:port
 	muduo::net::InetAddress serverAddr(vec[0], stoi(vec[1]));
 	//muduo::net::EventLoop* ioLoop = threadPool->getNextLoop();
-	hallConector_.check(ipaddr, false);
+	//hallConector_.check(ipaddr, false);
 	hallConector_.create(ipaddr, serverAddr);
 }
 
@@ -292,7 +292,7 @@ void Gateway::ProcessHallIps(std::vector<std::string> const& newIps)
 		assert(std::find(
 			std::begin(newIps),
 			std::end(newIps), ip) == newIps.end());
-		hallConector_.check(ip, false);
+		//hallConector_.check(ip, false);
 	}
 	//新生节点：newIps中有，而hallIps_中没有
 	diff.clear();
@@ -338,7 +338,7 @@ void Gateway::GetHallChildrenWatcherHandler(
 
 		int i = 0;
 		for (std::string const& ip : ipaddrs) {
-			LOG_ERROR << __FUNCTION__ << " --- *** " << "zkclient_->getClildren hallIps[" << i++ << "] " << ip;
+			LOG_ERROR << __FUNCTION__ << " connect to hall[" << i++ << "][" << ip << "]";
 		}
 		ProcessHallIps(ipaddrs);
 	}
