@@ -48,7 +48,7 @@ Gateway::Gateway(muduo::net::EventLoop* loop,
     : server_(loop, listenAddr, "Gateway[client]")
 	, innServer_(loop, listenAddrInn, "Gateway[inner]")
 	, httpServer_(loop, listenAddrHttp, "Gateway[http]")
-	, hallConector_(loop)
+	, hallConnector_(loop)
 	, gameConnector_(loop)
 	, kTimeoutSeconds_(3)
 	, kHttpTimeoutSeconds_(3)
@@ -70,7 +70,7 @@ Gateway::Gateway(muduo::net::EventLoop* loop,
 		std::bind(&Gateway::onMessage, this,
 			std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4));
 	
-	//网关服[S]端 <- 推送服[C]端，通知服
+	//网关服[S]端 <- 推送服[C]端，推送通知服务
 	innServer_.setConnectionCallback(
 		std::bind(&Gateway::onInnConnection, this, std::placeholders::_1));
 	innServer_.setMessageCallback(
@@ -85,12 +85,20 @@ Gateway::Gateway(muduo::net::EventLoop* loop,
 			std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
 	
 	//网关服[C]端 -> 大厅服[S]端，内部交互
-	hallConector_.setConnectionCallback(
+	hallConnector_.setConnectionCallback(
 		std::bind(&Gateway::onHallConnection, this, std::placeholders::_1));
-	hallConector_.setMessageCallback(
+	hallConnector_.setMessageCallback(
 		std::bind(&Gateway::onHallMessage, this,
 			std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
-	iptable_[servTyE::kHallTy].connector_ = &hallConector_;
+	iptable_[servTyE::kHallTy].connector_ = &hallConnector_;
+
+	//网关服[C]端 -> 游戏服[S]端，内部交互
+	gameConnector_.setConnectionCallback(
+		std::bind(&Gateway::onGameConnection, this, std::placeholders::_1));
+	hallConnector_.setMessageCallback(
+		std::bind(&Gateway::onGameMessage, this,
+			std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+	iptable_[servTyE::kGameTy].connector_ = &gameConnector_;
 
 	//添加OpenSSL认证支持 httpServer_&server_ 共享证书
 	muduo::net::ssl::SSL_CTX_Init(
@@ -361,7 +369,7 @@ void Gateway::start(int numThreads, int numWorkerThreads, int maxSize)
 	}
 }
 
-//网关服[S]端 <- 推送服[C]端，通知服
+//网关服[S]端 <- 推送服[C]端，推送通知服务
 void Gateway::onInnConnection(const muduo::net::TcpConnectionPtr& conn) {
 	
 	if (conn->connected()) {
@@ -378,7 +386,7 @@ void Gateway::onInnConnection(const muduo::net::TcpConnectionPtr& conn) {
 	}
 }
 
-//网关服[S]端 <- 推送服[C]端，通知服
+//网关服[S]端 <- 推送服[C]端，推送通知服务
 void Gateway::onInnMessage(
 	const muduo::net::TcpConnectionPtr& conn,
 	muduo::net::Buffer* buf, muduo::Timestamp receiveTime) {
@@ -442,7 +450,7 @@ void Gateway::onInnMessage(
 	}
 }
 
-//网关服[S]端 <- 推送服[C]端，通知服
+//网关服[S]端 <- 推送服[C]端，推送通知服务
 void Gateway::asyncInnHandler(
 	const muduo::net::TcpConnectionPtr& conn,
 	WeakEntryPtr const& weakEntry,
@@ -1337,11 +1345,13 @@ void Gateway::sendHallMessage(WeakEntryPtr const& weakEntry, BufferPtr& buf, int
 		muduo::net::TcpConnectionPtr hallConn(clientConn.second.lock());
 		if (hallConn) {
 			assert(hallConn->connected());
+#if 0
 			assert(
 				std::find(
-				std::begin(iptable_[servTyE::kHallTy].ips_),
-				std::end(iptable_[servTyE::kHallTy].ips_),
-				clientConn.first) != iptable_[servTyE::kHallTy].ips_.end());
+					std::begin(iptable_[servTyE::kHallTy].ips_),
+					std::end(iptable_[servTyE::kHallTy].ips_),
+					clientConn.first) != iptable_[servTyE::kHallTy].ips_.end());
+#endif
 			iptable_[servTyE::kHallTy].connector_->check(clientConn.first, true);
 			hallConn->send(buf.get());
 		}
@@ -1359,6 +1369,188 @@ void Gateway::sendHallMessage(WeakEntryPtr const& weakEntry, BufferPtr& buf, int
 				if (hallConn) {
 					entryContext->setClientConn(servTyE::kHallTy, clientConn);
 					hallConn->send(buf.get());
+				}
+				else {
+
+				}
+			}
+			else {
+				LOG_ERROR << __FUNCTION__ << " --- *** " << "clients.size() = 0";
+			}
+		}
+		return;
+	}
+	LOG_ERROR << __FUNCTION__ << " --- *** " << "entry(weakEntry.lock()) failed";
+}
+
+//网关服[C]端 -> 游戏服[S]端
+void Gateway::onGameConnection(const muduo::net::TcpConnectionPtr& conn) {
+
+	if (conn->connected()) {
+		int32_t num = numConnected_.incrementAndGet();
+		LOG_INFO << __FUNCTION__ << " --- *** " << "网关服[" << conn->localAddress().toIpPort() << "] -> 游戏服["
+			<< conn->peerAddress().toIpPort() << "] "
+			<< (conn->connected() ? "UP" : "DOWN") << " " << num;
+	}
+	else {
+		int32_t num = numConnected_.decrementAndGet();
+		LOG_INFO << __FUNCTION__ << " --- *** " << "网关服[" << conn->localAddress().toIpPort() << "] -> 游戏服["
+			<< conn->peerAddress().toIpPort() << "] "
+			<< (conn->connected() ? "UP" : "DOWN") << " " << num;
+	}
+}
+
+//网关服[C]端 -> 游戏服[S]端
+void Gateway::onGameMessage(const muduo::net::TcpConnectionPtr& conn,
+	muduo::net::Buffer* buf,
+	muduo::Timestamp receiveTime) {
+	//LOG_ERROR << __FUNCTION__;
+	//解析TCP数据包，先解析包头(header)，再解析包体(body)，避免粘包出现
+	while (buf->readableBytes() >= packet::kMinPacketSZ) {
+
+		const uint16_t len = buf->peekInt16();
+
+		//数据包太大或太小
+		if (likely(len > packet::kMaxPacketSZ ||
+			len < packet::kMinPacketSZ)) {
+			if (conn) {
+#if 0
+				//不再发送数据
+				conn->shutdown();
+#else
+				//直接强制关闭连接
+				conn->forceClose();
+#endif
+			}
+			break;
+		}
+		//数据包不足够解析，等待下次接收再解析
+		else if (likely(len > buf->readableBytes())) {
+			break;
+		}
+		else /*if (likely(len <= buf->readableBytes()))*/ {
+			BufferPtr buffer(new muduo::net::Buffer(len));
+			buffer->append(buf->peek(), static_cast<size_t>(len));
+			buf->retrieve(len);
+			packet::internal_prev_header_t* pre_header = (packet::internal_prev_header_t*)buffer->peek();
+			std::string session((char const*)pre_header->session, sizeof(pre_header->session));
+#if 0
+			//////////////////////////////////////////////////////////////////////////
+			//session -> hash(session) -> index
+			//////////////////////////////////////////////////////////////////////////
+			int index = hash_session_(session) % threadPool_.size();
+
+			//扔给任务消息队列处理
+			threadPool_[index]->run(
+				std::bind(
+					&Gateway::asyncHallHandler,
+					this,
+					conn, buffer, receiveTime));
+#else
+			//////////////////////////////////////////////////////////////////////////
+			//session -> entry -> entryContext -> index
+			//////////////////////////////////////////////////////////////////////////
+			WeakEntryPtr weakEntry = sessInfos_.getSessInfo(session);
+			EntryPtr entry(weakEntry.lock());
+			if (likely(entry)) {
+				Entry::Context* entryContext = boost::any_cast<Entry::Context>(entry->getMutableContext());
+				assert(entryContext);
+
+				int index = entryContext->getWorkerIndex();
+				assert(index >= 0 && index < threadPool_.size());
+
+				//扔给任务消息队列处理
+				threadPool_[index]->run(
+					std::bind(
+						&Gateway::asyncGameHandler,
+						this,
+						conn, weakEntry, buffer, receiveTime));
+			}
+			else {
+				assert(false);
+			}
+#endif
+		}
+	}
+}
+
+//网关服[C]端 -> 游戏服[S]端
+void Gateway::asyncGameHandler(
+	const muduo::net::TcpConnectionPtr& conn,
+	WeakEntryPtr const& weakEntry,
+	BufferPtr& buf,
+	muduo::Timestamp receiveTime) {
+	//LOG_ERROR << __FUNCTION__;
+	//内部消息头internal_prev_header_t + 命令消息头header_t
+	if (buf->readableBytes() < packet::kPrevHeaderLen + packet::kHeaderLen) {
+		return;
+	}
+	//内部消息头internal_prev_header_t
+	packet::internal_prev_header_t /*const*/* pre_header = (packet::internal_prev_header_t /*const*/*)buf->peek();
+	//session
+	std::string session((char const*)pre_header->session, sizeof(pre_header->session));
+	//userid
+	int64_t userId = pre_header->userID;
+	EntryPtr entry(weakEntry.lock());
+	if (likely(entry)) {
+		Entry::Context* entryContext = boost::any_cast<Entry::Context>(entry->getMutableContext());
+		assert(entryContext);
+		//userid
+		entryContext->setUserId(pre_header->userID);
+		muduo::net::TcpConnectionPtr playerConn(entry->getWeakConnPtr().lock());
+		if (likely(playerConn)) {
+
+			//命令消息头header_t
+			packet::header_t /*const*/* header = (packet::header_t /*const*/*)(buf->peek() + packet::kPrevHeaderLen);
+			//校验CRC
+			//uint16_t crc = packet::getCheckSum((uint8_t const*)header->ver, packet::kHeaderLen - 4);
+			//assert(header->crc == crc);
+			TraceMessageID(header->mainID, header->subID);
+			
+			server_.send(playerConn, (uint8_t const*)buf->peek() + packet::kPrevHeaderLen, header->len);
+			return;
+		}
+		LOG_ERROR << __FUNCTION__ << " --- *** " << "playerConn(entry->getWeakConnPtr().lock()) failed";
+		return;
+	}
+	LOG_ERROR << __FUNCTION__ << " --- *** " << "entry(weakEntry.lock()) failed";
+}
+
+//网关服[C]端 -> 游戏服[S]端
+void Gateway::sendGameMessage(WeakEntryPtr const& weakEntry, BufferPtr& buf, int64_t userId) {
+
+	EntryPtr entry(weakEntry.lock());
+	if (likely(entry)) {
+		Entry::Context* entryContext = boost::any_cast<Entry::Context>(entry->getMutableContext());
+		assert(entryContext);
+		ClientConn const& clientConn = entryContext->getClientConn(servTyE::kGameTy);
+		muduo::net::TcpConnectionPtr gameConn(clientConn.second.lock());
+		if (gameConn) {
+			assert(gameConn->connected());
+#if 0
+			assert(
+				std::find(
+					std::begin(iptable_[servTyE::kGameTy].ips_),
+					std::end(iptable_[servTyE::kGameTy].ips_),
+					clientConn.first) != iptable_[servTyE::kGameTy].ips_.end());
+#endif
+			iptable_[servTyE::kGameTy].connector_->check(clientConn.first, true);
+			gameConn->send(buf.get());
+		}
+		else {
+			LOG_ERROR << __FUNCTION__ << " --- *** " << "用户游戏服无效，重新分配";
+			//用户游戏服无效，重新分配
+			ClientConnList clients;
+			//异步获取全部有效游戏连接
+			iptable_[servTyE::kGameTy].connector_->getAll(&clients);
+			if (clients.size() > 0) {
+				int index = randomHall_.betweenInt(0, clients.size() - 1).randInt_mt();
+				assert(index >= 0 && index < clients.size());
+				ClientConn const& clientConn = clients[index];
+				muduo::net::TcpConnectionPtr gameConn(clientConn.second.lock());
+				if (gameConn) {
+					entryContext->setClientConn(servTyE::kGameTy, clientConn);
+					gameConn->send(buf.get());
 				}
 				else {
 

@@ -166,7 +166,7 @@ public:
 	void quit();
 private:
 	void onGetAesKey(const muduo::net::TcpConnectionPtr& conn, muduo::net::Buffer* msg);
-private:
+public:
 	//zookeeper
 	bool initZookeeper(std::string const& ipaddr);
 	//RedisCluster
@@ -215,7 +215,7 @@ private:
 	bool refreshBlackListSync();
 	bool refreshBlackListInLoop();
 
-	//网关服[S]端 <- 推送服[C]端，通知服
+	//网关服[S]端 <- 推送服[C]端，推送通知服务
 private:
 	void onInnConnection(const muduo::net::TcpConnectionPtr& conn);
 
@@ -280,6 +280,24 @@ private:
 	void sendHallMessage(
 		WeakEntryPtr const& weakEntry,
 		BufferPtr& buf, int64_t userId);
+
+	//网关服[C]端 -> 游戏服[S]端
+private:
+	void onGameConnection(const muduo::net::TcpConnectionPtr& conn);
+
+	void onGameMessage(
+		const muduo::net::TcpConnectionPtr& conn,
+		muduo::net::Buffer* buf, muduo::Timestamp receiveTime);
+
+	void asyncGameHandler(
+		const muduo::net::TcpConnectionPtr& conn,
+		WeakEntryPtr const& weakEntry,
+		BufferPtr& buf,
+		muduo::Timestamp receiveTime);
+
+	void sendGameMessage(
+		WeakEntryPtr const& weakEntry,
+		BufferPtr& buf, int64_t userId);
 private:
 	//监听客户端TCP请求(websocket)
 	muduo::net::websocket::Server server_;
@@ -318,7 +336,7 @@ private:
 	CmdCallbacks handlers_;
 	
 	//连接到所有大厅服
-	Connector hallConector_;
+	Connector hallConnector_;
 	
 	//连接到所有游戏服
 	Connector gameConnector_;
