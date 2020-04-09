@@ -41,6 +41,7 @@ class TcpClient : noncopyable
   TcpConnectionPtr connection() const
   {
     //MutexLockGuard lock(mutex_);
+    loop_->assertInLoopThread();
     return connection_;
   }
 

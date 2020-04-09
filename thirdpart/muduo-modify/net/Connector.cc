@@ -39,6 +39,7 @@ Connector::~Connector()
 
 void Connector::start()
 {
+  LOG_WARN << __FUNCTION__;
   connect_ = true;
   loop_->runInLoop(std::bind(&Connector::startInLoop, this)); // FIXME: unsafe
 }
@@ -59,6 +60,7 @@ void Connector::startInLoop()
 
 void Connector::stop()
 {
+  LOG_WARN << __FUNCTION__;
   connect_ = false;
   loop_->runInLoop/*queueInLoop*/(std::bind(&Connector::stopInLoop, this)); // FIXME: unsafe
   // FIXME: cancel timer
@@ -75,6 +77,7 @@ void Connector::stopInLoop()
   }
   else if (state_ == kConnected) {
       setState(kDisconnected);
+      int sockfd = removeAndResetChannel();
   }
 }
 
@@ -89,6 +92,7 @@ void Connector::connect()
     case EINPROGRESS:
     case EINTR:
     case EISCONN:
+      LOG_WARN << __FUNCTION__;
       connecting(sockfd);
       break;
 
@@ -121,6 +125,7 @@ void Connector::connect()
 
 void Connector::restart()
 {
+  LOG_WARN << __FUNCTION__;
   loop_->assertInLoopThread();
   setState(kDisconnected);
   retryDelayMs_ = kInitRetryDelayMs;
@@ -160,7 +165,7 @@ void Connector::resetChannel()
 
 void Connector::handleWrite()
 {
-  LOG_TRACE << "Connector::handleWrite " << state_;
+  //LOG_TRACE << "Connector::handleWrite " << state_;
 
   if (state_ == kConnecting)
   {
@@ -205,6 +210,7 @@ void Connector::handleError()
     int sockfd = removeAndResetChannel();
     int err = sockets::getSocketError(sockfd);
     //LOG_TRACE << "SO_ERROR = " << err << " " << strerror_tl(err);
+    errno = 0;//reset
     retry(sockfd);
   }
 }
@@ -215,8 +221,8 @@ void Connector::retry(int sockfd)
   setState(kDisconnected);
   if (connect_)
   {
-    //LOG_INFO << "Connector::retry - Retry connecting to " << serverAddr_.toIpPort()
-    //         << " in " << retryDelayMs_ << " milliseconds. ";
+    LOG_WARN << __FUNCTION__ << " - connecting to " << serverAddr_.toIpPort()
+             << " in " << retryDelayMs_ << " milliseconds. ";
     loop_->runAfter(retryDelayMs_/1000.0,
                     std::bind(&Connector::startInLoop, shared_from_this()));
     retryDelayMs_ = std::min(retryDelayMs_ * 2, kMaxRetryDelayMs);
