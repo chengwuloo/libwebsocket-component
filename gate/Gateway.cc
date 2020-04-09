@@ -56,6 +56,8 @@ Gateway::Gateway(muduo::net::EventLoop* loop,
 	, serverState_(ServiceStateE::kRunning)
 	, isdebug_(false) {
 
+	init();
+
 	//网络I/O线程池，I/O收发读写 recv(read)/send(write)
 	muduo::net::ReactorSingleton::inst(loop, "RWIOThreadPool");
 
@@ -102,6 +104,13 @@ Gateway::Gateway(muduo::net::EventLoop* loop,
 }
 
 Gateway::~Gateway() {
+}
+
+void Gateway::init() {
+	handlers_[packet::enword(
+		::Game::Common::MAIN_MESSAGE_CLIENT_TO_PROXY,
+		::Game::Common::CLIENT_TO_PROXY_GET_AES_KEY_MESSAGE_REQ)] =
+		std::bind(&Gateway::onGetAesKey, this, std::placeholders::_1, std::placeholders::_2);
 }
 
 void Gateway::quit() {
@@ -1644,6 +1653,12 @@ void Gateway::asyncClientHandler(
 					case packet::PUBENC_PROTOBUF_NONE: {
 						//NONE
 						TraceMessageID(commandHeader->mainID, commandHeader->subID);
+						int cmd = packet::enword(commandHeader->mainID, commandHeader->subID);
+						CmdCallbacks::const_iterator it = handlers_.find(cmd);
+						if (it != handlers_.end()) {
+							CmdCallback const& handler = it->second;
+							handler(conn, get_pointer(buf));
+						}
 						break;
 					}
 					case packet::PUBENC_PROTOBUF_RSA: {
@@ -1778,4 +1793,10 @@ bool Gateway::refreshBlackListInLoop() {
 			<< "--- *** ipaddr[" << Inet2Ipstr(it->first) << "] status[" << it->second << "]";
 	}
 	return false;
+}
+
+void Gateway::onGetAesKey(
+	const muduo::net::TcpConnectionPtr& conn,
+	muduo::net::Buffer* msg) {
+
 }

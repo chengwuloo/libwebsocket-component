@@ -140,7 +140,7 @@ class Gateway : public muduo::noncopyable {
 public:
 	//@@ CmdCallback
 	typedef std::function<
-		void(const muduo::net::TcpConnectionPtr&, muduo::net::Buffer&)> CmdCallback;
+		void(const muduo::net::TcpConnectionPtr&, muduo::net::Buffer*)> CmdCallback;
 	//@@ CmdCallbacks
 	typedef std::map<uint32_t, CmdCallback> CmdCallbacks;
 	
@@ -162,7 +162,11 @@ public:
 		std::string const& client_ca_cert_dir_path = "");
 	//Gateway dctor
 	~Gateway();
+	void init();
 	void quit();
+private:
+	void onGetAesKey(const muduo::net::TcpConnectionPtr& conn, muduo::net::Buffer* msg);
+private:
 	//zookeeper
 	bool initZookeeper(std::string const& ipaddr);
 	//RedisCluster

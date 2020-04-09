@@ -61,6 +61,17 @@ namespace packet {
 	static const size_t kPrevHeaderLen = sizeof(internal_prev_header_t);
 	static const size_t kMaxPacketSZ = 60 * 1024;
 	static const size_t kMinPacketSZ = sizeof(int16_t);
+	
+	//enword
+	static inline int enword(int mainID, int subID) {
+		return ((0xFF & mainID) << 8) | (0xFF & subID);
+	}
+	
+	//deword
+	static inline void deword(int cmd, int& mainID, int& subID) {
+		mainID = (0xFF & (cmd >> 8));
+		subID = (0xFF & cmd);
+	}
 
 	//getCheckSum 计算校验和
 	static uint16_t getCheckSum(uint8_t const* header, size_t size) {
