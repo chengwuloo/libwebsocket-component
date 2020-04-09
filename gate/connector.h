@@ -55,9 +55,6 @@ private:
 
 typedef std::shared_ptr<TcpClient> TcpClientPtr;
 typedef std::weak_ptr<TcpClient> WeakTcpClientPtr;
-typedef std::pair<TcpClientPtr, bool> TcpClientState;
-
-#define CONNECTED(state) ((state).second)
 
 typedef std::pair<std::string,
 	muduo::net::WeakTcpConnectionPtr> ClientConn;
@@ -68,7 +65,7 @@ class Connector : muduo::noncopyable {
 public:
 	friend class TcpClient;
 public:
-	typedef std::map<std::string, TcpClientState> TcpClientMap;
+	typedef std::map<std::string, TcpClientPtr> TcpClientMap;
 public:
 	Connector(muduo::net::EventLoop* loop);
 	~Connector();
@@ -81,23 +78,19 @@ public:
 	{
 		messageCallback_ = cb;
 	}
-
 	//create
 	void create(
 		std::string const& name,
 		const muduo::net::InetAddress& serverAddr);
-
 	//remove
-	void remove(std::string const& name);
-
+	void remove(std::string const& name, bool lazy = false);
 	//check
 	void check(std::string const& name, bool exist);
-
 	//getAll
 	void getAll(ClientConnList* clients);
-protected:
-	void quit();
+	//closeAll
 	void closeAll();
+protected:
 	void onConnected(const muduo::net::TcpConnectionPtr& conn, const TcpClientPtr& client);
 	void onClosed(const muduo::net::TcpConnectionPtr& conn, const std::string& name);
 	void onMessage(
@@ -115,7 +108,8 @@ protected:
 
 	void checkInLoop(std::string const& name, bool exist);
 	void getAllInLoop(ClientConnList* clients, bool* bok);
-	void removeInLoop(std::string const& name);
+	void removeInLoop(std::string const& name, bool lazy);
+	void cleanupInLoop();
 private:
 	muduo::net::EventLoop* loop_;
 	TcpClientMap clients_;

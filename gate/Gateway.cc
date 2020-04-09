@@ -292,7 +292,8 @@ void Gateway::ProcessHallIps(std::vector<std::string> const& newIps)
 		assert(std::find(
 			std::begin(newIps),
 			std::end(newIps), ip) == newIps.end());
-		//hallConector_.check(ip, false);
+		//清理无效连接
+		hallConector_.remove(ip, false);
 	}
 	//新生节点：newIps中有，而hallIps_中没有
 	diff.clear();
