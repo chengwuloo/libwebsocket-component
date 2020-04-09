@@ -145,7 +145,7 @@ public:
 		muduo::net::TcpConnectionPtr conn(weakConn_.lock());
 		if (conn) {
 #ifdef _DEBUG_BUCKETS_
-			LOG_INFO << __FUNCTION__ << " --- *** " << "客户端[" << conn->peerAddress().toIpPort() << "] -> 网关服["
+			LOG_WARN << __FUNCTION__ << " --- *** " << "客户端[" << conn->peerAddress().toIpPort() << "] -> 网关服["
 				<< conn->localAddress().toIpPort() << "] timeout closing";
 #endif
 #if 0
@@ -230,14 +230,14 @@ struct ConnectionBucket {
 		//心跳间隔时间(interval)
 		buckets_.resize(size);
 #ifdef _DEBUG_BUCKETS_
-		LOG_INFO << __FUNCTION__ << " --- *** [" << index << "] timeout = " << size << "s";
+		LOG_WARN << __FUNCTION__ << " --- *** [" << index << "] timeout = " << size << "s";
 #endif
 	}
 	//tick检查，间隔1s，踢出超时conn
 	void onTimer() {
 		buckets_.push_back(Bucket());
 #ifdef _DEBUG_BUCKETS_
-		LOG_INFO << __FUNCTION__ << " --- *** loop[" << index_ << "] timeout[" << buckets_.size() << "]";
+		LOG_WARN << __FUNCTION__ << " --- *** loop[" << index_ << "] timeout[" << buckets_.size() << "]";
 #endif
 		//重启连接超时定时器检查，间隔1s
 		loop_.runAfter(1.0f, std::bind(&ConnectionBucket::onTimer, this));
@@ -250,7 +250,7 @@ struct ConnectionBucket {
 				//必须使用shared_ptr，持有entry引用计数(加1)
 				buckets_.back().insert(entry);
 #ifdef _DEBUG_BUCKETS_
-				LOG_INFO << __FUNCTION__ << " --- *** loop[" << index_ << "] timeout[" << buckets_.size() << "] 客户端[" << conn->peerAddress().toIpPort() << "] -> 网关服["
+				LOG_WARN << __FUNCTION__ << " --- *** loop[" << index_ << "] timeout[" << buckets_.size() << "] 客户端[" << conn->peerAddress().toIpPort() << "] -> 网关服["
 					<< conn->localAddress().toIpPort() << "]";
 #endif
 			}
@@ -267,7 +267,7 @@ struct ConnectionBucket {
 				//必须使用shared_ptr，持有entry引用计数(加1)
 				buckets_.back().insert(entry);
 #ifdef _DEBUG_BUCKETS_
-				LOG_INFO << __FUNCTION__ << " --- *** loop[" << index_ << "] timeout[" << buckets_.size() << "] 客户端[" << conn->peerAddress().toIpPort() << "] -> 网关服["
+				LOG_WARN << __FUNCTION__ << " --- *** loop[" << index_ << "] timeout[" << buckets_.size() << "] 客户端[" << conn->peerAddress().toIpPort() << "] -> 网关服["
 					<< conn->localAddress().toIpPort() << "]";
 #endif
 			}

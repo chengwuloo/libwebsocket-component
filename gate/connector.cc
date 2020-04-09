@@ -262,6 +262,7 @@ void Connector::removeConnection(const muduo::net::TcpConnectionPtr& conn, const
 		if (1 == removes_.erase(name)) {
 			TcpClientMap::const_iterator it = clients_.find(name);
 			assert(it != clients_.end());
+			LOG_ERROR << __FUNCTION__ << " 清理节点 = " << it->first;
 			it->second->stop();
 			//it->second.reset();
 			clients_.erase(it);

@@ -21,34 +21,34 @@ void ContextConnector::processIps(std::vector<std::string> const& ips) {
 			oldset.emplace(ip);
 		}
 	}
-	//Ê§Ð§½Úµã£ºips_ÖÐÓÐ£¬¶øipsÖÐÃ»ÓÐ
+	//å¤±æ•ˆèŠ‚ç‚¹ï¼šips_ä¸­æœ‰ï¼Œè€Œipsä¸­æ²¡æœ‰
 	std::vector<std::string> diff(oldset.size());
 	std::vector<std::string>::iterator it;
 	it = set_difference(oldset.begin(), oldset.end(), newset.begin(), newset.end(), diff.begin());
 	diff.resize(it - diff.begin());
 	for (std::string const& ip : diff) {
-		//ips_ÖÐÓÐ
+		//ips_ä¸­æœ‰
 		assert(std::find(std::begin(ips_), std::end(ips_), ip) != ips_.end());
-		//ipsÖÐÃ»ÓÐ
+		//ipsä¸­æ²¡æœ‰
 		assert(std::find(std::begin(ips), std::end(ips), ip) == ips.end());
-		//É¾³ýÊ§Ð§½Úµã
+		//åˆ é™¤å¤±æ•ˆèŠ‚ç‚¹
 		connector_->remove(ip, false);
 	}
-	//»î¶¯½Úµã£ºipsÖÐÓÐ£¬¶øips_ÖÐÃ»ÓÐ
+	//æ´»åŠ¨èŠ‚ç‚¹ï¼šipsä¸­æœ‰ï¼Œè€Œips_ä¸­æ²¡æœ‰
 	diff.clear();
 	diff.resize(newset.size());
 	it = set_difference(newset.begin(), newset.end(), oldset.begin(), oldset.end(), diff.begin());
 	diff.resize(it - diff.begin());
 	for (std::string const& ip : diff) {
-		//ips_ÖÐÃ»ÓÐ
+		//ips_ä¸­æ²¡æœ‰
 		assert(std::find(std::begin(ips_), std::end(ips_), ip) == ips_.end());
-		//ipsÖÐÓÐ
+		//ipsä¸­æœ‰
 		assert(std::find(std::begin(ips), std::end(ips), ip) != ips.end());
-		//Á¬½ÓÐÂµÄ½Úµã
+		//è¿žæŽ¥æ–°çš„èŠ‚ç‚¹
 		connect(ip);
 	}
 	{
-		//Ìí¼Óipsµ½ips_
+		//æ·»åŠ ipsåˆ°ips_
 		WRITE_LOCK(mutex_);
 		ips_.assign(ips.begin(), ips.end());
 	}
@@ -58,7 +58,7 @@ void ContextConnector::processIps(std::vector<std::string> const& ips) {
 void ContextConnector::connect(std::string const& ip) {
 	std::vector<std::string> vec;
 	boost::algorithm::split(vec, ip, boost::is_any_of(":"));
-	//vec£ºip:port
+	//vecï¼šip:port
 	muduo::net::InetAddress serverAddr(vec[0], atoi(vec[1].c_str()));
 	connector_->create(ip, serverAddr);
 }
@@ -67,7 +67,7 @@ void ContextConnector::connect(std::string const& ip) {
 void ContextConnector::connectAll() {
 	READ_LOCK(mutex_);
 	for (std::string const& ip : ips_) {
-		//Á¬½ÓÐÂµÄ½Úµã
+		//è¿žæŽ¥æ–°çš„èŠ‚ç‚¹
 		connect(ip);
 	}
 }
