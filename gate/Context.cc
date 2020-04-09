@@ -2,6 +2,8 @@
 /*    @author create by andy_ro@qq.com                                  */
 /*    @Date		   03.18.2020                                           */
 /************************************************************************/
+#include <muduo/base/Logging.h>
+#include "public/global.h"
 #include "Context.h"
 
 //assign
@@ -14,7 +16,7 @@ void ContextConnector::assign(std::vector<std::string> const& ips) {
 void ContextConnector::processIps(std::vector<std::string> const& ips) {
 	std::set<std::string> oldset, newset(ips.begin(), ips.end());
 	{
-		WRITE_LOCK(mutex_);
+		READ_LOCK(mutex_);
 		for (std::string const& ip : ips_) {
 			oldset.emplace(ip);
 		}
@@ -26,13 +28,10 @@ void ContextConnector::processIps(std::vector<std::string> const& ips) {
 	diff.resize(it - diff.begin());
 	for (std::string const& ip : diff) {
 		//ips_中有
-		assert(std::find(
-			std::begin(ips_),
-			std::end(ips_), ip) != ips_.end());
+		assert(std::find(std::begin(ips_), std::end(ips_), ip) != ips_.end());
 		//ips中没有
-		assert(std::find(
-			std::begin(ips),
-			std::end(ips), ip) == ips.end());
+		assert(std::find(std::begin(ips), std::end(ips), ip) == ips.end());
+		//删除失效节点
 		connector_->remove(ip, false);
 	}
 	//活动节点：ips中有，而ips_中没有
@@ -42,13 +41,10 @@ void ContextConnector::processIps(std::vector<std::string> const& ips) {
 	diff.resize(it - diff.begin());
 	for (std::string const& ip : diff) {
 		//ips_中没有
-		assert(std::find(
-			std::begin(ips_),
-			std::end(ips_), ip) == ips_.end());
+		assert(std::find(std::begin(ips_), std::end(ips_), ip) == ips_.end());
 		//ips中有
-		assert(std::find(
-			std::begin(ips),
-			std::end(ips), ip) != ips.end());
+		assert(std::find(std::begin(ips), std::end(ips), ip) != ips.end());
+		//连接新的节点
 		connect(ip);
 	}
 	{
@@ -60,22 +56,18 @@ void ContextConnector::processIps(std::vector<std::string> const& ips) {
 
 //connect
 void ContextConnector::connect(std::string const& ip) {
-	LOG_ERROR << __FUNCTION__;
-	//获取网络I/O模型EventLoop池
-	//std::shared_ptr<muduo::net::EventLoopThreadPool> threadPool = server_.server_.threadPool();
-	//std::vector<muduo::net::EventLoop*> loops = threadPool->getAllLoops();
 	std::vector<std::string> vec;
 	boost::algorithm::split(vec, ip, boost::is_any_of(":"));
 	//vec：ip:port
-	muduo::net::InetAddress serverAddr(vec[0], stoi(vec[1]));
-	//muduo::net::EventLoop* ioLoop = threadPool->getNextLoop();
+	muduo::net::InetAddress serverAddr(vec[0], atoi(vec[1].c_str()));
 	connector_->create(ip, serverAddr);
 }
 
 //connectAll
 void ContextConnector::connectAll() {
-	for (std::vector<std::string>::const_iterator it = ips_.begin();
-		it != ips_.end(); ++it) {
-		connect(*it);
+	READ_LOCK(mutex_);
+	for (std::string const& ip : ips_) {
+		//连接新的节点
+		connect(ip);
 	}
 }

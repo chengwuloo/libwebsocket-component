@@ -5,8 +5,6 @@
 #ifndef CONTEXTCONNECTOR_INCLUDE_H
 #define CONTEXTCONNECTOR_INCLUDE_H
 
-#include <muduo/base/Logging.h>
-
 #include <boost/filesystem.hpp>
 #include <boost/circular_buffer.hpp>
 #include <boost/unordered_set.hpp>
@@ -34,7 +32,6 @@
 #include <arpa/inet.h>
 
 #include "connector.h"
-#include "EntryPtr.h"
 
 //@@ ContextConnector
 struct ContextConnector {
@@ -46,10 +43,10 @@ struct ContextConnector {
 	void processIps(std::vector<std::string> const& ips);
 	
 	//connect
-	inline void connect(std::string const& ip);
+	void connect(std::string const& ip);
 	
 	//connectAll
-	inline void connectAll();
+	void connectAll();
 
 	Connector* connector_;
 	std::vector<std::string> ips_;
