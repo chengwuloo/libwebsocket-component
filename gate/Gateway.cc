@@ -1961,6 +1961,7 @@ void Gateway::asyncClientHandler(
 						assert(svrid.length() <= sizeof(pre_header.servID));
 						memcpy(pre_header.servID, svrid.c_str(), std::min(sizeof(pre_header.servID), svrid.length()));
 #endif
+						//CRC校验位 header->len = packet::kHeaderLen + len
 						packet::setCheckSum(&pre_header);
 						BufferPtr buffer(new muduo::net::Buffer(len));
 						buffer->append((const char*)&pre_header, packet::kPrevHeaderLen);
@@ -2041,6 +2042,7 @@ void Gateway::asyncClientHandler(
 BufferPtr Gateway::packMessage(int mainID, int subID, ::google::protobuf::Message* msg) {
 	assert(msg);
 	size_t len = msg->ByteSizeLong();
+	assert(len > 0);
 	BufferPtr buffer(new muduo::net::Buffer(packet::kHeaderLen + len));
 	//buffer[packet::kHeaderLen]
 	if (msg->SerializeToArray(buffer->beginWrite() + packet::kHeaderLen, len)) {
