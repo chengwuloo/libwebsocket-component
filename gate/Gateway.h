@@ -52,7 +52,7 @@
 
 #include "connector.h"
 #include "EntryPtr.h"
-#include "SessInfos.h"
+#include "Entities.h"
 #include "Context.h"
 
 #include "public/packet.h"
@@ -135,22 +135,25 @@ static void setFailedResponse(muduo::net::HttpResponse& rsp,
 #endif
 }
 
+//@@
+//typedef std::shared_ptr<muduo::net::TcpClient> TcpClientPtr;
+//typedef std::weak_ptr<muduo::net::TcpClient> WeakTcpClientPtr;
+//typedef std::map<std::string, TcpClientPtr> TcpClientMap;
+//typedef std::map<std::string, WeakEntryPtr> SessInfosMap;
+
+//@@
+typedef std::shared_ptr<muduo::net::Buffer> BufferPtr;
+typedef std::map<std::string, std::string> HttpParams;
+
 //@@ Gateway
 class Gateway : public muduo::noncopyable {
 public:
 	//@@ CmdCallback
 	typedef std::function<
-		void(const muduo::net::TcpConnectionPtr&, muduo::net::Buffer*)> CmdCallback;
+		void(const muduo::net::TcpConnectionPtr&,
+			muduo::net::Buffer*)> CmdCallback;
 	//@@ CmdCallbacks
 	typedef std::map<uint32_t, CmdCallback> CmdCallbacks;
-	
-	//typedef std::shared_ptr<muduo::net::TcpClient> TcpClientPtr;
-	//typedef std::weak_ptr<muduo::net::TcpClient> WeakTcpClientPtr;
-	//typedef std::map<std::string, TcpClientPtr> TcpClientMap;
-	//typedef std::map<std::string, WeakEntryPtr> SessInfosMap;
-	
-	typedef std::shared_ptr<muduo::net::Buffer> BufferPtr;
-	typedef std::map<std::string, std::string> HttpParams;
 public:
 	//Gateway ctor
 	Gateway(muduo::net::EventLoop* loop,
@@ -206,6 +209,8 @@ private:
 		const WeakEntryPtr& weakEntry,
 		BufferPtr& buf,
 		muduo::Timestamp receiveTime);
+
+	static BufferPtr packClientShutdownMsg(int64_t userid, int status = 0);
 
 	//刷新客户端访问IP黑名单信息
 	//1.web后台更新黑名单通知刷新
@@ -329,8 +334,10 @@ private:
 	//worker线程池，内部任务消息队列
 	std::vector<std::shared_ptr<muduo::ThreadPool>> threadPool_;
 
-	//保存玩家会话信息[session] = conn，entry超时/session过期/玩家离线清理
-	SessInfos sessInfos_;
+	//map[session] = entry，entry超时/session过期/玩家离线清理
+	STR::Entities entities_;
+	//map[userid] = session
+	INT::Sessions sessions_;
 
 	//命令消息回调处理函数
 	CmdCallbacks handlers_;

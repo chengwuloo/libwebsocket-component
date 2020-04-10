@@ -473,7 +473,7 @@ void Gateway::onInnMessage(
 			//////////////////////////////////////////////////////////////////////////
 			//session -> entry -> entryContext -> index
 			//////////////////////////////////////////////////////////////////////////
-			WeakEntryPtr weakEntry = sessInfos_.getSessInfo(session);
+			WeakEntryPtr weakEntry = entities_.get(session);
 			EntryPtr entry(weakEntry.lock());
 			if (likely(entry)) {
 				Entry::Context* entryContext = boost::any_cast<Entry::Context>(entry->getMutableContext());
@@ -1287,7 +1287,7 @@ void Gateway::onHallMessage(const muduo::net::TcpConnectionPtr& conn,
 			//////////////////////////////////////////////////////////////////////////
 			//session -> entry -> entryContext -> index
 			//////////////////////////////////////////////////////////////////////////
-			WeakEntryPtr weakEntry = sessInfos_.getSessInfo(session);
+			WeakEntryPtr weakEntry = entities_.get(session);
 			EntryPtr entry(weakEntry.lock());
 			if (likely(entry)) {
 				Entry::Context* entryContext = boost::any_cast<Entry::Context>(entry->getMutableContext());
@@ -1332,27 +1332,57 @@ void Gateway::asyncHallHandler(
 	if (likely(entry)) {
 		Entry::Context* entryContext = boost::any_cast<Entry::Context>(entry->getMutableContext());
 		assert(entryContext);
-		//userid
-		entryContext->setUserId(pre_header->userID);
 		muduo::net::TcpConnectionPtr peer(entry->getWeakConnPtr().lock());
 		if (likely(peer)) {
-
 			//命令消息头header_t
 			packet::header_t /*const*/* header = (packet::header_t /*const*/*)(buf->peek() + packet::kPrevHeaderLen);
-			//校验CRC
-			//uint16_t crc = packet::getCheckSum((uint8_t const*)header->ver, packet::kHeaderLen - 4);
-			//assert(header->crc == crc);
+			//校验CRC header->len = packet::kHeaderLen + len
+			uint16_t crc = packet::getCheckSum((uint8_t const*)&header->ver, header->len - 4);
+			assert(header->crc == crc);
 			TraceMessageID(header->mainID, header->subID);
 			if (
 				header->mainID == ::Game::Common::MAINID::MAIN_MESSAGE_CLIENT_TO_HALL &&
 				header->subID == ::Game::Common::MESSAGE_CLIENT_TO_HALL_SUBID::CLIENT_TO_HALL_LOGIN_MESSAGE_RES &&
 				pre_header->ok == 1) {
+				//////////////////////////////////////////////////////////////////////////
+				//顶号处理 userid->session->entry
+				//////////////////////////////////////////////////////////////////////////
+				//userid->session
+				std::string const session_(sessions_.add(pre_header->userID, session));
+				if (!session_.empty()) {
+					//session->entry
+					WeakEntryPtr weakEntry_(entities_.get(session_));
+					EntryPtr entry_(weakEntry_.lock());
+					if (entry_) {
+						Entry::Context* entryContext_ = boost::any_cast<Entry::Context>(entry_->getMutableContext());
+						assert(entryContext_);
+						muduo::net::TcpConnectionPtr peer_(entry->getWeakConnPtr().lock());
+						if (peer_) {
+							BufferPtr buffer = packClientShutdownMsg(userId, 0);
+							peer_->send(get_pointer(buffer));
+#if 0
+							peer_->getLoop()->runAfter(0.2f, [&]() {
+								entry_.reset();
+							});
+#elif 1
+							peer_->getLoop()->runAfter(0.2f, std::bind(&detail::resetEntry, weakEntry_));
+#else
+							peer_->forceCloseWithDelay(0.2);
+#endif
+						}
+					}
+				}
 				//登陆成功，需要处理异地登陆/断线重连/顶号，清除旧的conn
+	
+				//指定userid
+				entryContext->setUserId(pre_header->userID);
 			}
 			else if (
 				header->mainID == ::Game::Common::MAINID::MAIN_MESSAGE_CLIENT_TO_HALL &&
 				header->subID == ::Game::Common::MESSAGE_CLIENT_TO_HALL_SUBID::CLIENT_TO_HALL_GET_GAME_SERVER_MESSAGE_RES &&
 				pre_header->ok == 1) {
+				//校验userid
+				assert(userId == entryContext->getUserId());
 				//std::string ip;
 				//if (REDISCLIENT.GetUserOnlineInfoIP(userId, ip))
 				{
@@ -1494,7 +1524,7 @@ void Gateway::onGameMessage(const muduo::net::TcpConnectionPtr& conn,
 			//////////////////////////////////////////////////////////////////////////
 			//session -> entry -> entryContext -> index
 			//////////////////////////////////////////////////////////////////////////
-			WeakEntryPtr weakEntry = sessInfos_.getSessInfo(session);
+			WeakEntryPtr weakEntry = entities_.get(session);
 			EntryPtr entry(weakEntry.lock());
 			if (likely(entry)) {
 				Entry::Context* entryContext = boost::any_cast<Entry::Context>(entry->getMutableContext());
@@ -1723,7 +1753,7 @@ void Gateway::onConnected(
 		}
 		{
 			//添加玩家session
-			sessInfos_.addSessInfo(session, weakEntry);
+			entities_.add(session, weakEntry);
 		}
 	}
 }
@@ -1954,6 +1984,34 @@ void Gateway::asyncClientHandler(
 	}
 	//累计未处理请求数
 	numTotalBadReq_.incrementAndGet();
+}
+
+//网关服[S]端 <- 客户端[C]端，websocket
+BufferPtr Gateway::packClientShutdownMsg(int64_t userid, int status) {
+	::Game::Common::ProxyNotifyShutDownUserClientMessage rsp;
+	rsp.mutable_header()->set_sign(PROTO_BUF_SIGN);
+	rsp.set_userid(userid);
+	rsp.set_status(status);
+	size_t len = rsp.ByteSizeLong();
+	BufferPtr buffer(new muduo::net::Buffer(packet::kHeaderLen + len));
+	//buffer[packet::kHeaderLen]
+	rsp.SerializeToArray(buffer->beginWrite() + packet::kHeaderLen, len);
+	//buffer[0]
+	packet::header_t* header = (packet::header_t*)buffer->beginWrite();
+	header->len = packet::kHeaderLen + len;
+	header->ver = 1;
+	header->sign = HEADER_SIGN;
+	header->mainID = ::Game::Common::MAIN_MESSAGE_CLIENT_TO_PROXY;
+	header->subID = ::Game::Common::PROXY_NOTIFY_SHUTDOWN_USER_CLIENT_MESSAGE_NOTIFY;
+	header->enctype = packet::enctypeE::PUBENC_PROTOBUF_NONE;
+	header->reserved = 0;
+	header->reqID = 0;
+	header->realsize = len;
+	//CRC header->len = packet::kHeaderLen + len
+	header->crc = packet::getCheckSum((uint8_t const*)&header->ver, header->len - 4);
+	buffer->hasWritten(packet::kHeaderLen + len);
+	TraceMessageID(header->mainID, header->subID);
+	return buffer;
 }
 
 //网关服[S]端 <- 客户端[C]端，websocket

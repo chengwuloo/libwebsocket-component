@@ -169,6 +169,17 @@ typedef std::weak_ptr<Entry> WeakEntryPtr;
 typedef boost::unordered_set<EntryPtr> Bucket;
 typedef boost::circular_buffer<Bucket> WeakConnList;
 
+namespace detail {
+
+	//resetEntry std::bind(&detail::resetEntry, weakEntry);
+	static void resetEntry(WeakEntryPtr const weakEntry) {
+		EntryPtr entry(weakEntry.lock());
+		if (likely(entry)) {
+			entry.reset();
+		}
+	}
+}
+
 //////////////////////////////////////////////////////////////////////////
 //@@ EventLoopContext
 class EventLoopContext : public muduo::copyable {
