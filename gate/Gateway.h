@@ -67,6 +67,10 @@
 #include <google/protobuf/message.h>
 
 //#define NDEBUG
+#define KICK_GS                 (0x01)
+#define KICK_HALL               (0x02)
+#define KICK_CLOSEONLY          (0x100)
+#define KICK_LEAVEGS            (0x200)
 
 //@@ ServiceStateE 服务状态
 enum ServiceStateE {
@@ -214,6 +218,15 @@ private:
 
 	static BufferPtr packMessage(int mainID, int subID, ::google::protobuf::Message* msg);
 
+	static BufferPtr packMessage(
+		int64_t userid,
+		std::string const& session,
+		std::string const& aeskey,
+		uint32_t ipaddr,
+		int16_t kicking,
+		int mainID, int subID,
+		::google::protobuf::Message* msg);
+
 	static BufferPtr packClientShutdownMsg(int64_t userid, int status = 0);
 
 	static BufferPtr packNoticeMsg(
@@ -295,7 +308,9 @@ private:
 
 	void sendHallMessage(
 		WeakEntryPtr const& weakEntry,
-		BufferPtr& buf, int64_t userId);
+		BufferPtr& buf, int64_t userid);
+
+	void onUserOfflineHall(WeakEntryPtr const& weakEntry);
 
 	//网关服[C]端 -> 游戏服[S]端
 private:
@@ -313,7 +328,9 @@ private:
 
 	void sendGameMessage(
 		WeakEntryPtr const& weakEntry,
-		BufferPtr& buf, int64_t userId);
+		BufferPtr& buf, int64_t userid);
+
+	void onUserOfflineGame(WeakEntryPtr const& weakEntry, bool leave = 0);
 private:
 	//监听客户端TCP请求(websocket)
 	muduo::net::websocket::Server server_;

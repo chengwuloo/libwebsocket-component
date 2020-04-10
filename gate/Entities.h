@@ -40,6 +40,10 @@ namespace STR {
 		//add
 		inline void add(std::string const& session, WeakEntryPtr const& weakEntry) {
 			WRITE_LOCK(mutex_);
+#ifndef NDEBUG
+			EntryMap::const_iterator it = players_.find(session);
+			assert(it == players_.end());
+#endif
 			players_[session] = weakEntry;
 		}
 		//get
@@ -180,17 +184,16 @@ namespace INT {
 			return "";
 		}
 		//remove
-		inline void remove(int64_t userid) {
+		inline void remove(int64_t userid, std::string const& session) {
 			{
 				WRITE_LOCK(mutex_);
-#if 0
 				SessionMap::const_iterator it = players_.find(userid);
 				if (it != players_.end()) {
-					players_.erase(it);
+					//check before remove
+					if (it->second == session) {
+						players_.erase(it);
+					}
 				}
-#else
-				players_.erase(userid);
-#endif
 			}
 		}
 	private:

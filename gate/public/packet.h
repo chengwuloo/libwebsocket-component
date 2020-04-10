@@ -47,10 +47,12 @@ namespace packet {
 		int16_t  kicking;
 		int32_t  ok;
 		int64_t  userID;
-		uint32_t ipaddr;             //真实IP
+		uint32_t ipaddr;             //来自真实IP
 		uint8_t  session[SESSIONSZ]; //用户会话
-		uint8_t  aesKey[AESKEYSZ];   //AES_KEY
+		uint8_t  aeskey[AESKEYSZ];   //AES_KEY
+#if 0
 		uint8_t  servID[SERVIDSZ];   //来自节点ID
+#endif
 		uint16_t checksum;           //校验和CHKSUM
 	};
 
@@ -61,7 +63,13 @@ namespace packet {
 	static const size_t kPrevHeaderLen = sizeof(internal_prev_header_t);
 	static const size_t kMaxPacketSZ = 60 * 1024;
 	static const size_t kMinPacketSZ = sizeof(int16_t);
-	
+
+	static const size_t kSessionSZ = sizeof(((internal_prev_header_t*)0)->session);
+	static const size_t kAesKeySZ = sizeof(((internal_prev_header_t*)0)->aeskey);
+#if 0
+	static const size_t kServIDSZ = sizeof(((internal_prev_header_t*)0)->servID);
+#endif
+
 	//enword
 	static inline int enword(int mainID, int subID) {
 		return ((0xFF & mainID) << 8) | (0xFF & subID);

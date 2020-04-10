@@ -88,14 +88,14 @@ public:
 			return &context_;
 		}
 		//ipaddr
-		void setIpaddr(in_addr_t inaddr) { ipaddr_ = inaddr; }
-		in_addr_t getIpaddr() { return ipaddr_; }
+		void setFromIp(in_addr_t inaddr) { ipaddr_ = inaddr; }
+		in_addr_t getFromIp() { return ipaddr_; }
 		//session
 		inline void setSession(std::string const& session) { session_ = session; }
 		inline std::string const& getSession() const { return session_; }
 		//userid
-		inline void setUserId(int64_t userid) { userid_ = userid; }
-		inline int64_t getUserId() const { return userid_; }
+		inline void setUserID(int64_t userid) { userid_ = userid; }
+		inline int64_t getUserID() const { return userid_; }
 		//aeskey
 		inline void setAesKey(std::string key) { aeskey_ = key; }
 		inline std::string const& getAesKey() const { return aeskey_; }
