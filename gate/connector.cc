@@ -88,12 +88,12 @@ Connector::~Connector() {
 	closeAll();
 }
 
-//create
-void Connector::create(
+//add
+void Connector::add(
 	std::string const& name,
 	const muduo::net::InetAddress& serverAddr) {
 	loop_->runInLoop(
-		std::bind(&Connector::createInLoop, this, name, serverAddr));
+		std::bind(&Connector::addInLoop, this, name, serverAddr));
 }
 
 //remove
@@ -134,7 +134,7 @@ void Connector::getAllInLoop(ClientConnList* clients, bool* bok) {
 	*bok = true;
 }
 
-void Connector::createInLoop(
+void Connector::addInLoop(
 	std::string const& name,
 	const muduo::net::InetAddress& serverAddr) {
 	

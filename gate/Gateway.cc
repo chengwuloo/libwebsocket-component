@@ -10,10 +10,6 @@
 #include <muduo/net/Reactor.h>
 #include <muduo/net/libwebsocket/ssl.h>
 
-#include <boost/uuid/uuid.hpp>
-#include <boost/uuid/uuid_generators.hpp>
-#include <boost/uuid/uuid_io.hpp>
-
 #include <boost/archive/iterators/base64_from_binary.hpp>
 #include <boost/archive/iterators/binary_from_base64.hpp>
 #include <boost/archive/iterators/transform_width.hpp>
@@ -25,6 +21,7 @@
 
 #include "public/SubNetIP.h"
 #include "public/NetCardIP.h"
+#include "public/utils.h"
 
 #include "public/codec/aes.h"
 #include "public/codec/mymd5.h"
@@ -256,9 +253,30 @@ void Gateway::ZookeeperConnectedHandler() {
 			for (std::string const& ip : ipaddrs) {
 				LOG_ERROR << __FUNCTION__ << " connect to hall[" << i++ << "][" << ip << "]";
 			}
-			iptable_[servTyE::kHallTy].assign(ipaddrs);
+			iptable_[servTyE::kHallTy].add(ipaddrs);
 		}
-		iptable_[servTyE::kHallTy].connectAll();
+	}
+	{
+		//游戏服 ip:port
+		std::vector<std::string> ipaddrs;
+
+		//看门狗zk监控节点
+		if (ZOK == zkclient_->getClildren(
+			"/GAME/GameServers",
+			ipaddrs,
+			std::bind(
+				&Gateway::GetGameChildrenWatcherHandler, this,
+				std::placeholders::_1, std::placeholders::_2,
+				std::placeholders::_3, std::placeholders::_4,
+				std::placeholders::_5),
+			this)) {
+
+			int i = 0;
+			for (std::string const& ip : ipaddrs) {
+				LOG_ERROR << __FUNCTION__ << " connect to game[" << i++ << "][" << ip << "]";
+			}
+			iptable_[servTyE::kGameTy].add(ipaddrs);
+		}
 	}
 }
 
@@ -284,7 +302,33 @@ void Gateway::GetHallChildrenWatcherHandler(
 		for (std::string const& ip : ipaddrs) {
 			LOG_ERROR << __FUNCTION__ << " connect to hall[" << i++ << "][" << ip << "]";
 		}
-		iptable_[servTyE::kHallTy].processIps(ipaddrs);
+		iptable_[servTyE::kHallTy].process(ipaddrs);
+	}
+}
+
+void Gateway::GetGameChildrenWatcherHandler(
+	int type, int state, const std::shared_ptr<ZookeeperClient>& zkClientPtr,
+	const std::string& path, void* context)
+{
+	//大厅服 ip:port
+	std::vector<std::string> ipaddrs;
+
+	//看门狗zk监控节点
+	if (ZOK == zkclient_->getClildren(
+		"/GAME/GameServers",
+		ipaddrs,
+		std::bind(
+			&Gateway::GetGameChildrenWatcherHandler, this,
+			std::placeholders::_1, std::placeholders::_2,
+			std::placeholders::_3, std::placeholders::_4,
+			std::placeholders::_5),
+		this)) {
+
+		int i = 0;
+		for (std::string const& ip : ipaddrs) {
+			LOG_ERROR << __FUNCTION__ << " connect to game[" << i++ << "][" << ip << "]";
+		}
+		iptable_[servTyE::kGameTy].process(ipaddrs);
 	}
 }
 
@@ -470,8 +514,8 @@ void Gateway::asyncInnHandler(
 	if (likely(entry)) {
 		Entry::Context* entryContext = boost::any_cast<Entry::Context>(entry->getMutableContext());
 		assert(entryContext);
-		muduo::net::TcpConnectionPtr playerConn(entry->getWeakConnPtr().lock());
-		if (likely(playerConn)) {
+		muduo::net::TcpConnectionPtr peer(entry->getWeakConnPtr().lock());
+		if (likely(peer)) {
 			//命令消息头header_t
 			packet::header_t /*const*/* header = (packet::header_t /*const*/*)(buf->peek() + packet::kPrevHeaderLen);
 			//校验CRC
@@ -482,10 +526,10 @@ void Gateway::asyncInnHandler(
 				pre_header->ok == 0) {
 
 			}
-			server_.send(playerConn, (uint8_t const*)buf->peek() + packet::kPrevHeaderLen, header->len);
+			server_.send(peer, (uint8_t const*)buf->peek() + packet::kPrevHeaderLen, header->len);
 			return;
 		}
-		LOG_ERROR << __FUNCTION__ << " --- *** " << "playerConn(entry->getWeakConnPtr().lock()) failed";
+		LOG_ERROR << __FUNCTION__ << " --- *** " << "peer(entry->getWeakConnPtr().lock()) failed";
 		return;
 	}
 	LOG_ERROR << __FUNCTION__ << " --- *** " << "entry(weakEntry.lock()) failed";
@@ -1290,8 +1334,8 @@ void Gateway::asyncHallHandler(
 		assert(entryContext);
 		//userid
 		entryContext->setUserId(pre_header->userID);
-		muduo::net::TcpConnectionPtr playerConn(entry->getWeakConnPtr().lock());
-		if (likely(playerConn)) {
+		muduo::net::TcpConnectionPtr peer(entry->getWeakConnPtr().lock());
+		if (likely(peer)) {
 
 			//命令消息头header_t
 			packet::header_t /*const*/* header = (packet::header_t /*const*/*)(buf->peek() + packet::kPrevHeaderLen);
@@ -1325,10 +1369,10 @@ void Gateway::asyncHallHandler(
 					}
 				}
 			}
-			server_.send(playerConn, (uint8_t const*)buf->peek() + packet::kPrevHeaderLen, header->len);
+			server_.send(peer, (uint8_t const*)buf->peek() + packet::kPrevHeaderLen, header->len);
 			return;
 		}
-		LOG_ERROR << __FUNCTION__ << " --- *** " << "playerConn(entry->getWeakConnPtr().lock()) failed";
+		LOG_ERROR << __FUNCTION__ << " --- *** " << "peer(entry->getWeakConnPtr().lock()) failed";
 		return;
 	}
 	LOG_ERROR << __FUNCTION__ << " --- *** " << "entry(weakEntry.lock()) failed";
@@ -1353,7 +1397,7 @@ void Gateway::sendHallMessage(WeakEntryPtr const& weakEntry, BufferPtr& buf, int
 					clientConn.first) != iptable_[servTyE::kHallTy].ips_.end());
 #endif
 			iptable_[servTyE::kHallTy].connector_->check(clientConn.first, true);
-			hallConn->send(buf.get());
+			hallConn->send(get_pointer(buf));
 		}
 		else {
 			LOG_ERROR << __FUNCTION__ << " --- *** " << "用户大厅服无效，重新分配";
@@ -1412,7 +1456,7 @@ void Gateway::onGameMessage(const muduo::net::TcpConnectionPtr& conn,
 
 		//数据包太大或太小
 		if (likely(len > packet::kMaxPacketSZ ||
-			len < packet::kMinPacketSZ)) {
+				   len < packet::kMinPacketSZ)) {
 			if (conn) {
 #if 0
 				//不再发送数据
@@ -1443,7 +1487,7 @@ void Gateway::onGameMessage(const muduo::net::TcpConnectionPtr& conn,
 			//扔给任务消息队列处理
 			threadPool_[index]->run(
 				std::bind(
-					&Gateway::asyncHallHandler,
+					&Gateway::asyncGameHandler,
 					this,
 					conn, buffer, receiveTime));
 #else
@@ -1495,10 +1539,17 @@ void Gateway::asyncGameHandler(
 	if (likely(entry)) {
 		Entry::Context* entryContext = boost::any_cast<Entry::Context>(entry->getMutableContext());
 		assert(entryContext);
-		//userid
-		entryContext->setUserId(pre_header->userID);
-		muduo::net::TcpConnectionPtr playerConn(entry->getWeakConnPtr().lock());
-		if (likely(playerConn)) {
+		//校验userid
+		assert(userId == entryContext->getUserId());
+		//校验session
+		if (session != entryContext->getSession()) {
+			LOG_ERROR << __FUNCTION__ << " --- *** " << "check userid. " << userId
+				<< "\nsession = " << buffer2HexStr((unsigned char const*)session.c_str(), session.length())
+				<< "\nsave    = " << buffer2HexStr((unsigned char const*)entryContext->getSession().c_str(), entryContext->getSession().length());
+			return;
+		}
+		muduo::net::TcpConnectionPtr peer(entry->getWeakConnPtr().lock());
+		if (likely(peer)) {
 
 			//命令消息头header_t
 			packet::header_t /*const*/* header = (packet::header_t /*const*/*)(buf->peek() + packet::kPrevHeaderLen);
@@ -1507,10 +1558,10 @@ void Gateway::asyncGameHandler(
 			//assert(header->crc == crc);
 			TraceMessageID(header->mainID, header->subID);
 			
-			server_.send(playerConn, (uint8_t const*)buf->peek() + packet::kPrevHeaderLen, header->len);
+			server_.send(peer, (uint8_t const*)buf->peek() + packet::kPrevHeaderLen, header->len);
 			return;
 		}
-		LOG_ERROR << __FUNCTION__ << " --- *** " << "playerConn(entry->getWeakConnPtr().lock()) failed";
+		LOG_ERROR << __FUNCTION__ << " --- *** " << "peer(entry->getWeakConnPtr().lock()) failed";
 		return;
 	}
 	LOG_ERROR << __FUNCTION__ << " --- *** " << "entry(weakEntry.lock()) failed";
@@ -1535,54 +1586,14 @@ void Gateway::sendGameMessage(WeakEntryPtr const& weakEntry, BufferPtr& buf, int
 					clientConn.first) != iptable_[servTyE::kGameTy].ips_.end());
 #endif
 			iptable_[servTyE::kGameTy].connector_->check(clientConn.first, true);
-			gameConn->send(buf.get());
+			gameConn->send(get_pointer(buf));
 		}
 		else {
-			LOG_ERROR << __FUNCTION__ << " --- *** " << "用户游戏服无效，重新分配";
-			//用户游戏服无效，重新分配
-			ClientConnList clients;
-			//异步获取全部有效游戏连接
-			iptable_[servTyE::kGameTy].connector_->getAll(&clients);
-			if (clients.size() > 0) {
-				int index = randomHall_.betweenInt(0, clients.size() - 1).randInt_mt();
-				assert(index >= 0 && index < clients.size());
-				ClientConn const& clientConn = clients[index];
-				muduo::net::TcpConnectionPtr gameConn(clientConn.second.lock());
-				if (gameConn) {
-					entryContext->setClientConn(servTyE::kGameTy, clientConn);
-					gameConn->send(buf.get());
-				}
-				else {
-
-				}
-			}
-			else {
-				LOG_ERROR << __FUNCTION__ << " --- *** " << "clients.size() = 0";
-			}
+			LOG_ERROR << __FUNCTION__ << " --- *** " << "gameConn(clientConn.second.lock()) failed";
 		}
 		return;
 	}
 	LOG_ERROR << __FUNCTION__ << " --- *** " << "entry(weakEntry.lock()) failed";
-}
-
-//createUUID 创建uuid
-static std::string createUUID() {
-	boost::uuids::random_generator rgen;
-	boost::uuids::uuid u = rgen();
-	std::string uuid;
-	uuid.assign(u.begin(), u.end());
-	return uuid;
-}
-
-//buffer2HexStr
-static std::string buffer2HexStr(unsigned char const* buf, size_t len)
-{
-	std::ostringstream oss;
-	oss << std::hex << std::uppercase << std::setfill('0');
-	for (size_t i = 0; i < len; ++i) {
-		oss << std::setw(2) << (unsigned int)(buf[i]);
-	}
-	return oss.str();
 }
 
 //网关服[S]端 <- 客户端[C]端，websocket

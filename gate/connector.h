@@ -78,8 +78,8 @@ public:
 	{
 		messageCallback_ = cb;
 	}
-	//create
-	void create(
+	//add
+	void add(
 		std::string const& name,
 		const muduo::net::InetAddress& serverAddr);
 	//remove
@@ -97,7 +97,7 @@ protected:
 		const muduo::net::TcpConnectionPtr& conn,
 		muduo::net::Buffer* buf, muduo::Timestamp receiveTime);
 
-	void createInLoop(
+	void addInLoop(
 		std::string const& name,
 		const muduo::net::InetAddress& serverAddr);
 

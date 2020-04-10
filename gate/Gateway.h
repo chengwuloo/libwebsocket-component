@@ -350,7 +350,13 @@ private:
 	STD::Random randomHall_;
 private:
 	void ZookeeperConnectedHandler();
+	
 	void GetHallChildrenWatcherHandler(
+		int type, int state,
+		const std::shared_ptr<ZookeeperClient>& zkClientPtr,
+		const std::string& path, void* context);
+	
+	void GetGameChildrenWatcherHandler(
 		int type, int state,
 		const std::shared_ptr<ZookeeperClient>& zkClientPtr,
 		const std::string& path, void* context);

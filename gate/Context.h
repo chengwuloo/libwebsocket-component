@@ -36,18 +36,17 @@
 //@@ ContextConnector
 struct ContextConnector {
 	
-	//assign
-	void assign(std::vector<std::string> const& ips);
-	
-	//processIps
-	void processIps(std::vector<std::string> const& ips);
-	
-	//connect
-	void connect(std::string const& ip);
-	
-	//connectAll
-	void connectAll();
+	//add
+	void add(std::vector<std::string> const& ips);
 
+	//process
+	void process(std::vector<std::string> const& ips);
+
+private:
+	//add
+	void add(std::string const& ip);
+
+public:
 	Connector* connector_;
 	std::vector<std::string> ips_;
 	mutable boost::shared_mutex mutex_;
