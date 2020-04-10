@@ -1925,12 +1925,13 @@ void Gateway::asyncClientHandler(
 					{
 						Entry::Context* entryContext = boost::any_cast<Entry::Context>(entry->getMutableContext());
 						assert(entryContext);
-						
+						//userid
 						int64_t userId = entryContext->getUserId();
-						
+						//session
 						std::string const& session = entryContext->getSession();
+						//aeskey
 						std::string const& aesKey = entryContext->getAesKey();
-						
+						//客户端ipaddr
 						uint32_t clientip = entryContext->getIpaddr();
 
 						ClientConn const& clientConn = entryContext->getClientConn(servTyE::kHallTy);
@@ -1942,7 +1943,7 @@ void Gateway::asyncClientHandler(
 						memset(&pre_header, 0, packet::kPrevHeaderLen);
 						pre_header.len = len;
 						pre_header.userID = userId;
-						pre_header.ipaddr = clientip;
+						pre_header.ipaddr = clientip;//客户端ipaddr
 						memcpy(pre_header.session, session.c_str(), sizeof(pre_header.session));
 						memcpy(pre_header.aesKey, aesKey.c_str(), min(sizeof(pre_header.aesKey), aesKey.size()));
 #if 0
@@ -1969,14 +1970,58 @@ void Gateway::asyncClientHandler(
 					}
 					break;
 				}
-				case Game::Common::MAINID::MAIN_MESSAGE_CLIENT_TO_GAME_SERVER: {
-					//游戏服(GameS)
-					TraceMessageID(header->mainID, header->subID);
-					break;
-				}
+				case Game::Common::MAINID::MAIN_MESSAGE_CLIENT_TO_GAME_SERVER:
 				case Game::Common::MAINID::MAIN_MESSAGE_CLIENT_TO_GAME_LOGIC: {
+					//游戏服(GameS)
 					//逻辑服(LogicS，逻辑子游戏libGame_xxx.so)
 					TraceMessageID(header->mainID, header->subID);
+					{
+						Entry::Context* entryContext = boost::any_cast<Entry::Context>(entry->getMutableContext());
+						assert(entryContext);
+						//userid
+						int64_t userId = entryContext->getUserId();
+						//session
+						std::string const& session = entryContext->getSession();
+						//aeskey
+						std::string const& aesKey = entryContext->getAesKey();
+						//客户端ipaddr
+						uint32_t clientip = entryContext->getIpaddr();
+
+						ClientConn const& clientConn = entryContext->getClientConn(servTyE::kHallTy);
+						muduo::net::TcpConnectionPtr hallConn(clientConn.second.lock());
+						//
+						assert(header->len == buf->readableBytes());
+						uint16_t len = packet::kPrevHeaderLen + header->len;
+						packet::internal_prev_header_t pre_header = { 0 };
+						memset(&pre_header, 0, packet::kPrevHeaderLen);
+						pre_header.len = len;
+						pre_header.userID = userId;
+						pre_header.ipaddr = clientip;//客户端ipaddr
+						memcpy(pre_header.session, session.c_str(), sizeof(pre_header.session));
+						memcpy(pre_header.aesKey, aesKey.c_str(), min(sizeof(pre_header.aesKey), aesKey.size()));
+#if 0
+						//////////////////////////////////////////////////////////////////////////
+						//玩家登陆网关服信息
+						//使用hash	h.usr:proxy[1001] = session|ip:port:port:pid<弃用>
+						//使用set	s.uid:1001:proxy = session|ip:port:port:pid<使用>
+						//网关服ID格式：session|ip:port:port:pid
+						//第一个ip:port是网关服监听客户端的标识
+						//第二个ip:port是网关服监听订单服的标识
+						//pid标识网关服进程id
+						//////////////////////////////////////////////////////////////////////////
+						//网关服servid session|ip:port:port:pid
+						std::string const& svrid = nodeValue_;
+						assert(svrid.length() <= sizeof(pre_header.servID));
+						memcpy(pre_header.servID, svrid.c_str(), std::min(sizeof(pre_header.servID), svrid.length()));
+#endif
+						//CRC校验位 header->len = packet::kHeaderLen + len
+						packet::setCheckSum(&pre_header);
+						BufferPtr buffer(new muduo::net::Buffer(len));
+						buffer->append((const char*)&pre_header, packet::kPrevHeaderLen);
+						buffer->append(buf->peek(), header->len);
+						//发送游戏消息
+						sendGameMessage(weakEntry, buffer, userId);
+					}
 					break;
 				}
 				default: {
@@ -1993,32 +2038,83 @@ void Gateway::asyncClientHandler(
 	numTotalBadReq_.incrementAndGet();
 }
 
-//网关服[S]端 <- 客户端[C]端，websocket
-BufferPtr Gateway::packClientShutdownMsg(int64_t userid, int status) {
-	::Game::Common::ProxyNotifyShutDownUserClientMessage rsp;
-	rsp.mutable_header()->set_sign(PROTO_BUF_SIGN);
-	rsp.set_userid(userid);
-	rsp.set_status(status);
-	size_t len = rsp.ByteSizeLong();
+BufferPtr Gateway::packMessage(int mainID, int subID, ::google::protobuf::Message* msg) {
+	assert(msg);
+	size_t len = msg->ByteSizeLong();
 	BufferPtr buffer(new muduo::net::Buffer(packet::kHeaderLen + len));
 	//buffer[packet::kHeaderLen]
-	rsp.SerializeToArray(buffer->beginWrite() + packet::kHeaderLen, len);
-	//buffer[0]
-	packet::header_t* header = (packet::header_t*)buffer->beginWrite();
-	header->len = packet::kHeaderLen + len;
-	header->ver = 1;
-	header->sign = HEADER_SIGN;
-	header->mainID = ::Game::Common::MAIN_MESSAGE_CLIENT_TO_PROXY;
-	header->subID = ::Game::Common::PROXY_NOTIFY_SHUTDOWN_USER_CLIENT_MESSAGE_NOTIFY;
-	header->enctype = packet::enctypeE::PUBENC_PROTOBUF_NONE;
-	header->reserved = 0;
-	header->reqID = 0;
-	header->realsize = len;
-	//CRC校验位 header->len = packet::kHeaderLen + len
-	header->crc = packet::getCheckSum((uint8_t const*)&header->ver, header->len - 4);
-	buffer->hasWritten(packet::kHeaderLen + len);
-	TraceMessageID(header->mainID, header->subID);
+	if (msg->SerializeToArray(buffer->beginWrite() + packet::kHeaderLen, len)) {
+		//buffer[0]
+		packet::header_t* header = (packet::header_t*)buffer->beginWrite();
+		header->len = packet::kHeaderLen + len;
+		header->ver = 1;
+		header->sign = HEADER_SIGN;
+		header->mainID = mainID;
+		header->subID = subID;
+		header->enctype = packet::enctypeE::PUBENC_PROTOBUF_NONE;
+		header->reserved = 0;
+		header->reqID = 0;
+		header->realsize = len;
+		//CRC校验位 header->len = packet::kHeaderLen + len
+		//header.len uint16_t
+		//header.crc uint16_t
+		//header.ver ~ header.realsize + protobuf
+		header->crc = packet::getCheckSum((uint8_t const*)&header->ver, header->len - 4);
+		buffer->hasWritten(packet::kHeaderLen + len);
+		return buffer;
+	}
+	else {
+		buffer.reset();
+	}
 	return buffer;
+}
+
+//网关服[S]端 <- 客户端[C]端，websocket
+BufferPtr Gateway::packClientShutdownMsg(int64_t userid, int status) {
+
+	::Game::Common::ProxyNotifyShutDownUserClientMessage msg;
+	msg.mutable_header()->set_sign(PROTO_BUF_SIGN);
+	msg.set_userid(userid);
+	msg.set_status(status);
+	
+	BufferPtr buffer = packMessage(
+		::Game::Common::MAIN_MESSAGE_CLIENT_TO_PROXY,
+		::Game::Common::PROXY_NOTIFY_SHUTDOWN_USER_CLIENT_MESSAGE_NOTIFY, &msg);
+	
+	TraceMessageID(::Game::Common::MAIN_MESSAGE_CLIENT_TO_PROXY,
+		::Game::Common::PROXY_NOTIFY_SHUTDOWN_USER_CLIENT_MESSAGE_NOTIFY);
+	
+	return buffer;
+}
+
+BufferPtr Gateway::packNoticeMsg(
+	int32_t agentid, std::string const& title,
+	std::string const& content, int msgtype) {
+	
+	::ProxyServer::Message::NotifyNoticeMessageFromProxyServerMessage msg;
+	msg.mutable_header()->set_sign(PROTO_BUF_SIGN);
+	msg.set_title(title.c_str());
+	msg.set_message(content);
+	msg.add_agentid(agentid);
+	msg.set_msgtype(msgtype);
+	
+	BufferPtr buffer = packMessage(
+		::Game::Common::MAIN_MESSAGE_CLIENT_TO_PROXY,
+		::Game::Common::PROXY_NOTIFY_PUBLIC_NOTICE_MESSAGE_NOTIFY, &msg);
+	
+	TraceMessageID(::Game::Common::MAIN_MESSAGE_CLIENT_TO_PROXY,
+		::Game::Common::PROXY_NOTIFY_PUBLIC_NOTICE_MESSAGE_NOTIFY);
+
+	return buffer;
+}
+
+//网关服[S]端 <- 客户端[C]端，websocket
+void Gateway::broadcastMessage(int mainID, int subID, ::google::protobuf::Message* msg) {
+	BufferPtr buffer = packMessage(mainID, subID, msg);
+	if (buffer) {
+		TraceMessageID(mainID, subID);
+		entities_.broadcast(buffer);
+	}
 }
 
 //网关服[S]端 <- 客户端[C]端，websocket

@@ -27,6 +27,8 @@
 #include "connector.h"
 #include "EntryPtr.h"
 
+typedef std::shared_ptr<muduo::net::Buffer> BufferPtr;
+
 namespace STR {
 
 	//@@ map[session] = entry
@@ -52,8 +54,24 @@ namespace STR {
 			}
 			return weakEntry;
 		}
-		//removeSessInfo
-		inline void removeSessInfo(std::string const& session) {
+		//broadcast
+		inline void broadcast(BufferPtr const buf) {
+			READ_LOCK(mutex_);
+			for (EntryMap::const_iterator it = players_.begin();
+				it != players_.end(); ++it) {
+				EntryPtr entry(it->second.lock());
+				if (likely(entry)) {
+					muduo::net::TcpConnectionPtr conn(entry->getWeakConnPtr().lock());
+					if (conn) {
+						muduo::net::websocket::Server::send(
+							conn,
+							buf->peek(), buf->readableBytes());
+					}
+				}
+			}
+		}
+		//remove
+		inline void remove(std::string const& session) {
 			WRITE_LOCK(mutex_);
 #if 1
 			players_.erase(session);
@@ -94,6 +112,22 @@ namespace INT {
 				}
 			}
 			return weakEntry;
+		}
+		//broadcast
+		inline void broadcast(BufferPtr const buf) {
+			READ_LOCK(mutex_);
+			for (EntryMap::const_iterator it = players_.begin();
+				it != players_.end(); ++it) {
+				EntryPtr entry(it->second.lock());
+				if (likely(entry)) {
+					muduo::net::TcpConnectionPtr conn(entry->getWeakConnPtr().lock());
+					if (conn) {
+						muduo::net::websocket::Server::send(
+							conn,
+							buf->peek(), buf->readableBytes());
+					}
+				}
+			}
 		}
 		//remove
 		inline void remove(int64_t userid) {

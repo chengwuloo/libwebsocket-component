@@ -64,6 +64,8 @@
 #include "public/MongoDB/MongoDBClient.h"
 #include "public/traceMsg/traceMsg.h"
 
+#include <google/protobuf/message.h>
+
 //#define NDEBUG
 
 //@@ ServiceStateE 服务状态
@@ -210,8 +212,17 @@ private:
 		BufferPtr& buf,
 		muduo::Timestamp receiveTime);
 
+	static BufferPtr packMessage(int mainID, int subID, ::google::protobuf::Message* msg);
+
 	static BufferPtr packClientShutdownMsg(int64_t userid, int status = 0);
 
+	static BufferPtr packNoticeMsg(
+		int32_t agentid, std::string const& title,
+		std::string const& content, int msgtype);
+
+	void broadcastMessage(int mainID, int subID, ::google::protobuf::Message* msg);
+
+	
 	//刷新客户端访问IP黑名单信息
 	//1.web后台更新黑名单通知刷新
 	//2.游戏启动刷新一次
