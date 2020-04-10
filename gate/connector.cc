@@ -108,6 +108,16 @@ void Connector::check(std::string const& name, bool exist) {
 		std::bind(&Connector::checkInLoop, this, name, exist));
 }
 
+//get
+void Connector::get(std::string const& name, ClientConn* client) {
+	assert(client);
+	bool bok = false;
+	loop_->runInLoop(
+		std::bind(&Connector::getInLoop, this, name, client, &bok));
+	//spin lock until getAllInLoop return
+	while (!bok);
+}
+
 //getAll
 void Connector::getAll(ClientConnList* clients) {
 	assert(clients && clients->size() == 0);
@@ -116,6 +126,23 @@ void Connector::getAll(ClientConnList* clients) {
 		std::bind(&Connector::getAllInLoop, this, clients, &bok));
 	//spin lock until getAllInLoop return
 	while (!bok);
+}
+
+void Connector::getInLoop(std::string const& name, ClientConn* client, bool* bok) {
+
+	loop_->assertInLoopThread();
+
+	TcpClientMap::const_iterator it = clients_.find(name);
+	if (it != clients_.end()) {
+		if (it->second->connection() &&
+			it->second->connection()->connected()) {
+			client->first = it->first;
+			client->second = it->second->connection();
+		}
+		else {
+		}
+	}
+	*bok = true;
 }
 
 void Connector::getAllInLoop(ClientConnList* clients, bool* bok) {

@@ -516,12 +516,16 @@ void Gateway::asyncInnHandler(
 		assert(entryContext);
 		muduo::net::TcpConnectionPtr peer(entry->getWeakConnPtr().lock());
 		if (likely(peer)) {
+			
 			//命令消息头header_t
 			packet::header_t /*const*/* header = (packet::header_t /*const*/*)(buf->peek() + packet::kPrevHeaderLen);
-			//校验CRC
-			uint16_t crc = packet::getCheckSum((uint8_t const*)header->ver, packet::kHeaderLen - 4);
+			
+			//校验CRC header->len = packet::kHeaderLen + len
+			uint16_t crc = packet::getCheckSum((uint8_t const*)&header->ver, header->len - 4);
 			assert(header->crc == crc);
+			
 			TraceMessageID(header->mainID, header->subID);
+			
 			if (header->mainID == ::Game::Common::MAINID::MAIN_MESSAGE_CLIENT_TO_HALL &&
 				pre_header->ok == 0) {
 
@@ -1334,16 +1338,21 @@ void Gateway::asyncHallHandler(
 		assert(entryContext);
 		muduo::net::TcpConnectionPtr peer(entry->getWeakConnPtr().lock());
 		if (likely(peer)) {
+			
 			//命令消息头header_t
 			packet::header_t /*const*/* header = (packet::header_t /*const*/*)(buf->peek() + packet::kPrevHeaderLen);
+			
 			//校验CRC header->len = packet::kHeaderLen + len
 			uint16_t crc = packet::getCheckSum((uint8_t const*)&header->ver, header->len - 4);
 			assert(header->crc == crc);
+			
 			TraceMessageID(header->mainID, header->subID);
+			
 			if (
 				header->mainID == ::Game::Common::MAINID::MAIN_MESSAGE_CLIENT_TO_HALL &&
 				header->subID == ::Game::Common::MESSAGE_CLIENT_TO_HALL_SUBID::CLIENT_TO_HALL_LOGIN_MESSAGE_RES &&
 				pre_header->ok == 1) {
+				//登陆成功
 				//////////////////////////////////////////////////////////////////////////
 				//顶号处理 userid->session->entry
 				//////////////////////////////////////////////////////////////////////////
@@ -1359,7 +1368,7 @@ void Gateway::asyncHallHandler(
 						muduo::net::TcpConnectionPtr peer_(entry->getWeakConnPtr().lock());
 						if (peer_) {
 							BufferPtr buffer = packClientShutdownMsg(userId, 0);
-							peer_->send(get_pointer(buffer));
+							server_.send(peer_, buffer->peek(), buffer->readableBytes());
 #if 0
 							peer_->getLoop()->runAfter(0.2f, [&]() {
 								entry_.reset();
@@ -1372,8 +1381,6 @@ void Gateway::asyncHallHandler(
 						}
 					}
 				}
-				//登陆成功，需要处理异地登陆/断线重连/顶号，清除旧的conn
-	
 				//指定userid
 				entryContext->setUserId(pre_header->userID);
 			}
@@ -1383,19 +1390,18 @@ void Gateway::asyncHallHandler(
 				pre_header->ok == 1) {
 				//校验userid
 				assert(userId == entryContext->getUserId());
-				//std::string ip;
-				//if (REDISCLIENT.GetUserOnlineInfoIP(userId, ip))
-				{
-					//muduo::MutexLockGuard lock(m_gameIPServerMapMutex);
-					//if (m_gameIPServerMap.count(ip))
-					{
-						//LOG_DEBUG << " >>> bind game server succeeded, userId:" << userId << ", ip:" << ip;
-						//shared_ptr<TcpClient> gameTcpClientPtr = m_gameIPServerMap[ip];
-						//weak_ptr<TcpClient>   gameTcpClient(gameTcpClientPtr);
-						//if (gameTcpClientPtr)
-						//{
-						///	//entry->setGameTcpClient(gameTcpClient);
-						//}
+				std::string gameIp;
+				if (REDISCLIENT.GetUserOnlineInfoIP(userId, gameIp)) {
+					//分配用户游戏服
+					ClientConn client;
+					//异步获取指定游戏服连接
+					iptable_[servTyE::kGameTy].connector_->get(gameIp, &client);
+					muduo::net::TcpConnectionPtr gameConn(client.second.lock());
+					if (gameConn) {
+						entryContext->setClientConn(servTyE::kGameTy, client);
+					}
+					else {
+
 					}
 				}
 			}
@@ -1583,9 +1589,11 @@ void Gateway::asyncGameHandler(
 
 			//命令消息头header_t
 			packet::header_t /*const*/* header = (packet::header_t /*const*/*)(buf->peek() + packet::kPrevHeaderLen);
-			//校验CRC
-			//uint16_t crc = packet::getCheckSum((uint8_t const*)header->ver, packet::kHeaderLen - 4);
-			//assert(header->crc == crc);
+			
+			//校验CRC header->len = packet::kHeaderLen + len
+			uint16_t crc = packet::getCheckSum((uint8_t const*)&header->ver, header->len - 4);
+			assert(header->crc == crc);
+			
 			TraceMessageID(header->mainID, header->subID);
 			
 			server_.send(peer, (uint8_t const*)buf->peek() + packet::kPrevHeaderLen, header->len);
@@ -1855,19 +1863,18 @@ void Gateway::asyncClientHandler(
 	}
 	//data, dataLen
 	uint8_t const* data = (uint8_t const*)buf->peek();
-	size_t dataLen = buf->readableBytes();
+	size_t len = buf->readableBytes();
 	//packet::header_t
-	packet::header_t* commandHeader = (packet::header_t*)(&data[0]);
-	//CRC校验位
-	//command_header.len uint16_t
-	//command_header.crc uint16_t
-	//command_header.ver ~ command_header.realSize + protobuf
-	uint16_t crc = packet::getCheckSum(&data[4], dataLen - 4);
-
-	if (commandHeader->len == dataLen &&
-		commandHeader->crc == crc &&
-		commandHeader->ver == 1 &&
-		commandHeader->sign == HEADER_SIGN) {
+	packet::header_t* header = (packet::header_t*)(&data[0]);
+	//校验CRC header->len = packet::kHeaderLen + len
+	//header.len uint16_t
+	//header.crc uint16_t
+	//header.ver ~ header.realsize + protobuf
+	uint16_t crc = packet::getCheckSum(&data[4], /*header->len*/len - 4);
+	if (header->len == len &&
+		header->crc == crc &&
+		header->ver == 1 &&
+		header->sign == HEADER_SIGN) {
 		//锁定conn操作
 		//刚开始还在想，会不会出现超时conn被异步关闭释放掉，而业务逻辑又被处理了，却发送不了的尴尬情况，
 		//假如因为超时entry弹出bucket，引用计数减1，处理业务之前这里使用shared_ptr，持有entry引用计数(加1)，
@@ -1879,14 +1886,14 @@ void Gateway::asyncClientHandler(
 			muduo::net::TcpConnectionPtr conn(entry->getWeakConnPtr().lock());
 			if (conn) {
  				//mainID
- 				switch (commandHeader->mainID) {
+ 				switch (header->mainID) {
  				case Game::Common::MAINID::MAIN_MESSAGE_CLIENT_TO_PROXY: {
  					//网关服(Gateway)
- 					switch (commandHeader->enctype) {
+ 					switch (header->enctype) {
 					case packet::PUBENC_PROTOBUF_NONE: {
 						//NONE
-						TraceMessageID(commandHeader->mainID, commandHeader->subID);
-						int cmd = packet::enword(commandHeader->mainID, commandHeader->subID);
+						TraceMessageID(header->mainID, header->subID);
+						int cmd = packet::enword(header->mainID, header->subID);
 						CmdCallbacks::const_iterator it = handlers_.find(cmd);
 						if (it != handlers_.end()) {
 							CmdCallback const& handler = it->second;
@@ -1896,12 +1903,12 @@ void Gateway::asyncClientHandler(
 					}
 					case packet::PUBENC_PROTOBUF_RSA: {
 						//RSA
-						TraceMessageID(commandHeader->mainID, commandHeader->subID);
+						TraceMessageID(header->mainID, header->subID);
 						break;
 					}
  					case packet::PUBENC_PROTOBUF_AES: {
  						//AES
-						TraceMessageID(commandHeader->mainID, commandHeader->subID);
+						TraceMessageID(header->mainID, header->subID);
  						break;
  					}
 					default: {
@@ -1914,7 +1921,7 @@ void Gateway::asyncClientHandler(
  				}
 				case Game::Common::MAINID::MAIN_MESSAGE_CLIENT_TO_HALL: {
 					//大厅服(HallS)
-					TraceMessageID(commandHeader->mainID, commandHeader->subID);
+					TraceMessageID(header->mainID, header->subID);
 					{
 						Entry::Context* entryContext = boost::any_cast<Entry::Context>(entry->getMutableContext());
 						assert(entryContext);
@@ -1929,8 +1936,8 @@ void Gateway::asyncClientHandler(
 						ClientConn const& clientConn = entryContext->getClientConn(servTyE::kHallTy);
 						muduo::net::TcpConnectionPtr hallConn(clientConn.second.lock());
 						//
-						assert(commandHeader->len == buf->readableBytes());
-						uint16_t len = packet::kPrevHeaderLen + commandHeader->len;
+						assert(header->len == buf->readableBytes());
+						uint16_t len = packet::kPrevHeaderLen + header->len;
 						packet::internal_prev_header_t pre_header = { 0 };
 						memset(&pre_header, 0, packet::kPrevHeaderLen);
 						pre_header.len = len;
@@ -1956,7 +1963,7 @@ void Gateway::asyncClientHandler(
 						packet::setCheckSum(&pre_header);
 						BufferPtr buffer(new muduo::net::Buffer(len));
 						buffer->append((const char*)&pre_header, packet::kPrevHeaderLen);
-						buffer->append(buf->peek(), commandHeader->len);
+						buffer->append(buf->peek(), header->len);
 						//发送大厅消息
 						sendHallMessage(weakEntry, buffer, userId);
 					}
@@ -1964,12 +1971,12 @@ void Gateway::asyncClientHandler(
 				}
 				case Game::Common::MAINID::MAIN_MESSAGE_CLIENT_TO_GAME_SERVER: {
 					//游戏服(GameS)
-					TraceMessageID(commandHeader->mainID, commandHeader->subID);
+					TraceMessageID(header->mainID, header->subID);
 					break;
 				}
 				case Game::Common::MAINID::MAIN_MESSAGE_CLIENT_TO_GAME_LOGIC: {
 					//逻辑服(LogicS，逻辑子游戏libGame_xxx.so)
-					TraceMessageID(commandHeader->mainID, commandHeader->subID);
+					TraceMessageID(header->mainID, header->subID);
 					break;
 				}
 				default: {
@@ -2007,7 +2014,7 @@ BufferPtr Gateway::packClientShutdownMsg(int64_t userid, int status) {
 	header->reserved = 0;
 	header->reqID = 0;
 	header->realsize = len;
-	//CRC header->len = packet::kHeaderLen + len
+	//CRC校验位 header->len = packet::kHeaderLen + len
 	header->crc = packet::getCheckSum((uint8_t const*)&header->ver, header->len - 4);
 	buffer->hasWritten(packet::kHeaderLen + len);
 	TraceMessageID(header->mainID, header->subID);

@@ -86,6 +86,8 @@ public:
 	void remove(std::string const& name, bool lazy = false);
 	//check
 	void check(std::string const& name, bool exist);
+	//get
+	void get(std::string const& name, ClientConn* client);
 	//getAll
 	void getAll(ClientConnList* clients);
 	//closeAll
@@ -107,6 +109,7 @@ protected:
 	void connectionCallback(const muduo::net::TcpConnectionPtr& conn);
 
 	void checkInLoop(std::string const& name, bool exist);
+	void getInLoop(std::string const& name, ClientConn* client, bool* bok);
 	void getAllInLoop(ClientConnList* clients, bool* bok);
 	void removeInLoop(std::string const& name, bool lazy);
 	void cleanupInLoop();
