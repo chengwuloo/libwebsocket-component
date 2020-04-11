@@ -32,23 +32,28 @@
 #include <arpa/inet.h>
 
 #include "connector.h"
+#include "EntryPtr.h"
 
 //@@ ContextConnector
 struct ContextConnector {
 	
 	//add
-	void add(std::vector<std::string> const& ips);
+	void add(std::vector<std::string> const& names);
 
 	//process
-	void process(std::vector<std::string> const& ips);
+	void process(std::vector<std::string> const& names);
 
 private:
 	//add
-	void add(std::string const& ip);
+	void add(std::string const& name);
+	
+	//remove
+	void remove(std::string const& name);
 
 public:
+	servTyE ty_;
 	Connector* connector_;
-	std::vector<std::string> ips_;
+	std::vector<std::string> names_;
 	mutable boost::shared_mutex mutex_;
 };
 

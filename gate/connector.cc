@@ -171,6 +171,7 @@ void Connector::addInLoop(
 	if (it == clients_.end()) {
 		//name新节点
 		TcpClientPtr client(new TcpClient(loop_, serverAddr, name, this));
+		LOG_ERROR << __FUNCTION__ << " 添加节点 name = " << client->name();
 		//192.168.2.93:20000
 		clients_[client->name()] = client;
 		client->enableRetry();
@@ -184,6 +185,7 @@ void Connector::addInLoop(
 				!client->connection()->connected()) {
 				//连接断开则重连
 				if (!client->retry()) {
+					LOG_ERROR << __FUNCTION__ << " 重连节点 name = " << client->name();
 					client->reconnect();
 				}
 			}
@@ -195,6 +197,7 @@ void Connector::addInLoop(
 		}
 		else {
 			it->second.reset(new TcpClient(loop_, serverAddr, name, this));
+			LOG_ERROR << __FUNCTION__ << " 重建节点 name = " << name;
 			it->second->enableRetry();
 			it->second->connect();
 		}
@@ -289,10 +292,11 @@ void Connector::removeConnection(const muduo::net::TcpConnectionPtr& conn, const
 		if (1 == removes_.erase(name)) {
 			TcpClientMap::const_iterator it = clients_.find(name);
 			assert(it != clients_.end());
-			LOG_ERROR << __FUNCTION__ << " 清理节点 = " << it->first;
-			it->second->stop();
+			//it->second->stop();
+			loop_->queueInLoop(
+				std::bind(&Connector::removeInLoop, this, name, true));
 			//it->second.reset();
-			clients_.erase(it);
+			//clients_.erase(it);
 		}
 		else {
 			TcpClientMap::iterator it = clients_.find(name);
@@ -326,7 +330,7 @@ void Connector::removeInLoop(std::string const& name, bool lazy) {
 		//连接已经无效直接删除
 		if (!it->second->connection() ||
 			!it->second->connection()->connected()) {
-			LOG_ERROR << __FUNCTION__ << " 清理节点 = " << it->first;
+			LOG_ERROR << __FUNCTION__ << " 移除节点 name = " << it->first;
 			it->second->stop();
 			clients_.erase(it);
 		}

@@ -37,9 +37,10 @@ namespace net
 namespace detail
 {
 
-void removeConnection(EventLoop* loop, const TcpConnectionPtr& conn)
+void removeConnection(const TcpConnectionPtr& conn)
 {
-  loop->queueInLoop(std::bind(&TcpConnection::connectDestroyed, conn));
+	EventLoop* ioLoop = conn->getLoop();
+    ioLoop->queueInLoop(std::bind(&TcpConnection::connectDestroyed, conn));
 }
 
 void removeConnector(const ConnectorPtr& connector)
@@ -57,11 +58,16 @@ void removeAllInLoop(EventLoop* loop_, TcpConnectionPtr connection_, ConnectorPt
 		conn = connection_;
 	}
 	if (conn) {
-		assert(loop_ == conn->getLoop());
+		//assert(loop_ == conn->getLoop());
 		// FIXME: not 100% safe, if we are in different thread
-		CloseCallback cb = std::bind(&detail::removeConnection, loop_, _1);
-		loop_->runInLoop(
-			std::bind(&TcpConnection::setCloseCallback, conn, cb));
+		//CloseCallback cb = std::bind(&detail::removeConnection, loop_, _1);
+		//loop_->runInLoop(
+		//	std::bind(&TcpConnection::setCloseCallback, conn, cb));
+
+        //maybe that connector_->restart after TcpClient::dtor
+        //connector_->stop();
+		conn->setCloseCallback(
+			std::bind(&detail::removeConnection, _1));
 		if (unique)
 		{
 			conn->forceClose();
@@ -202,8 +208,9 @@ void TcpClient::newConnection(int sockfd)
 
 void TcpClient::removeConnection(const TcpConnectionPtr& conn)
 {
-	// FIXME: unsafe
-	loop_->runInLoop(std::bind(&TcpClient::removeConnectionInLoop, this, conn));
+  conn->getLoop()->assertInLoopThread();
+  // FIXME: unsafe
+  loop_->runInLoop(std::bind(&TcpClient::removeConnectionInLoop, this, conn));
 }
 
 void TcpClient::removeConnectionInLoop(const TcpConnectionPtr& conn)
@@ -221,8 +228,10 @@ void TcpClient::removeConnectionInLoop(const TcpConnectionPtr& conn)
       std::bind(&TcpConnection::connectDestroyed, conn));
   if (retry_ && connect_)
   {
-    //LOG_INFO << "TcpClient::connect[" << name_ << "] - Reconnecting to "
-    //         << connector_->serverAddress().toIpPort();
+    LOG_WARN << "TcpClient::connect[" << name_ << "] - Reconnecting to "
+             << connector_->serverAddress().toIpPort();
+
+    //maybe that connector_->restart after TcpClient::dtor
     connector_->restart();
   }
 }

@@ -88,14 +88,16 @@ Gateway::Gateway(muduo::net::EventLoop* loop,
 		std::bind(&Gateway::onHallMessage, this,
 			std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
 	iptable_[servTyE::kHallTy].connector_ = &hallConnector_;
+	iptable_[servTyE::kHallTy].ty_ = servTyE::kHallTy;
 
 	//网关服[C]端 -> 游戏服[S]端，内部交互
 	gameConnector_.setConnectionCallback(
 		std::bind(&Gateway::onGameConnection, this, std::placeholders::_1));
-	hallConnector_.setMessageCallback(
+	gameConnector_.setMessageCallback(
 		std::bind(&Gateway::onGameMessage, this,
 			std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
 	iptable_[servTyE::kGameTy].connector_ = &gameConnector_;
+	iptable_[servTyE::kGameTy].ty_ = servTyE::kGameTy;
 
 	//添加OpenSSL认证支持 httpServer_&server_ 共享证书
 	muduo::net::ssl::SSL_CTX_Init(
@@ -236,12 +238,12 @@ void Gateway::ZookeeperConnectedHandler() {
 	}
 	{
 		//大厅服 ip:port
-		std::vector<std::string> ipaddrs;
+		std::vector<std::string> names;
 		
 		//看门狗zk监控节点
 		if (ZOK == zkclient_->getClildren(
 			"/GAME/HallServers",
-			ipaddrs,
+			names,
 			std::bind(
 				&Gateway::GetHallChildrenWatcherHandler, this,
 				std::placeholders::_1, std::placeholders::_2,
@@ -249,21 +251,17 @@ void Gateway::ZookeeperConnectedHandler() {
 				std::placeholders::_5),
 			this)) {
 			
-			int i = 0;
-			for (std::string const& ip : ipaddrs) {
-				LOG_ERROR << __FUNCTION__ << " connect to hall[" << i++ << "][" << ip << "]";
-			}
-			iptable_[servTyE::kHallTy].add(ipaddrs);
+			iptable_[servTyE::kHallTy].add(names);
 		}
 	}
 	{
 		//游戏服 ip:port
-		std::vector<std::string> ipaddrs;
+		std::vector<std::string> names;
 
 		//看门狗zk监控节点
 		if (ZOK == zkclient_->getClildren(
 			"/GAME/GameServers",
-			ipaddrs,
+			names,
 			std::bind(
 				&Gateway::GetGameChildrenWatcherHandler, this,
 				std::placeholders::_1, std::placeholders::_2,
@@ -271,11 +269,7 @@ void Gateway::ZookeeperConnectedHandler() {
 				std::placeholders::_5),
 			this)) {
 
-			int i = 0;
-			for (std::string const& ip : ipaddrs) {
-				LOG_ERROR << __FUNCTION__ << " connect to game[" << i++ << "][" << ip << "]";
-			}
-			iptable_[servTyE::kGameTy].add(ipaddrs);
+			iptable_[servTyE::kGameTy].add(names);
 		}
 	}
 }
@@ -284,13 +278,14 @@ void Gateway::GetHallChildrenWatcherHandler(
 	int type, int state, const std::shared_ptr<ZookeeperClient>& zkClientPtr,
 	const std::string& path, void* context)
 {
+	LOG_ERROR << __FUNCTION__;
 	//大厅服 ip:port
-	std::vector<std::string> ipaddrs;
+	std::vector<std::string> names;
 	
 	//看门狗zk监控节点
 	if (ZOK == zkclient_->getClildren(
 		"/GAME/HallServers",
-		ipaddrs,
+		names,
 		std::bind(
 			&Gateway::GetHallChildrenWatcherHandler, this,
 			std::placeholders::_1, std::placeholders::_2,
@@ -298,11 +293,7 @@ void Gateway::GetHallChildrenWatcherHandler(
 			std::placeholders::_5),
 		this)) {
 
-		int i = 0;
-		for (std::string const& ip : ipaddrs) {
-			LOG_ERROR << __FUNCTION__ << " connect to hall[" << i++ << "][" << ip << "]";
-		}
-		iptable_[servTyE::kHallTy].process(ipaddrs);
+		iptable_[servTyE::kHallTy].process(names);
 	}
 }
 
@@ -310,13 +301,14 @@ void Gateway::GetGameChildrenWatcherHandler(
 	int type, int state, const std::shared_ptr<ZookeeperClient>& zkClientPtr,
 	const std::string& path, void* context)
 {
-	//大厅服 ip:port
-	std::vector<std::string> ipaddrs;
+	LOG_ERROR << __FUNCTION__;
+	//游戏服 roomid:ip:port
+	std::vector<std::string> names;
 
 	//看门狗zk监控节点
 	if (ZOK == zkclient_->getClildren(
 		"/GAME/GameServers",
-		ipaddrs,
+		names,
 		std::bind(
 			&Gateway::GetGameChildrenWatcherHandler, this,
 			std::placeholders::_1, std::placeholders::_2,
@@ -324,11 +316,7 @@ void Gateway::GetGameChildrenWatcherHandler(
 			std::placeholders::_5),
 		this)) {
 
-		int i = 0;
-		for (std::string const& ip : ipaddrs) {
-			LOG_ERROR << __FUNCTION__ << " connect to game[" << i++ << "][" << ip << "]";
-		}
-		iptable_[servTyE::kGameTy].process(ipaddrs);
+		iptable_[servTyE::kGameTy].process(names);
 	}
 }
 

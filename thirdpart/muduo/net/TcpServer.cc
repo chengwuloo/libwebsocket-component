@@ -118,6 +118,7 @@ void TcpServer::newConnection(int sockfd, const InetAddress& peerAddr)
 
 void TcpServer::removeConnection(const TcpConnectionPtr& conn)
 {
+  conn->getLoop()->assertInLoopThread();
   // FIXME: unsafe
   loop_->runInLoop(std::bind(&TcpServer::removeConnectionInLoop, this, conn));
 }

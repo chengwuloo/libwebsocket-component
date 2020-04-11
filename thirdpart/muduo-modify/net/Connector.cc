@@ -150,6 +150,7 @@ void Connector::connecting(int sockfd)
 
 int Connector::removeAndResetChannel()
 {
+  LOG_WARN << __FUNCTION__;
   channel_->disableAll();
   channel_->remove();
   int sockfd = channel_->fd();

@@ -61,7 +61,7 @@ class Buffer;
 class TcpConnection;
 class InetAddress;
 typedef std::shared_ptr<TcpConnection> TcpConnectionPtr;
-typedef std::weak_ptr<TcpConnection> WeakTcpConnectionPtr;
+typedef std::weak_ptr<TcpConnection> WeakTcpConnectionPtr, TcpConnectionWeakPtr;
 typedef std::function<bool(const InetAddress&)> ConditionCallback;
 typedef std::function<void (const TcpConnectionPtr& conn)> TcpConnectionCallback;
 typedef std::function<void()> TimerCallback;
