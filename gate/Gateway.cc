@@ -1484,7 +1484,7 @@ void Gateway::onUserOfflineHall(WeakEntryPtr const& weakEntry) {
 		//aeskey
 		std::string const& aeskey = entryContext->getAesKey();
 		//packMessage
-		BufferPtr buffer = packMessage(
+		BufferPtr buffer = packet::packMessage(
 			userid,
 			session,
 			aeskey,
@@ -1688,7 +1688,7 @@ void Gateway::onUserOfflineGame(WeakEntryPtr const& weakEntry, bool leave) {
 		//aeskey
 		std::string const& aeskey = entryContext->getAesKey();
 		//packMessage
-		BufferPtr buffer = packMessage(
+		BufferPtr buffer = packet::packMessage(
 			userid,
 			session,
 			aeskey,
@@ -2001,25 +2001,16 @@ void Gateway::asyncClientHandler(
 						assert(entryContext);
 						//userid
 						int64_t userid = entryContext->getUserID();
+						//clientip
+						uint32_t clientip = entryContext->getFromIp();
 						//session
 						std::string const& session = entryContext->getSession();
 						//aeskey
 						std::string const& aeskey = entryContext->getAesKey();
-						//clientip
-						uint32_t clientip = entryContext->getFromIp();
-
 						ClientConn const& clientConn = entryContext->getClientConn(servTyE::kHallTy);
 						muduo::net::TcpConnectionPtr hallConn(clientConn.second.lock());
-						//
-						assert(header->len == buf->readableBytes());
-						uint16_t len = packet::kPrevHeaderLen + header->len;
-						packet::internal_prev_header_t pre_header = { 0 };
-						memset(&pre_header, 0, packet::kPrevHeaderLen);
-						pre_header.len = len;
-						pre_header.userID = userid;
-						pre_header.ipaddr = clientip;
-						memcpy(pre_header.session, session.c_str(), std::min(packet::kSessionSZ, session.length()));
-						memcpy(pre_header.aeskey, aeskey.c_str(), std::min(packet::kAesKeySZ, aeskey.length()));
+						assert(header->len == len);
+						assert(header->len >= packet::kHeaderLen);
 #if 0
 						//////////////////////////////////////////////////////////////////////////
 						//玩家登陆网关服信息
@@ -2031,17 +2022,23 @@ void Gateway::asyncClientHandler(
 						//pid标识网关服进程id
 						//////////////////////////////////////////////////////////////////////////
 						//网关服servid session|ip:port:port:pid
-						std::string const& svrid = nodeValue_;
-						assert(svrid.length() <= sizeof(pre_header.servID));
-						memcpy(pre_header.servID, svrid.c_str(), std::min(sizeof(pre_header.servID), svrid.length()));
+						std::string const& servid = nodeValue_;
 #endif
-						//checksum
-						packet::setCheckSum(&pre_header);
-						BufferPtr buffer(new muduo::net::Buffer(len));
-						buffer->append((const char*)&pre_header, packet::kPrevHeaderLen);
-						buffer->append(buf->peek(), header->len);
-						//发送大厅消息
-						sendHallMessage(weakEntry, buffer, userid);
+						BufferPtr buffer = packet::packMessage(
+							userid,
+							session,
+							aeskey,
+							clientip,
+							0,
+#if 0
+							servid,
+#endif
+							buf->peek(),
+							header->len);
+						if (buffer) {
+							//发送大厅消息
+							sendHallMessage(weakEntry, buffer, userid);
+						}
 					}
 					break;
 				}
@@ -2055,25 +2052,16 @@ void Gateway::asyncClientHandler(
 						assert(entryContext);
 						//userid
 						int64_t userid = entryContext->getUserID();
+						//clientip
+						uint32_t clientip = entryContext->getFromIp();
 						//session
 						std::string const& session = entryContext->getSession();
 						//aeskey
 						std::string const& aeskey = entryContext->getAesKey();
-						//clientip
-						uint32_t clientip = entryContext->getFromIp();
-
 						ClientConn const& clientConn = entryContext->getClientConn(servTyE::kHallTy);
 						muduo::net::TcpConnectionPtr hallConn(clientConn.second.lock());
-						//
-						assert(header->len == buf->readableBytes());
-						uint16_t len = packet::kPrevHeaderLen + header->len;
-						packet::internal_prev_header_t pre_header = { 0 };
-						memset(&pre_header, 0, packet::kPrevHeaderLen);
-						pre_header.len = len;
-						pre_header.userID = userid;
-						pre_header.ipaddr = clientip;
-						memcpy(pre_header.session, session.c_str(), std::min(packet::kSessionSZ, session.length()));
-						memcpy(pre_header.aeskey, aeskey.c_str(), std::min(packet::kAesKeySZ, aeskey.length()));
+						assert(header->len == len);
+						assert(header->len >= packet::kHeaderLen);
 #if 0
 						//////////////////////////////////////////////////////////////////////////
 						//玩家登陆网关服信息
@@ -2085,17 +2073,23 @@ void Gateway::asyncClientHandler(
 						//pid标识网关服进程id
 						//////////////////////////////////////////////////////////////////////////
 						//网关服servid session|ip:port:port:pid
-						std::string const& svrid = nodeValue_;
-						assert(svrid.length() <= sizeof(pre_header.servID));
-						memcpy(pre_header.servID, svrid.c_str(), std::min(sizeof(pre_header.servID), svrid.length()));
+						std::string const& servid = nodeValue_;
 #endif
-						//checksum
-						packet::setCheckSum(&pre_header);
-						BufferPtr buffer(new muduo::net::Buffer(len));
-						buffer->append((const char*)&pre_header, packet::kPrevHeaderLen);
-						buffer->append(buf->peek(), header->len);
-						//发送游戏消息
-						sendGameMessage(weakEntry, buffer, userid);
+						BufferPtr buffer = packet::packMessage(
+							userid,
+							session,
+							aeskey,
+							clientip,
+							0,
+#if 0
+							servid,
+#endif
+							buf->peek(),
+							header->len);
+						if (buffer) {
+							//发送游戏消息
+							sendGameMessage(weakEntry, buffer, userid);
+						}
 					}
 					break;
 				}
@@ -2113,102 +2107,6 @@ void Gateway::asyncClientHandler(
 	numTotalBadReq_.incrementAndGet();
 }
 
-BufferPtr Gateway::packMessage(int mainID, int subID, ::google::protobuf::Message* msg) {
-	//protobuf
-	size_t len = msg ? msg->ByteSizeLong() : 0;
-	//命令消息头header_t + len
-	BufferPtr buffer(new muduo::net::Buffer(packet::kHeaderLen + len));
-	//buffer[packet::kHeaderLen]
-	if (len > 0) {
-		if (!msg->SerializeToArray(buffer->beginWrite() + packet::kHeaderLen, len)) {
-			buffer.reset();
-			return buffer;
-		}
-	}
-	{
-		//命令消息头header_t
-		packet::header_t* header = (packet::header_t*)buffer->beginWrite();
-		header->len = packet::kHeaderLen + len;
-		header->ver = 1;
-		header->sign = HEADER_SIGN;
-		header->mainID = mainID;
-		header->subID = subID;
-		header->enctype = packet::enctypeE::PUBENC_PROTOBUF_NONE;
-		header->reserved = 0;
-		header->reqID = 0;
-		header->realsize = len;
-		//CRC校验位 header->len = packet::kHeaderLen + len
-		//header.len uint16_t
-		//header.crc uint16_t
-		//header.ver ~ header.realsize + protobuf
-		header->crc = packet::getCheckSum((uint8_t const*)&header->ver, header->len - 4);
-		buffer->hasWritten(packet::kHeaderLen + len);
-	}
-	return buffer;
-	
-}
-
-BufferPtr Gateway::packMessage(
-	int64_t userid,
-	std::string const& session,
-	std::string const& aeskey,
-	uint32_t ipaddr,
-	int16_t kicking,
-	int mainID, int subID,
-	::google::protobuf::Message* msg) {
-	//protobuf
-	size_t len = msg ? msg->ByteSizeLong() : 0;
-	//内部消息头internal_prev_header_t + 命令消息头header_t + len
-	BufferPtr buffer(new muduo::net::Buffer(packet::kPrevHeaderLen + packet::kHeaderLen + len));
-	//buffer[packet::kPrevHeaderLen + packet::kHeaderLen]
-	if (len > 0) {
-		if (!msg->SerializeToArray(buffer->beginWrite() + packet::kPrevHeaderLen + packet::kHeaderLen, len)) {
-			buffer.reset();
-			return buffer;
-		}
-	}
-	{
-		//内部消息头internal_prev_header_t
-		packet::internal_prev_header_t* pre_header = (packet::internal_prev_header_t*)buffer->beginWrite();
-		memset(pre_header, 0, packet::kPrevHeaderLen + packet::kHeaderLen);
-		pre_header->len = packet::kPrevHeaderLen + packet::kHeaderLen + len;
-		//kicking
-		pre_header->kicking = kicking;
-		//userid
-		pre_header->userID = userid;
-		//clientip
-		pre_header->ipaddr = ipaddr;
-		//session
-		assert(session.length() <= packet::kSessionSZ);
-		memcpy(pre_header->session, session.c_str(), std::min(packet::kSessionSZ, session.length()));
-		//aeskey
-		assert(aeskey.length() <= packet::kAesKeySZ);
-		memcpy(pre_header->aeskey, aeskey.c_str(), std::min(packet::kAesKeySZ, aeskey.length()));
-		//checksum
-		packet::setCheckSum(pre_header);
-	}
-	{
-		//命令消息头header_t
-		packet::header_t* header = (packet::header_t*)buffer->beginWrite() + packet::kPrevHeaderLen;
-		header->len = packet::kHeaderLen + len;
-		header->ver = 1;
-		header->sign = HEADER_SIGN;
-		header->mainID = mainID;
-		header->subID = subID;
-		header->enctype = packet::enctypeE::PUBENC_PROTOBUF_NONE;
-		header->reserved = 0;
-		header->reqID = 0;
-		header->realsize = len;
-		//CRC校验位 header->len = packet::kHeaderLen + len
-		//header.len uint16_t
-		//header.crc uint16_t
-		//header.ver ~ header.realsize + protobuf
-		header->crc = packet::getCheckSum((uint8_t const*)&header->ver, header->len - 4);
-		buffer->hasWritten(packet::kPrevHeaderLen + packet::kHeaderLen + len);
-	}
-	return buffer;
-}
-
 //网关服[S]端 <- 客户端[C]端，websocket
 BufferPtr Gateway::packClientShutdownMsg(int64_t userid, int status) {
 
@@ -2217,7 +2115,7 @@ BufferPtr Gateway::packClientShutdownMsg(int64_t userid, int status) {
 	msg.set_userid(userid);
 	msg.set_status(status);
 	
-	BufferPtr buffer = packMessage(
+	BufferPtr buffer = packet::packMessage(
 		::Game::Common::MAIN_MESSAGE_CLIENT_TO_PROXY,
 		::Game::Common::PROXY_NOTIFY_SHUTDOWN_USER_CLIENT_MESSAGE_NOTIFY, &msg);
 	
@@ -2238,7 +2136,7 @@ BufferPtr Gateway::packNoticeMsg(
 	msg.add_agentid(agentid);
 	msg.set_msgtype(msgtype);
 	
-	BufferPtr buffer = packMessage(
+	BufferPtr buffer = packet::packMessage(
 		::Game::Common::MAIN_MESSAGE_CLIENT_TO_PROXY,
 		::Game::Common::PROXY_NOTIFY_PUBLIC_NOTICE_MESSAGE_NOTIFY, &msg);
 	
@@ -2250,7 +2148,7 @@ BufferPtr Gateway::packNoticeMsg(
 
 //网关服[S]端 <- 客户端[C]端，websocket
 void Gateway::broadcastMessage(int mainID, int subID, ::google::protobuf::Message* msg) {
-	BufferPtr buffer = packMessage(mainID, subID, msg);
+	BufferPtr buffer = packet::packMessage(mainID, subID, msg);
 	if (buffer) {
 		TraceMessageID(mainID, subID);
 		entities_.broadcast(buffer);

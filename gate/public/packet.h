@@ -3,6 +3,13 @@
 
 #include <stdint.h>
 #include "global.h"
+#include <memory>
+
+#include <muduo/net/Buffer.h>
+
+#include <google/protobuf/message.h>
+
+typedef std::shared_ptr<muduo::net::Buffer> BufferPtr;
 
 #define SESSIONSZ  32
 #define AESKEYSZ   16
@@ -119,6 +126,90 @@ namespace packet {
 		//–£—ÈCRC
 		return *ptr == sum;
 	}
+
+	//pack data[len] to buffer with packet::header_t
+	void packMessage(muduo::net::Buffer* buffer, int mainID, int subID, char const* data, size_t len);
+	BufferPtr packMessage(int mainID, int subID, char const* data, size_t len);
+	
+	//pack protobuf to buffer with packet::header_t
+	bool packMessage(muduo::net::Buffer* buffer, int mainID, int subID, ::google::protobuf::Message* data);
+	BufferPtr packMessage(int mainID, int subID, ::google::protobuf::Message* data);
+
+	//pack data[len] to buffer with packet::internal_prev_header_t
+	void packMessage(
+		muduo::net::Buffer* buffer,
+		int64_t userid,
+		std::string const& session,
+		std::string const& aeskey,
+		uint32_t clientip,
+		int16_t kicking,
+#if 0
+		std::string const& servid,
+#endif
+		char const* data, size_t len);
+	
+	BufferPtr packMessage(
+		int64_t userid,
+		std::string const& session,
+		std::string const& aeskey,
+		uint32_t clientip,
+		int16_t kicking,
+#if 0
+		std::string const& servid,
+#endif
+		char const* data, size_t len);
+
+	//pack data[len] to buffer with packet::internal_prev_header_t & packet::header_t
+	void packMessage(
+		muduo::net::Buffer* buffer,
+		int64_t userid,
+		std::string const& session,
+		std::string const& aeskey,
+		uint32_t clientip,
+		int16_t kicking,
+#if 0
+		std::string const& servid,
+#endif
+		int mainID, int subID,
+		char const* data, size_t len);
+	
+	BufferPtr packMessage(
+		int64_t userid,
+		std::string const& session,
+		std::string const& aeskey,
+		uint32_t clientip,
+		int16_t kicking,
+#if 0
+		std::string const& servid,
+#endif
+		int mainID, int subID,
+		char const* data, size_t len);
+
+	//pack protobuf to buffer with packet::internal_prev_header_t & packet::header_t
+	bool packMessage(
+		muduo::net::Buffer* buffer,
+		int64_t userid,
+		std::string const& session,
+		std::string const& aeskey,
+		uint32_t clientip,
+		int16_t kicking,
+#if 0
+		std::string const& servid,
+#endif
+		int mainID, int subID,
+		::google::protobuf::Message* data);
+
+	BufferPtr packMessage(
+		int64_t userid,
+		std::string const& session,
+		std::string const& aeskey,
+		uint32_t clientip,
+		int16_t kicking,
+#if 0
+		std::string const& servid,
+#endif
+		int mainID, int subID,
+		::google::protobuf::Message* data);
 
 }//namespace packet
 

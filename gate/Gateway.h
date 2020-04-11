@@ -64,8 +64,6 @@
 #include "public/MongoDB/MongoDBClient.h"
 #include "public/traceMsg/traceMsg.h"
 
-#include <google/protobuf/message.h>
-
 //#define NDEBUG
 #define KICK_GS                 (0x01)
 #define KICK_HALL               (0x02)
@@ -215,17 +213,6 @@ private:
 		const WeakEntryPtr& weakEntry,
 		BufferPtr& buf,
 		muduo::Timestamp receiveTime);
-
-	static BufferPtr packMessage(int mainID, int subID, ::google::protobuf::Message* msg);
-
-	static BufferPtr packMessage(
-		int64_t userid,
-		std::string const& session,
-		std::string const& aeskey,
-		uint32_t ipaddr,
-		int16_t kicking,
-		int mainID, int subID,
-		::google::protobuf::Message* msg);
 
 	static BufferPtr packClientShutdownMsg(int64_t userid, int status = 0);
 
