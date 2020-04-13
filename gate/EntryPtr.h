@@ -61,6 +61,7 @@ public:
 		//LOG_WARN << __FUNCTION__ << " Entry::dtor";
 		muduo::net::TcpConnectionPtr conn(weakConn_.lock());
 		if (conn) {
+			conn->getLoop()->assertInLoopThread();
 #ifdef _DEBUG_BUCKETS_
 			LOG_WARN << __FUNCTION__ << " 客户端[" << conn->peerAddress().toIpPort() << "] -> 网关服["
 				<< conn->localAddress().toIpPort() << "] timeout closing";
