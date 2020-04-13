@@ -240,7 +240,6 @@ private:
 		muduo::net::Buffer* buf, muduo::Timestamp receiveTime);
 
 	void asyncInnHandler(
-		const muduo::net::TcpConnectionPtr& conn,
 		WeakEntryPtr const& weakEntry,
 		BufferPtr& buf,
 		muduo::Timestamp receiveTime);
@@ -288,7 +287,6 @@ private:
 		muduo::net::Buffer* buf, muduo::Timestamp receiveTime);
 
 	void asyncHallHandler(
-		const muduo::net::TcpConnectionPtr& conn,
 		WeakEntryPtr const& weakEntry,
 		BufferPtr& buf,
 		muduo::Timestamp receiveTime);
@@ -308,7 +306,6 @@ private:
 		muduo::net::Buffer* buf, muduo::Timestamp receiveTime);
 
 	void asyncGameHandler(
-		const muduo::net::TcpConnectionPtr& conn,
 		WeakEntryPtr const& weakEntry,
 		BufferPtr& buf,
 		muduo::Timestamp receiveTime);
@@ -366,7 +363,8 @@ private:
 	//所有大厅服/游戏服节点
 	ContextConnector iptable_[kMaxServTy];
 
-	//玩家session哈希散列
+	//一致性哈希散列
+	//对玩家session进行一致性hash运算，使得玩家worker线程处理均匀分配(worker线程负载均衡)
 	std::hash<std::string> hash_session_;
 
 	STD::Random randomHall_;

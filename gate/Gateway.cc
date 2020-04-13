@@ -459,23 +459,26 @@ void Gateway::onInnMessage(
 			int index = hash_session_(session) % threadPool_.size();
 #else
 			//////////////////////////////////////////////////////////////////////////
-			//session -> entry -> entryContext -> index
+			//session -> entry -> conn -> entryContext -> index
 			//////////////////////////////////////////////////////////////////////////
 			WeakEntryPtr weakEntry = entities_.get(session);
 			EntryPtr entry(weakEntry.lock());
 			if (likely(entry)) {
-				Entry::Context* entryContext = boost::any_cast<Entry::Context>(entry->getMutableContext());
-				assert(entryContext);
+				muduo::net::TcpConnectionPtr peer(entry->getWeakConnPtr().lock());
+				if (peer) {
+					Context* entryContext = boost::any_cast<Context>(peer->getMutableContext());
+					assert(entryContext);
 
-				int index = entryContext->getWorkerIndex();
-				assert(index >= 0 && index < threadPool_.size());
-
-				//扔给任务消息队列处理
-				threadPool_[index]->run(
-					std::bind(
-						&Gateway::asyncInnHandler,
-						this,
-						conn, weakEntry, buffer, receiveTime));
+					int index = entryContext->getWorkerIndex();
+					assert(index >= 0 && index < threadPool_.size());
+					
+					//扔给任务消息队列处理
+					threadPool_[index]->run(
+						std::bind(
+							&Gateway::asyncInnHandler,
+							this,
+							weakEntry, buffer, receiveTime));
+				}
 			}
 #endif
 		}
@@ -484,7 +487,6 @@ void Gateway::onInnMessage(
 
 //网关服[S]端 <- 推送服[C]端，推送通知服务
 void Gateway::asyncInnHandler(
-	const muduo::net::TcpConnectionPtr& conn,
 	WeakEntryPtr const& weakEntry,
 	BufferPtr& buf,
 	muduo::Timestamp receiveTime) {
@@ -500,8 +502,6 @@ void Gateway::asyncInnHandler(
 	int64_t userid = pre_header->userID;
 	EntryPtr entry(weakEntry.lock());
 	if (likely(entry)) {
-		Entry::Context* entryContext = boost::any_cast<Entry::Context>(entry->getMutableContext());
-		assert(entryContext);
 		muduo::net::TcpConnectionPtr peer(entry->getWeakConnPtr().lock());
 		if (likely(peer)) {
 			
@@ -595,13 +595,13 @@ void Gateway::onHttpConnection(const muduo::net::TcpConnectionPtr& conn) {
 		}
 		EventLoopContext* context = boost::any_cast<EventLoopContext>(conn->getLoop()->getMutableContext());
 		assert(context);
-#ifndef NDEBUG
-		EntryPtr entry(new Entry(muduo::net::WeakTcpConnectionPtr(conn), Entry::Context(muduo::net::HttpContext())));
-#else
-		EntryPtr entry(new Entry(muduo::net::WeakTcpConnectionPtr(conn), Entry::Context(context->allocWorkerIndex(), muduo::net::HttpContext())));
-#endif
+
+		EntryPtr entry(new Entry(muduo::net::WeakTcpConnectionPtr(conn)));
+		
+		//指定conn上下文信息
+		conn->setContext(Context(WeakEntryPtr(entry)/*, context->allocWorkerIndex()*/, muduo::net::HttpContext()));
 		{
-			Entry::Context* entryContext = boost::any_cast<Entry::Context>(entry->getMutableContext());
+			Context* entryContext = boost::any_cast<Context>(conn->getMutableContext());
 			assert(entryContext);
 #ifndef NDEBUG
 			//给新conn绑定一个worker线程，之后所有conn相关逻辑业务都在该worker线程中处理
@@ -621,10 +621,6 @@ void Gateway::onHttpConnection(const muduo::net::TcpConnectionPtr& conn) {
 				std::bind(&ConnectionBucket::pushBucket, &bucketsPool_[index], entry));
 		}
 		{
-			//指定conn上下文信息
-			conn->setContext(WeakEntryPtr(entry));
-		}
-		{
 			//TCP_NODELAY
 			conn->setTcpNoDelay(true);
 		}
@@ -634,17 +630,13 @@ void Gateway::onHttpConnection(const muduo::net::TcpConnectionPtr& conn) {
 		LOG_INFO << __FUNCTION__ << " --- *** " << "WEB前端[" << conn->peerAddress().toIpPort() << "] -> 网关服["
 			<< conn->localAddress().toIpPort() << "] "
 			<< (conn->connected() ? "UP" : "DOWN") << " " << num;
-		WeakEntryPtr weakEntry(boost::any_cast<WeakEntryPtr>(conn->getContext()));
-		EntryPtr entry(weakEntry.lock());
-		if (likely(entry)) {
-			//reset
-			entry.reset();
-		}
 	}
 }
 
 //网关服[S]端 <- HTTP客户端[C]端，WEB前端
-void Gateway::onHttpMessage(const muduo::net::TcpConnectionPtr& conn, muduo::net::Buffer* buf, muduo::Timestamp receiveTime) {
+void Gateway::onHttpMessage(
+	const muduo::net::TcpConnectionPtr& conn,
+	muduo::net::Buffer* buf, muduo::Timestamp receiveTime) {
 	//超过最大连接数限制
 	if (!conn || conn->getContext().empty()) {
 		//LOG_ERROR << __FUNCTION__ << " --- *** " << "TcpConnectionPtr.conn max";
@@ -658,101 +650,102 @@ void Gateway::onHttpMessage(const muduo::net::TcpConnectionPtr& conn, muduo::net
 	//先确定是HTTP数据报文，再解析 ///
 	//assert(buf->readableBytes() > 4 && buf->findCRLFCRLF());
 
-	WeakEntryPtr weakEntry(boost::any_cast<WeakEntryPtr>(conn->getContext()));
-	EntryPtr entry(weakEntry.lock());
-	if (likely(entry)) {
-		Entry::Context* entryContext = boost::any_cast<Entry::Context>(entry->getMutableContext());
-		assert(entryContext);
-		muduo::net::HttpContext* httpContext = boost::any_cast<muduo::net::HttpContext>(entryContext->getMutableContext());
-		assert(httpContext);
-		//解析HTTP数据包
-		if (!httpContext->parseRequest(buf, receiveTime)) {
-			//发生错误
-		}
-		else if (httpContext->gotAll()) {
-			//Accept时候判断，socket底层控制，否则开启异步检查
-			if (whiteListControl_ == IpVisitCtrlE::kOpen) {
-				std::string ipaddr;
-				{
-					std::string ipaddrs = httpContext->request().getHeader("X-Forwarded-For");
-					if (ipaddrs.empty()) {
-						ipaddr = conn->peerAddress().toIp();
+	Context* entryContext = boost::any_cast<Context>(conn->getMutableContext());
+	assert(entryContext);
+	muduo::net::HttpContext* httpContext = boost::any_cast<muduo::net::HttpContext>(entryContext->getMutableContext());
+	assert(httpContext);
+	//解析HTTP数据包
+	if (!httpContext->parseRequest(buf, receiveTime)) {
+		//发生错误
+	}
+	else if (httpContext->gotAll()) {
+		//Accept时候判断，socket底层控制，否则开启异步检查
+		if (whiteListControl_ == IpVisitCtrlE::kOpen) {
+			std::string ipaddr;
+			{
+				std::string ipaddrs = httpContext->request().getHeader("X-Forwarded-For");
+				if (ipaddrs.empty()) {
+					ipaddr = conn->peerAddress().toIp();
+				}
+				else {
+#if 0
+					//第一个IP为客户端真实IP，可伪装，第二个IP为一级代理IP，第三个IP为二级代理IP
+					std::string::size_type spos = ipaddrs.find_first_of(',');
+					if (spos == std::string::npos) {
 					}
 					else {
-#if 0
-						//第一个IP为客户端真实IP，可伪装，第二个IP为一级代理IP，第三个IP为二级代理IP
-						std::string::size_type spos = ipaddrs.find_first_of(',');
-						if (spos == std::string::npos) {
-						}
-						else {
-							ipaddr = ipaddrs.substr(0, spos);
-						}
+						ipaddr = ipaddrs.substr(0, spos);
+					}
 #else
-						boost::replace_all<std::string>(ipaddrs, " ", "");
-						std::vector<std::string> vec;
-						boost::algorithm::split(vec, ipaddrs, boost::is_any_of(","));
-						for (std::vector<std::string>::const_iterator it = vec.begin();
-							it != vec.end(); ++it) {
-							if (!it->empty() &&
-								boost::regex_match(*it, boost::regex(
-									"^(1\\d{2}|2[0-4]\\d|25[0-5]|[1-9]\\d|[1-9])\\." \
-									"(1\\d{2}|2[0-4]\\d|25[0-5]|[1-9]\\d|\\d)\\." \
-									"(1\\d{2}|2[0-4]\\d|25[0-5]|[1-9]\\d|\\d)\\." \
-									"(1\\d{2}|2[0-4]\\d|25[0-5]|[1-9]\\d|\\d)$"))) {
+					boost::replace_all<std::string>(ipaddrs, " ", "");
+					std::vector<std::string> vec;
+					boost::algorithm::split(vec, ipaddrs, boost::is_any_of(","));
+					for (std::vector<std::string>::const_iterator it = vec.begin();
+						it != vec.end(); ++it) {
+						if (!it->empty() &&
+							boost::regex_match(*it, boost::regex(
+								"^(1\\d{2}|2[0-4]\\d|25[0-5]|[1-9]\\d|[1-9])\\." \
+								"(1\\d{2}|2[0-4]\\d|25[0-5]|[1-9]\\d|\\d)\\." \
+								"(1\\d{2}|2[0-4]\\d|25[0-5]|[1-9]\\d|\\d)\\." \
+								"(1\\d{2}|2[0-4]\\d|25[0-5]|[1-9]\\d|\\d)$"))) {
 
-								if (strncasecmp(it->c_str(), "10.", 3) != 0 &&
-									strncasecmp(it->c_str(), "192.168", 7) != 0 &&
-									strncasecmp(it->c_str(), "172.16.", 7) != 0) {
-									ipaddr = *it;
-									break;
-								}
+							if (strncasecmp(it->c_str(), "10.", 3) != 0 &&
+								strncasecmp(it->c_str(), "192.168", 7) != 0 &&
+								strncasecmp(it->c_str(), "172.16.", 7) != 0) {
+								ipaddr = *it;
+								break;
 							}
 						}
-#endif
 					}
-				}
-				muduo::net::InetAddress peerAddr(muduo::StringArg(ipaddr), 0, false);
-				bool is_ip_allowed = false;
-				{
-					//管理员挂维护/恢复服务
-					std::map<in_addr_t, IpVisitE>::const_iterator it = adminList_.find(peerAddr.ipNetEndian());
-					is_ip_allowed = (it != adminList_.end());
-				}
-				if (!is_ip_allowed) {
-					READ_LOCK(whiteList_mutex_);
-					std::map<in_addr_t, IpVisitE>::const_iterator it = whiteList_.find(peerAddr.ipNetEndian());
-					is_ip_allowed = ((it != whiteList_.end()) && (IpVisitE::kEnable == it->second));
-				}
-				if (!is_ip_allowed) {
-#if 0
-					//不再发送数据
-					conn->shutdown();
-#elif 1
-					//直接强制关闭连接
-					conn->forceClose();
-#else
-					//HTTP应答包(header/body)
-					muduo::net::HttpResponse rsp(false);
-					setFailedResponse(rsp,
-						muduo::net::HttpResponse::k404NotFound,
-						"HTTP/1.1 500 IP访问限制\r\n\r\n");
-					muduo::net::Buffer buf;
-					rsp.appendToBuffer(&buf);
-					conn->send(&buf);
-
-					//延迟0.2s强制关闭连接
-					conn->forceCloseWithDelay(0.2f);
 #endif
-					//累计未处理请求数
-					numTotalBadReq_.incrementAndGet();
-					return;
 				}
 			}
+			muduo::net::InetAddress peerAddr(muduo::StringArg(ipaddr), 0, false);
+			bool is_ip_allowed = false;
+			{
+				//管理员挂维护/恢复服务
+				std::map<in_addr_t, IpVisitE>::const_iterator it = adminList_.find(peerAddr.ipNetEndian());
+				is_ip_allowed = (it != adminList_.end());
+			}
+			if (!is_ip_allowed) {
+				READ_LOCK(whiteList_mutex_);
+				std::map<in_addr_t, IpVisitE>::const_iterator it = whiteList_.find(peerAddr.ipNetEndian());
+				is_ip_allowed = ((it != whiteList_.end()) && (IpVisitE::kEnable == it->second));
+			}
+			if (!is_ip_allowed) {
+#if 0
+				//不再发送数据
+				conn->shutdown();
+#elif 1
+				//直接强制关闭连接
+				conn->forceClose();
+#else
+				//HTTP应答包(header/body)
+				muduo::net::HttpResponse rsp(false);
+				setFailedResponse(rsp,
+					muduo::net::HttpResponse::k404NotFound,
+					"HTTP/1.1 500 IP访问限制\r\n\r\n");
+				muduo::net::Buffer buf;
+				rsp.appendToBuffer(&buf);
+				conn->send(&buf);
+
+				//延迟0.2s强制关闭连接
+				conn->forceCloseWithDelay(0.2f);
+#endif
+				//累计未处理请求数
+				numTotalBadReq_.incrementAndGet();
+				return;
+			}
+		}
+		WeakEntryPtr weakEntry(entryContext->getWeakEntryPtr().lock());
+		EntryPtr entry(weakEntry.lock());
+		if (likely(entry)) {
 			{
 				EventLoopContext* context = boost::any_cast<EventLoopContext>(conn->getLoop()->getMutableContext());
 				assert(context);
 				int index = context->getBucketIndex();
 				assert(index >= 0 && index < bucketsPool_.size());
+
 				//收到消息包，更新桶元素
 				conn->getLoop()->runInLoop(std::bind(&ConnectionBucket::updateBucket, &bucketsPool_[index], entry));
 			}
@@ -760,40 +753,43 @@ void Gateway::onHttpMessage(const muduo::net::TcpConnectionPtr& conn, muduo::net
 				//获取绑定的worker线程
 				int index = entryContext->getWorkerIndex();
 				assert(index >= 0 && index < threadPool_.size());
+
 				//扔给任务消息队列处理
 				threadPool_[index]->run(
-					std::bind(&Gateway::asyncHttpHandler, this, weakEntry, receiveTime));
+					std::bind(
+						&Gateway::asyncHttpHandler,
+						this, weakEntry, receiveTime));
 			}
 			return;
 		}
-		//发生错误
-		//HTTP应答包(header/body)
-		muduo::net::HttpResponse rsp(false);
-		setFailedResponse(rsp,
-			muduo::net::HttpResponse::k404NotFound,
-			"HTTP/1.1 400 Bad Request\r\n\r\n");
-		muduo::net::Buffer buf;
-		rsp.appendToBuffer(&buf);
-		conn->send(&buf);
-		//释放HttpContext资源
-		httpContext->reset();
-#if 0
-		//不再发送数据
-		conn->shutdown();
-#elif 0
-		//直接强制关闭连接
-		conn->forceClose();
-#else
-		//延迟0.2s强制关闭连接
-		conn->forceCloseWithDelay(0.2f);
-#endif
 		//累计未处理请求数
 		numTotalBadReq_.incrementAndGet();
+		LOG_ERROR << __FUNCTION__ << " --- *** " << "entry invalid";
 		return;
 	}
+	//发生错误
+	//HTTP应答包(header/body)
+	muduo::net::HttpResponse rsp(false);
+	setFailedResponse(rsp,
+		muduo::net::HttpResponse::k404NotFound,
+		"HTTP/1.1 400 Bad Request\r\n\r\n");
+	muduo::net::Buffer buffer;
+	rsp.appendToBuffer(&buffer);
+	conn->send(&buffer);
+	//释放HttpContext资源
+	httpContext->reset();
+#if 0
+	//不再发送数据
+	conn->shutdown();
+#elif 0
+	//直接强制关闭连接
+	conn->forceClose();
+#else
+	//延迟0.2s强制关闭连接
+	conn->forceCloseWithDelay(0.2f);
+#endif
 	//累计未处理请求数
 	numTotalBadReq_.incrementAndGet();
-	//LOG_ERROR << __FUNCTION__ << " --- *** " << "entry invalid";
 }
 
 //网关服[S]端 <- HTTP客户端[C]端，WEB前端
@@ -841,7 +837,7 @@ void Gateway::asyncHttpHandler(const WeakEntryPtr& weakEntry, muduo::Timestamp r
 				}
 			}
 #endif
-			Entry::Context* entryContext = boost::any_cast<Entry::Context>(entry->getMutableContext());
+			Context* entryContext = boost::any_cast<Context>(conn->getMutableContext());
 			assert(entryContext);
 			muduo::net::HttpContext* httpContext = boost::any_cast<muduo::net::HttpContext>(entryContext->getMutableContext());
 			assert(httpContext);
@@ -1288,18 +1284,21 @@ void Gateway::onHallMessage(const muduo::net::TcpConnectionPtr& conn,
 			WeakEntryPtr weakEntry = entities_.get(session);
 			EntryPtr entry(weakEntry.lock());
 			if (likely(entry)) {
-				Entry::Context* entryContext = boost::any_cast<Entry::Context>(entry->getMutableContext());
-				assert(entryContext);
+				muduo::net::TcpConnectionPtr peer(entry->getWeakConnPtr().lock());
+				if (peer) {
+					Context* entryContext = boost::any_cast<Context>(peer->getMutableContext());
+					assert(entryContext);
 
-				int index = entryContext->getWorkerIndex();
-				assert(index >= 0 && index < threadPool_.size());
+					int index = entryContext->getWorkerIndex();
+					assert(index >= 0 && index < threadPool_.size());
 
-				//扔给任务消息队列处理
-				threadPool_[index]->run(
-					std::bind(
-						&Gateway::asyncHallHandler,
-						this,
-						conn, weakEntry, buffer, receiveTime));
+					//扔给任务消息队列处理
+					threadPool_[index]->run(
+						std::bind(
+							&Gateway::asyncHallHandler,
+							this,
+							weakEntry, buffer, receiveTime));
+				}
 			}
 			else {
 				assert(false);
@@ -1311,7 +1310,6 @@ void Gateway::onHallMessage(const muduo::net::TcpConnectionPtr& conn,
 
 //网关服[C]端 -> 大厅服[S]端
 void Gateway::asyncHallHandler(
-	const muduo::net::TcpConnectionPtr& conn,
 	WeakEntryPtr const& weakEntry,
 	BufferPtr& buf,
 	muduo::Timestamp receiveTime) {
@@ -1320,19 +1318,19 @@ void Gateway::asyncHallHandler(
 	if (buf->readableBytes() < packet::kPrevHeaderLen + packet::kHeaderLen) {
 		return;
 	}
-	//内部消息头internal_prev_header_t
-	packet::internal_prev_header_t /*const*/* pre_header = (packet::internal_prev_header_t /*const*/*)buf->peek();
-	//session
-	std::string session((char const*)pre_header->session, sizeof(pre_header->session));
-	//userid
-	int64_t userid = pre_header->userID;
 	EntryPtr entry(weakEntry.lock());
 	if (likely(entry)) {
-		Entry::Context* entryContext = boost::any_cast<Entry::Context>(entry->getMutableContext());
-		assert(entryContext);
 		muduo::net::TcpConnectionPtr peer(entry->getWeakConnPtr().lock());
 		if (likely(peer)) {
-			
+			Context* entryContext = boost::any_cast<Context>(peer->getMutableContext());
+			assert(entryContext);
+
+			//内部消息头internal_prev_header_t
+			packet::internal_prev_header_t /*const*/* pre_header = (packet::internal_prev_header_t /*const*/*)buf->peek();
+			//session
+			std::string session((char const*)pre_header->session, sizeof(pre_header->session));
+			//userid
+			int64_t userid = pre_header->userID;
 			//命令消息头header_t
 			packet::header_t /*const*/* header = (packet::header_t /*const*/*)(buf->peek() + packet::kPrevHeaderLen);
 			
@@ -1348,7 +1346,7 @@ void Gateway::asyncHallHandler(
 				pre_header->ok == 1) {
 				//登陆成功
 				//////////////////////////////////////////////////////////////////////////
-				//顶号处理 userid->session->entry
+				//顶号处理 userid->session->entry->conn
 				//////////////////////////////////////////////////////////////////////////
 				//userid->session
 				std::string const session_(sessions_.add(userid, session));
@@ -1357,10 +1355,10 @@ void Gateway::asyncHallHandler(
 					WeakEntryPtr weakEntry_(entities_.get(session_));
 					EntryPtr entry_(weakEntry_.lock());
 					if (entry_) {
-						Entry::Context* entryContext_ = boost::any_cast<Entry::Context>(entry_->getMutableContext());
-						assert(entryContext_);
-						muduo::net::TcpConnectionPtr peer_(entry->getWeakConnPtr().lock());
+						muduo::net::TcpConnectionPtr peer_(entry_->getWeakConnPtr().lock());
 						if (peer_) {
+							Context* entryContext_ = boost::any_cast<Context>(peer_->getMutableContext());
+							assert(entryContext_);
 							BufferPtr buffer = packClientShutdownMsg(userid, 0);
 							server_.send(peer_, buffer->peek(), buffer->readableBytes());
 #if 0
@@ -1413,46 +1411,50 @@ void Gateway::sendHallMessage(WeakEntryPtr const& weakEntry, BufferPtr& buf, int
 	
 	EntryPtr entry(weakEntry.lock());
 	if (likely(entry)) {
-		Entry::Context* entryContext = boost::any_cast<Entry::Context>(entry->getMutableContext());
-		assert(entryContext);
-		ClientConn const& clientConn = entryContext->getClientConn(servTyE::kHallTy);
-		muduo::net::TcpConnectionPtr hallConn(clientConn.second.lock());
-		if (hallConn) {
-			assert(hallConn->connected());
+		muduo::net::TcpConnectionPtr peer(entry->getWeakConnPtr().lock());
+		if (likely(peer)) {
+			Context* entryContext = boost::any_cast<Context>(peer->getMutableContext());
+			assert(entryContext);
+			ClientConn const& clientConn = entryContext->getClientConn(servTyE::kHallTy);
+			muduo::net::TcpConnectionPtr hallConn(clientConn.second.lock());
+			if (hallConn) {
+				assert(hallConn->connected());
 #if 0
-			assert(
-				std::find(
-					std::begin(iptable_[servTyE::kHallTy].ips_),
-					std::end(iptable_[servTyE::kHallTy].ips_),
-					clientConn.first) != iptable_[servTyE::kHallTy].ips_.end());
+				assert(
+					std::find(
+						std::begin(iptable_[servTyE::kHallTy].ips_),
+						std::end(iptable_[servTyE::kHallTy].ips_),
+						clientConn.first) != iptable_[servTyE::kHallTy].ips_.end());
 #endif
-			iptable_[servTyE::kHallTy].connector_->check(clientConn.first, true);
-			hallConn->send(get_pointer(buf));
-		}
-		else {
-			LOG_ERROR << __FUNCTION__ << " --- *** " << "用户大厅服无效，重新分配";
-			//用户大厅服无效，重新分配
-			ClientConnList clients;
-			//异步获取全部有效大厅连接
-			iptable_[servTyE::kHallTy].connector_->getAll(&clients);
-			if (clients.size() > 0) {
-				int index = randomHall_.betweenInt(0, clients.size() - 1).randInt_mt();
-				assert(index >= 0 && index < clients.size());
-				ClientConn const& clientConn = clients[index];
-				muduo::net::TcpConnectionPtr hallConn(clientConn.second.lock());
-				if (hallConn) {
-					entryContext->setClientConn(servTyE::kHallTy, clientConn);
-					hallConn->send(buf.get());
-				}
-				else {
-
-				}
+				iptable_[servTyE::kHallTy].connector_->check(clientConn.first, true);
+				hallConn->send(get_pointer(buf));
 			}
 			else {
-				LOG_ERROR << __FUNCTION__ << " --- *** " << "clients.size() = 0";
+				LOG_ERROR << __FUNCTION__ << " --- *** " << "用户大厅服无效，重新分配";
+				//用户大厅服无效，重新分配
+				ClientConnList clients;
+				//异步获取全部有效大厅连接
+				iptable_[servTyE::kHallTy].connector_->getAll(&clients);
+				if (clients.size() > 0) {
+					int index = randomHall_.betweenInt(0, clients.size() - 1).randInt_mt();
+					assert(index >= 0 && index < clients.size());
+					ClientConn const& clientConn = clients[index];
+					muduo::net::TcpConnectionPtr hallConn(clientConn.second.lock());
+					if (hallConn) {
+						entryContext->setClientConn(servTyE::kHallTy, clientConn);
+						hallConn->send(buf.get());
+					}
+					else {
+
+					}
+				}
+				else {
+					LOG_ERROR << __FUNCTION__ << " --- *** " << "clients.size() = 0";
+				}
 			}
+			return;
 		}
-		return;
+		LOG_ERROR << __FUNCTION__ << " --- *** " << "peer(entry->getWeakConnPtr().lock()) failed";
 	}
 	LOG_ERROR << __FUNCTION__ << " --- *** " << "entry(weakEntry.lock()) failed";
 }
@@ -1461,31 +1463,34 @@ void Gateway::sendHallMessage(WeakEntryPtr const& weakEntry, BufferPtr& buf, int
 void Gateway::onUserOfflineHall(WeakEntryPtr const& weakEntry) {
 	EntryPtr entry(weakEntry.lock());
 	if (likely(entry)) {
-		Entry::Context* entryContext = boost::any_cast<Entry::Context>(entry->getMutableContext());
-		assert(entryContext);
-		//userid
-		int64_t userid = entryContext->getUserID();
-		//clientip
-		uint32_t clientip = entryContext->getFromIp();
-		//session
-		std::string const& session = entryContext->getSession();
-		//aeskey
-		std::string const& aeskey = entryContext->getAesKey();
-		//packMessage
-		BufferPtr buffer = packet::packMessage(
-			userid,
-			session,
-			aeskey,
-			clientip,
-			0,
-			::Game::Common::MAIN_MESSAGE_PROXY_TO_HALL,
-			::Game::Common::MESSAGE_PROXY_TO_HALL_SUBID::HALL_ON_USER_OFFLINE,
-			NULL);
-		if (buffer) {
-			TraceMessageID(
+		muduo::net::TcpConnectionPtr peer(entry->getWeakConnPtr().lock());
+		if (peer) {
+			Context* entryContext = boost::any_cast<Context>(peer->getMutableContext());
+			assert(entryContext);
+			//userid
+			int64_t userid = entryContext->getUserID();
+			//clientip
+			uint32_t clientip = entryContext->getFromIp();
+			//session
+			std::string const& session = entryContext->getSession();
+			//aeskey
+			std::string const& aeskey = entryContext->getAesKey();
+			//packMessage
+			BufferPtr buffer = packet::packMessage(
+				userid,
+				session,
+				aeskey,
+				clientip,
+				0,
 				::Game::Common::MAIN_MESSAGE_PROXY_TO_HALL,
-				::Game::Common::MESSAGE_PROXY_TO_HALL_SUBID::HALL_ON_USER_OFFLINE);
-			sendHallMessage(weakEntry, buffer, userid);
+				::Game::Common::MESSAGE_PROXY_TO_HALL_SUBID::HALL_ON_USER_OFFLINE,
+				NULL);
+			if (buffer) {
+				TraceMessageID(
+					::Game::Common::MAIN_MESSAGE_PROXY_TO_HALL,
+					::Game::Common::MESSAGE_PROXY_TO_HALL_SUBID::HALL_ON_USER_OFFLINE);
+				sendHallMessage(weakEntry, buffer, userid);
+			}
 		}
 	}
 }
@@ -1555,26 +1560,29 @@ void Gateway::onGameMessage(const muduo::net::TcpConnectionPtr& conn,
 					conn, buffer, receiveTime));
 #else
 			//////////////////////////////////////////////////////////////////////////
-			//session -> entry -> entryContext -> index
+			//session -> entry -> conn -> entryContext -> index
 			//////////////////////////////////////////////////////////////////////////
 			WeakEntryPtr weakEntry = entities_.get(session);
 			EntryPtr entry(weakEntry.lock());
 			if (likely(entry)) {
-				Entry::Context* entryContext = boost::any_cast<Entry::Context>(entry->getMutableContext());
-				assert(entryContext);
+				muduo::net::TcpConnectionPtr peer(entry->getWeakConnPtr().lock());
+				if (peer) {
+					Context* entryContext = boost::any_cast<Context>(peer->getMutableContext());
+					assert(entryContext);
 
-				int index = entryContext->getWorkerIndex();
-				assert(index >= 0 && index < threadPool_.size());
+					int index = entryContext->getWorkerIndex();
+					assert(index >= 0 && index < threadPool_.size());
 
-				//扔给任务消息队列处理
-				threadPool_[index]->run(
-					std::bind(
-						&Gateway::asyncGameHandler,
-						this,
-						conn, weakEntry, buffer, receiveTime));
+					//扔给任务消息队列处理
+					threadPool_[index]->run(
+						std::bind(
+							&Gateway::asyncGameHandler,
+							this,
+							weakEntry, buffer, receiveTime));
+				}
 			}
 			else {
-				assert(false);
+				//assert(false);
 			}
 #endif
 		}
@@ -1583,7 +1591,6 @@ void Gateway::onGameMessage(const muduo::net::TcpConnectionPtr& conn,
 
 //网关服[C]端 -> 游戏服[S]端
 void Gateway::asyncGameHandler(
-	const muduo::net::TcpConnectionPtr& conn,
 	WeakEntryPtr const& weakEntry,
 	BufferPtr& buf,
 	muduo::Timestamp receiveTime) {
@@ -1592,28 +1599,27 @@ void Gateway::asyncGameHandler(
 	if (buf->readableBytes() < packet::kPrevHeaderLen + packet::kHeaderLen) {
 		return;
 	}
-	//内部消息头internal_prev_header_t
-	packet::internal_prev_header_t /*const*/* pre_header = (packet::internal_prev_header_t /*const*/*)buf->peek();
-	//session
-	std::string session((char const*)pre_header->session, sizeof(pre_header->session));
-	//userid
-	int64_t userid = pre_header->userID;
 	EntryPtr entry(weakEntry.lock());
 	if (likely(entry)) {
-		Entry::Context* entryContext = boost::any_cast<Entry::Context>(entry->getMutableContext());
-		assert(entryContext);
-		//校验userid
-		assert(userid == entryContext->getUserID());
-		//校验session
-		if (session != entryContext->getSession()) {
-			LOG_ERROR << __FUNCTION__ << " --- *** " << "check userid. " << userid
-				<< "\nsession = " << buffer2HexStr((unsigned char const*)session.c_str(), session.length())
-				<< "\nsave    = " << buffer2HexStr((unsigned char const*)entryContext->getSession().c_str(), entryContext->getSession().length());
-			return;
-		}
 		muduo::net::TcpConnectionPtr peer(entry->getWeakConnPtr().lock());
 		if (likely(peer)) {
-
+			Context* entryContext = boost::any_cast<Context>(peer->getMutableContext());
+			assert(entryContext);
+			//内部消息头internal_prev_header_t
+			packet::internal_prev_header_t /*const*/* pre_header = (packet::internal_prev_header_t /*const*/*)buf->peek();
+			//session
+			std::string session((char const*)pre_header->session, sizeof(pre_header->session));
+			//userid
+			int64_t userid = pre_header->userID;
+			//校验userid
+			assert(userid == entryContext->getUserID());
+			//校验session
+			if (session != entryContext->getSession()) {
+				LOG_ERROR << __FUNCTION__ << " --- *** " << "check userid. " << userid
+					<< "\nsession = " << buffer2HexStr((unsigned char const*)session.c_str(), session.length())
+					<< "\nsave    = " << buffer2HexStr((unsigned char const*)entryContext->getSession().c_str(), entryContext->getSession().length());
+				return;
+			}
 			//命令消息头header_t
 			packet::header_t /*const*/* header = (packet::header_t /*const*/*)(buf->peek() + packet::kPrevHeaderLen);
 			
@@ -1634,27 +1640,29 @@ void Gateway::asyncGameHandler(
 
 //网关服[C]端 -> 游戏服[S]端
 void Gateway::sendGameMessage(WeakEntryPtr const& weakEntry, BufferPtr& buf, int64_t userid) {
-
 	EntryPtr entry(weakEntry.lock());
 	if (likely(entry)) {
-		Entry::Context* entryContext = boost::any_cast<Entry::Context>(entry->getMutableContext());
-		assert(entryContext);
-		ClientConn const& clientConn = entryContext->getClientConn(servTyE::kGameTy);
-		muduo::net::TcpConnectionPtr gameConn(clientConn.second.lock());
-		if (gameConn) {
-			assert(gameConn->connected());
+		muduo::net::TcpConnectionPtr peer(entry->getWeakConnPtr().lock());
+		if (peer) {
+			Context* entryContext = boost::any_cast<Context>(peer->getMutableContext());
+			assert(entryContext);
+			ClientConn const& clientConn = entryContext->getClientConn(servTyE::kGameTy);
+			muduo::net::TcpConnectionPtr gameConn(clientConn.second.lock());
+			if (gameConn) {
+				assert(gameConn->connected());
 #if 0
-			assert(
-				std::find(
-					std::begin(iptable_[servTyE::kGameTy].ips_),
-					std::end(iptable_[servTyE::kGameTy].ips_),
-					clientConn.first) != iptable_[servTyE::kGameTy].ips_.end());
+				assert(
+					std::find(
+						std::begin(iptable_[servTyE::kGameTy].ips_),
+						std::end(iptable_[servTyE::kGameTy].ips_),
+						clientConn.first) != iptable_[servTyE::kGameTy].ips_.end());
 #endif
-			iptable_[servTyE::kGameTy].connector_->check(clientConn.first, true);
-			gameConn->send(get_pointer(buf));
-		}
-		else {
-			LOG_ERROR << __FUNCTION__ << " --- *** " << "gameConn(clientConn.second.lock()) failed";
+				iptable_[servTyE::kGameTy].connector_->check(clientConn.first, true);
+				gameConn->send(get_pointer(buf));
+			}
+			else {
+				LOG_ERROR << __FUNCTION__ << " --- *** " << "gameConn(clientConn.second.lock()) failed";
+			}
 		}
 		return;
 	}
@@ -1665,31 +1673,34 @@ void Gateway::sendGameMessage(WeakEntryPtr const& weakEntry, BufferPtr& buf, int
 void Gateway::onUserOfflineGame(WeakEntryPtr const& weakEntry, bool leave) {
 	EntryPtr entry(weakEntry.lock());
 	if (likely(entry)) {
-		Entry::Context* entryContext = boost::any_cast<Entry::Context>(entry->getMutableContext());
-		assert(entryContext);
-		//userid
-		int64_t userid = entryContext->getUserID();
-		//clientip
-		uint32_t clientip = entryContext->getFromIp();
-		//session
-		std::string const& session = entryContext->getSession();
-		//aeskey
-		std::string const& aeskey = entryContext->getAesKey();
-		//packMessage
-		BufferPtr buffer = packet::packMessage(
-			userid,
-			session,
-			aeskey,
-			clientip,
-			KICK_LEAVEGS,
-			::Game::Common::MAIN_MESSAGE_PROXY_TO_GAME_SERVER,
-			::Game::Common::MESSAGE_PROXY_TO_GAME_SERVER_SUBID::GAME_SERVER_ON_USER_OFFLINE,
-			NULL);
-		if (buffer) {
-			TraceMessageID(
+		muduo::net::TcpConnectionPtr peer(entry->getWeakConnPtr().lock());
+		if (peer) {
+			Context* entryContext = boost::any_cast<Context>(peer->getMutableContext());
+			assert(entryContext);
+			//userid
+			int64_t userid = entryContext->getUserID();
+			//clientip
+			uint32_t clientip = entryContext->getFromIp();
+			//session
+			std::string const& session = entryContext->getSession();
+			//aeskey
+			std::string const& aeskey = entryContext->getAesKey();
+			//packMessage
+			BufferPtr buffer = packet::packMessage(
+				userid,
+				session,
+				aeskey,
+				clientip,
+				KICK_LEAVEGS,
 				::Game::Common::MAIN_MESSAGE_PROXY_TO_GAME_SERVER,
-				::Game::Common::MESSAGE_PROXY_TO_GAME_SERVER_SUBID::GAME_SERVER_ON_USER_OFFLINE);
-			sendGameMessage(weakEntry, buffer, userid);
+				::Game::Common::MESSAGE_PROXY_TO_GAME_SERVER_SUBID::GAME_SERVER_ON_USER_OFFLINE,
+				NULL);
+			if (buffer) {
+				TraceMessageID(
+					::Game::Common::MAIN_MESSAGE_PROXY_TO_GAME_SERVER,
+					::Game::Common::MESSAGE_PROXY_TO_GAME_SERVER_SUBID::GAME_SERVER_ON_USER_OFFLINE);
+				sendGameMessage(weakEntry, buffer, userid);
+			}
 		}
 	}
 }
@@ -1732,13 +1743,13 @@ void Gateway::onConnection(const muduo::net::TcpConnectionPtr& conn) {
 		}
 		EventLoopContext* context = boost::any_cast<EventLoopContext>(conn->getLoop()->getMutableContext());
 		assert(context);
-#ifndef NDEBUG
-		EntryPtr entry(new Entry(muduo::net::WeakTcpConnectionPtr(conn), Entry::Context()));
-#else
-		EntryPtr entry(new Entry(muduo::net::WeakTcpConnectionPtr(conn), Entry::Context(context->allocWorkerIndex())));
-#endif
+		
+		EntryPtr entry(new Entry(muduo::net::WeakTcpConnectionPtr(conn)));
+		
+		//指定conn上下文信息
+		conn->setContext(Context(WeakEntryPtr(entry)/*, context->allocWorkerIndex()*/));
 		{
-			Entry::Context* entryContext = boost::any_cast<Entry::Context>(entry->getMutableContext());
+			Context* entryContext = boost::any_cast<Context>(conn->getMutableContext());
 			assert(entryContext);
 #ifndef NDEBUG
 			//给新conn绑定一个worker线程，之后所有conn相关逻辑业务都在该worker线程中处理
@@ -1756,10 +1767,6 @@ void Gateway::onConnection(const muduo::net::TcpConnectionPtr& conn) {
 				std::bind(&ConnectionBucket::pushBucket, &bucketsPool_[index], entry));
 		}
 		{
-			//指定conn上下文信息
-			conn->setContext(WeakEntryPtr(entry));
-		}
-		{
 			//TCP_NODELAY
 			conn->setTcpNoDelay(true);
 		}
@@ -1770,26 +1777,24 @@ void Gateway::onConnection(const muduo::net::TcpConnectionPtr& conn) {
 			<< conn->localAddress().toIpPort() << "] "
 			<< (conn->connected() ? "UP" : "DOWN") << " " << num;
 
-		WeakEntryPtr weakEntry(boost::any_cast<WeakEntryPtr>(conn->getContext()));
+		Context* entryContext = boost::any_cast<Context>(conn->getMutableContext());
+		assert(entryContext);
+		//userid
+		int64_t userid = entryContext->getUserID();
+		//session
+		std::string const& session = entryContext->getSession();
+		WeakEntryPtr weakEntry(entryContext->getWeakEntryPtr().lock());
 		EntryPtr entry(weakEntry.lock());
 		if (likely(entry)) {
-			Entry::Context* entryContext = boost::any_cast<Entry::Context>(entry->getMutableContext());
-			assert(entryContext);
-			//userid
-			int64_t userid = entryContext->getUserID();
-			//session
-			std::string const& session = entryContext->getSession();
-			//
+			//offline hall
 			onUserOfflineHall(weakEntry);
-			//
+			//offline game
 			onUserOfflineGame(weakEntry);
-			//check before remove
-			sessions_.remove(userid, session);
-			//remove
-			entities_.remove(session);
-			//reset
-			entry.reset();
 		}
+		//check before remove
+		sessions_.remove(userid, session);
+		//remove
+		entities_.remove(session);
 	}
 }
 
@@ -1802,29 +1807,27 @@ void Gateway::onConnected(
 		<< conn->localAddress().toIpPort() << "] "
 		<< (conn->connected() ? "UP" : "DOWN") << " " << num;
 	assert(!conn->getContext().empty());
-	WeakEntryPtr weakEntry(boost::any_cast<WeakEntryPtr>(conn->getContext()));
+	Context* entryContext = boost::any_cast<Context>(conn->getMutableContext());
+	assert(entryContext);
+	{
+		//保存conn真实ipaddr到Entry::Context上下文
+		muduo::net::InetAddress address(ipaddr, 0);
+		entryContext->setFromIp(address.ipNetEndian());
+	}
+	//生成uuid/session
+	std::string uuid = createUUID();
+	std::string session = buffer2HexStr((unsigned char const*)uuid.data(), uuid.length());
+	{
+		//conn绑定session
+		//优化前，conn->name()断线重连->session变更->重新登陆->异地登陆通知
+		//优化后，conn->name()断线重连->session过期检查->登陆校验->异地登陆判断
+		entryContext->setSession(session);
+	}
+	WeakEntryPtr weakEntry(entryContext->getWeakEntryPtr());
 	EntryPtr entry(weakEntry.lock());
 	if (likely(entry)) {
-		Entry::Context* entryContext = boost::any_cast<Entry::Context>(entry->getMutableContext());
-		assert(entryContext);
-		{
-			//保存conn真实ipaddr到Entry::Context上下文
-			muduo::net::InetAddress address(ipaddr, 0);
-			entryContext->setFromIp(address.ipNetEndian());
-		}
-		//生成uuid/session
-		std::string uuid = createUUID();
-		std::string session = buffer2HexStr((unsigned char const*)uuid.data(), uuid.length());
-		{
-			//conn绑定session
-			//优化前，conn->name()断线重连->session变更->重新登陆->异地登陆通知
-			//优化后，conn->name()断线重连->session过期检查->登陆校验->异地登陆判断
-			entryContext->setSession(session);
-		}
-		{
-			//添加玩家session
-			entities_.add(session, weakEntry);
-		}
+		//添加玩家session
+		entities_.add(session, weakEntry);
 	}
 }
 
@@ -1868,8 +1871,9 @@ void Gateway::onMessage(
 		numTotalBadReq_.incrementAndGet();
 	}
 	else /*if (likely(len <= buf->readableBytes()))*/ {
-	
-		WeakEntryPtr weakEntry(boost::any_cast<WeakEntryPtr>(conn->getContext()));
+		Context* entryContext = boost::any_cast<Context>(conn->getMutableContext());
+		assert(entryContext);
+		WeakEntryPtr weakEntry(entryContext->getWeakEntryPtr());
 		EntryPtr entry(weakEntry.lock());
 		if (likely(entry)) {
 			{
@@ -1881,9 +1885,7 @@ void Gateway::onMessage(
 				conn->getLoop()->runInLoop(
 					std::bind(&ConnectionBucket::updateBucket, &bucketsPool_[index], entry));
 			}
-			{
-				Entry::Context* entryContext = boost::any_cast<Entry::Context>(entry->getMutableContext());
-				assert(entryContext);
+			{				
 #if 0
 				//理论上session不过期，worker线程不变，实际上每次断线重连，session都会变更
 				std::string const& session = entryContext->getSession();
@@ -1903,8 +1905,10 @@ void Gateway::onMessage(
 #endif
 				//扔给任务消息队列处理
 				threadPool_[index]->run(
-					std::bind(&Gateway::asyncClientHandler,
-						this, weakEntry, buffer, receiveTime));
+					std::bind(
+						&Gateway::asyncClientHandler,
+						this,
+						weakEntry, buffer, receiveTime));
 			}
 			return;
 		}
@@ -1945,8 +1949,8 @@ void Gateway::asyncClientHandler(
 		//直到业务逻辑处理完并发送，entry引用计数减1变为0，析构被调用关闭conn(如果conn还存在的话，业务处理完也会主动关闭conn)
 		EntryPtr entry(weakEntry.lock());
 		if (likely(entry)) {
-			muduo::net::TcpConnectionPtr conn(entry->getWeakConnPtr().lock());
-			if (conn) {
+			muduo::net::TcpConnectionPtr peer(entry->getWeakConnPtr().lock());
+			if (peer) {
  				//mainID
  				switch (header->mainID) {
  				case Game::Common::MAINID::MAIN_MESSAGE_CLIENT_TO_PROXY: {
@@ -1959,7 +1963,7 @@ void Gateway::asyncClientHandler(
 						CmdCallbacks::const_iterator it = handlers_.find(cmd);
 						if (it != handlers_.end()) {
 							CmdCallback const& handler = it->second;
-							handler(conn, get_pointer(buf));
+							handler(peer, get_pointer(buf));
 						}
 						break;
 					}
@@ -1985,7 +1989,7 @@ void Gateway::asyncClientHandler(
 					//大厅服(HallS)
 					TraceMessageID(header->mainID, header->subID);
 					{
-						Entry::Context* entryContext = boost::any_cast<Entry::Context>(entry->getMutableContext());
+						Context* entryContext = boost::any_cast<Context>(peer->getMutableContext());
 						assert(entryContext);
 						//userid
 						int64_t userid = entryContext->getUserID();
@@ -2036,7 +2040,7 @@ void Gateway::asyncClientHandler(
 					//逻辑服(LogicS，逻辑子游戏libGame_xxx.so)
 					TraceMessageID(header->mainID, header->subID);
 					{
-						Entry::Context* entryContext = boost::any_cast<Entry::Context>(entry->getMutableContext());
+						Context* entryContext = boost::any_cast<Context>(peer->getMutableContext());
 						assert(entryContext);
 						//userid
 						int64_t userid = entryContext->getUserID();

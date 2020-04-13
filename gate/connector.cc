@@ -290,17 +290,17 @@ void Connector::removeConnection(const muduo::net::TcpConnectionPtr& conn, const
 	{
 #if 1
 		if (1 == removes_.erase(name)) {
-			TcpClientMap::const_iterator it = clients_.find(name);
-			assert(it != clients_.end());
+			//TcpClientMap::const_iterator it = clients_.find(name);
+			//assert(it != clients_.end());
 			//it->second->stop();
-			loop_->queueInLoop(
-				std::bind(&Connector::removeInLoop, this, name, true));
 			//it->second.reset();
 			//clients_.erase(it);
+			loop_->queueInLoop(
+				std::bind(&Connector::removeInLoop, this, name, true));
 		}
 		else {
-			TcpClientMap::iterator it = clients_.find(name);
-			assert(it != clients_.end());
+			//TcpClientMap::iterator it = clients_.find(name);
+			//assert(it != clients_.end());
 			//it->second->stop();
 		}
 #else
