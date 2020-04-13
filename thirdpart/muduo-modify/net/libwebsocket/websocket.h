@@ -42,14 +42,10 @@ namespace muduo {
 				IBytesBufferPtr dataBuffer,
 				IBytesBufferPtr controlBuffer);
 
-			//context_free free websocket::IContextPtr
-			//@param IContextPtr& "websocket context"
-			void context_free(IContextPtr& context);
-
 			//parse_message_frame
 			//@param WeakIContextPtr const& "websocket context"
 			int parse_message_frame(
-				WeakIContextPtr const& weakContext,
+				WeakIContextPtr const/*&*/ weakContext,
 				IBytesBuffer /*const*/* buf,
 				ITimestamp* receiveTime);
 

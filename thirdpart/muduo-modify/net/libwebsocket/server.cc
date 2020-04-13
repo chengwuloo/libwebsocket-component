@@ -14,10 +14,7 @@ namespace muduo {
 			//@@ Server ctor
 			Server::Server(muduo::net::EventLoop* loop,
 				const muduo::net::InetAddress& listenAddr,
-				const std::string& name /*,
-				std::string const& cert_path, std::string const& private_key_path,
-				std::string const& client_ca_cert_file_path,
-				std::string const& client_ca_cert_dir_path*/)
+				const std::string& name)
 				: server_(loop, listenAddr, name) {
 				//注册TCP消息回调
 				server_.setMessageCallback(
@@ -88,10 +85,15 @@ namespace muduo {
 				//////////////////////////////////////////////////////////////////////////
 				//parse_message_frame
 				//////////////////////////////////////////////////////////////////////////
-				muduo::net::websocket::parse_message_frame(
-					conn->getWebsocketContext(),
-					buf,
-					&receiveTime);
+				if (conn) {
+					muduo::net::websocket::parse_message_frame(
+						conn->getWebsocketContext(),
+						buf,
+						&receiveTime);
+				}
+				else {
+					assert(false);
+				}
 			}
 
 			//onWebSocketClosed

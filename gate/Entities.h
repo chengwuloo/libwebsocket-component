@@ -77,7 +77,7 @@ namespace STR {
 		//remove
 		inline void remove(std::string const& session) {
 			WRITE_LOCK(mutex_);
-#if 1
+#if 0
 			players_.erase(session);
 #else
 			EntryMap::const_iterator it = players_.find(session);
@@ -136,7 +136,7 @@ namespace INT {
 		//remove
 		inline void remove(int64_t userid) {
 			WRITE_LOCK(mutex_);
-#if 1
+#if 0
 			players_.erase(userid);
 #else
 			EntryMap::const_iterator it = players_.find(userid);

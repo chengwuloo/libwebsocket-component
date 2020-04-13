@@ -112,6 +112,7 @@ buf[0] = 0x78  - 低地址 = 低位
 #include <libwebsocket/IHttpContext.h>
 #include <libwebsocket/websocket.h>
 #include <libwebsocket/private/Endian.h>
+#include <libwebsocket/private/CurrentThread.h>
 
 #include <memory>
 #include <assert.h>
@@ -895,7 +896,7 @@ namespace muduo {
 						messageBuffer_->retrieveAll();
 						segmentOffset_ = 0;
 						//unMask_c_ = 0;
-						messageBuffer_.reset();
+						//messageBuffer_.reset();
 					}
 				}
 				//getMessageHeader 完整websocket消息头(header)
@@ -1177,9 +1178,9 @@ namespace muduo {
 					dataMessage_.resetMessage();
 					controlMessage_.resetMessage();
 					//需要握手成功前释放httpContext资源 ///
-					if (httpContext_) {
-						httpContext_.reset();
-					}
+					//if (httpContext_) {
+					//	httpContext_.reset();
+					//}
 				}
 
 				//StateE
@@ -1252,13 +1253,6 @@ namespace muduo {
 				return newobj;
 			}
 
-			//context_free free websocket::IContextPtr
-			//@param IContextPtr& "websocket context"
-			/*extern*/ /*"C"*/ void context_free(IContextPtr& context) {
-				if (context) {
-					context.reset();
-				}
-			}
 
 			//testValidate 测试帧头合法性
 			void frame_header_t::testValidate() {
@@ -3894,7 +3888,7 @@ namespace muduo {
 			//parse_message_frame
 			//@param WeakIContextPtr const& "websocket context"
 			int parse_message_frame(
-				WeakIContextPtr const& weakContext,
+				WeakIContextPtr const/*&*/ weakContext,
 				IBytesBuffer /*const*/* buf,
 				ITimestamp* receiveTime) {
 				websocket::IContextPtr ctx(weakContext.lock());

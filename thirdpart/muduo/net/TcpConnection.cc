@@ -75,7 +75,7 @@ TcpConnection::TcpConnection(EventLoop* loop,
 TcpConnection::~TcpConnection()
 {
     //websocket support ///
-    websocket::context_free(websocket_ctx_);
+    //websocket_ctx_.reset();
     //openSSL support ///
     ssl::SSL_free(ssl_);
 	//////////////////////////////////////////////////////////////////////////
@@ -139,7 +139,7 @@ bool TcpConnection::initWebsocketContext(bool enable) {
 	bool bok = false;
  	if (enable) {
         TcpConnectionPtr conn(shared_from_this());
-        websocket::context_free(websocket_ctx_);
+        websocket_ctx_.reset();
         websocket_ctx_ = websocket::context_new(
                 WeakTcpConnectionPtr(conn),
 		        http::IContextPtr(new HttpContext()),

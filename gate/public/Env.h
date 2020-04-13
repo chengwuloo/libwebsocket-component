@@ -116,9 +116,9 @@ static void outputFunc(const char* msg, int len) {
 //logdir = "./log/Gateway/" logname = "Gateway"
 static int setEnv(std::string const& logdir, std::string const& logname) {
 
-	//if (!SetRLIMIT()) {
-	//	return -1;
-	//}
+	if (!SetRLIMIT()) {
+		return -1;
+	}
 	SetLibraryPath();
 	muduo::TimeZone beijing(gEastUTC, "CST");
 	muduo::Logger::setTimeZone(beijing);

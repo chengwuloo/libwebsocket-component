@@ -126,35 +126,31 @@ namespace muduo {
 				IBytesBufferPtr dataBuffer,
 				IBytesBufferPtr controlBuffer);
 
-			//context_free free websocket::IContextPtr
-			//@param IContextPtr& "websocket context"
-			void context_free(IContextPtr& context);
-
 			//parse_message_frame
 			//@param WeakIContextPtr const& "websocket context"
-			/*extern*/ int parse_message_frame(
-				WeakIContextPtr const& weakContext,
+			 int parse_message_frame(
+				WeakIContextPtr const/*&*/ weakContext,
 				IBytesBuffer /*const*/* buf,
 				ITimestamp* receiveTime);
 
 			//pack_unmask_data_frame S2C
-			/*extern*/ void pack_unmask_data_frame(
+			 void pack_unmask_data_frame(
 				IBytesBuffer* buf,
 				char const* data, size_t len,
 				MessageT messageType = MessageT::TyTextMessage, bool chunk = false);
 
 			//pack_unmask_close_frame S2C
-			/*extern*/ void pack_unmask_close_frame(
+			 void pack_unmask_close_frame(
 				IBytesBuffer* buf,
 				char const* data, size_t len);
 
 			//pack_unmask_ping_frame S2C
-			/*extern*/ void pack_unmask_ping_frame(
+			 void pack_unmask_ping_frame(
 				IBytesBuffer* buf,
 				char const* data, size_t len);
 
 			//pack_unmask_pong_frame S2C
-			/*extern*/ void pack_unmask_pong_frame(
+			 void pack_unmask_pong_frame(
 				IBytesBuffer* buf,
 				char const* data, size_t len);
 
