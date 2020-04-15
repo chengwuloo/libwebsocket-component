@@ -3803,13 +3803,17 @@ namespace muduo {
 
 #ifdef LIBWEBSOCKET_DEBUG
 					printf("----------------------------------------------\n");
-					printf("size = %d %.*s\n", buf->readableBytes(), buf->readableBytes(), buf->peek());
+					printf("bufsize = %d\n\n%.*s\n", buf->readableBytes(), buf->readableBytes(), buf->peek());
 #endif
 					//http::IContext ///
 					http::IContextPtr httpContext(context.getHttpContext().lock());
+					if (!httpContext) {
+						printf("%s %s(%d) err: httpContext == null\n", __FUNCTION__, __FILE__, __LINE__);
+					}
 					assert(httpContext);
 					if (!httpContext->parseRequestPtr(buf, receiveTime)) {
 						//发生错误
+						printf("%s %s(%d) parseRequestPtr failed\n", __FUNCTION__, __FILE__, __LINE__);
 						*saveErrno = HandShakeE::WS_ERROR_PARSE;
 #ifdef LIBWEBSOCKET_DEBUG
 						printf("-----------------------------------------------------------------------------\n");
@@ -3886,10 +3890,10 @@ namespace muduo {
 				case HandShakeE::WS_ERROR_PARSE:
 				case HandShakeE::WS_ERROR_PACKSZ:
 					//握手失败 ///
-#ifdef LIBWEBSOCKET_DEBUG
+//#ifdef LIBWEBSOCKET_DEBUG
 					printf("-----------------------------------------------------------------\n");
-					printf("websocket::do_handshake failed\n");
-#endif
+					printf("websocket::do_handshake(%d) failed[%s]\n", __LINE__, Handshake_to_string(*saveErrno).c_str());
+//#endif
 					break;
 				}
 				return false;
@@ -3912,13 +3916,14 @@ namespace muduo {
 						bool wsConnected = websocket::do_handshake(context, buf, receiveTime, &saveErrno);
 						switch (saveErrno)
 						{
-						case WS_ERROR_WANT_MORE:
-						case WS_ERROR_CRLFCRLF:
+						case HandShakeE::WS_ERROR_WANT_MORE:
+						case HandShakeE::WS_ERROR_CRLFCRLF:
 							break;
-						case WS_ERROR_PARSE:
-						case WS_ERROR_PACKSZ: {
+						case HandShakeE::WS_ERROR_PARSE:
+						case HandShakeE::WS_ERROR_PACKSZ: {
 							websocket::ICallbackPtr handler(context.getCallbackHandler().lock());
 							if (handler) {
+								printf("%s %s(%d) shutdown\n", __FUNCTION__, __FILE__, __LINE__);
 								handler->sendMessage("HTTP/1.1 400 Bad Request\r\n\r\n");
 								handler->shutdown();
 							}

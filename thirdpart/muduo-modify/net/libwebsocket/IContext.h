@@ -48,8 +48,8 @@ namespace muduo {
 					IBytesBufferPtr dataBuffer,
 					IBytesBufferPtr controlBuffer);
 			protected:
-				//virtual dtor
-				virtual ~IContext() {}
+				//virtual dtor 放这里会有bug???
+				//virtual ~IContext() {}
 
 				//setDataBuffer 完整数据帧消息体(body)
 				//@return IBytesBufferPtr
@@ -77,6 +77,9 @@ namespace muduo {
 
 				//resetHttpContext HTTP Context上下文
 				virtual void resetHttpContext() = 0;
+
+				//virtual dtor 为啥要放最后???
+				virtual ~IContext() {}
 			};
 
 		}//namespace websocket

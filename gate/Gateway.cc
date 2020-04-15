@@ -1250,7 +1250,7 @@ void Gateway::onHallMessage(const muduo::net::TcpConnectionPtr& conn,
 
 		//数据包太大或太小
 		if (likely(len > packet::kMaxPacketSZ ||
-			len < packet::kMinPacketSZ)) {
+			       len < packet::kMinPacketSZ)) {
 			if (conn) {
 #if 0
 				//不再发送数据

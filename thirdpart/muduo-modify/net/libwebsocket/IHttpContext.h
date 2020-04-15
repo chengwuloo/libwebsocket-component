@@ -114,13 +114,15 @@ namespace muduo {
 					kGotAll,
 				};
 			public:
-				//virtual dtor
-				virtual ~IContext() {}
+				//virtual dtor 放这里会有bug???
+				//virtual ~IContext() {}
 				virtual bool parseRequestPtr(IBytesBuffer* buf, ITimestamp* receiveTime) = 0;
 				virtual bool gotAll() const = 0;
 				virtual void reset() = 0;
 				virtual IRequest const* requestConstPtr() const = 0;
 				virtual IRequest* requestPtr() = 0;
+				//virtual dtor 为啥要放最后???
+				virtual ~IContext() {}
 			};
 			//@@
 			typedef http::IContext IHttpContext;
