@@ -27,7 +27,7 @@ namespace muduo {
 		namespace websocket {
 			
 			//@@ ICallback 让 TcpSession/TcpConnection 连接会话类继承，会话连接处理回调
-			class ICallback /*: public std::enable_shared_from_this<ICallback>*/ {
+			class ICallback {
 			public:
 				//@overide
 				virtual void send(const void* message, int len)      = 0;

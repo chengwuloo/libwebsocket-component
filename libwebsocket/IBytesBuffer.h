@@ -30,7 +30,7 @@ namespace muduo {
 		/// @endcode
 		//
 		//@@ IBytesBuffer
-		class IBytesBuffer : public std::enable_shared_from_this<IBytesBuffer> {
+		class IBytesBuffer {
 		public:
 			virtual size_t readableBytes() const = 0;
 			virtual size_t writableBytes() const = 0;

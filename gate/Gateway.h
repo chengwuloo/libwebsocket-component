@@ -7,6 +7,7 @@
 
 #include <muduo/base/Logging.h>
 #include <muduo/base/Mutex.h>
+#include <muduo/base/Exception.h>
 #include <muduo/net/EventLoop.h>
 #include <muduo/net/EventLoopThread.h>
 #include <muduo/net/EventLoopThreadPool.h>
@@ -104,10 +105,6 @@ enum IpVisitE {
 
 #define MY_CATCH() \
 	} \
-catch (const bsoncxx::exception & e) { \
-	LOG_ERROR << __FUNCTION__ << " --- *** " << "exception caught " << e.what(); \
-	abort(); \
-} \
 catch (const muduo::Exception & e) { \
 	LOG_ERROR << __FUNCTION__ << " --- *** " << "exception caught " << e.what(); \
 	abort(); \
@@ -210,7 +207,7 @@ private:
 		muduo::Timestamp receiveTime);
 
 	void asyncClientHandler(
-		const WeakEntryPtr& weakEntry,
+		muduo::net::WeakTcpConnectionPtr const& weakConn,
 		BufferPtr& buf,
 		muduo::Timestamp receiveTime);
 
@@ -222,7 +219,6 @@ private:
 
 	void broadcastMessage(int mainID, int subID, ::google::protobuf::Message* msg);
 
-	
 	//刷新客户端访问IP黑名单信息
 	//1.web后台更新黑名单通知刷新
 	//2.游戏启动刷新一次
@@ -240,7 +236,7 @@ private:
 		muduo::net::Buffer* buf, muduo::Timestamp receiveTime);
 
 	void asyncInnHandler(
-		WeakEntryPtr const& weakEntry,
+		muduo::net::WeakTcpConnectionPtr const& weakConn,
 		BufferPtr& buf,
 		muduo::Timestamp receiveTime);
 
@@ -253,7 +249,7 @@ private:
 
 	void onHttpMessage(const muduo::net::TcpConnectionPtr& conn, muduo::net::Buffer* buf, muduo::Timestamp receiveTime);
 
-	void asyncHttpHandler(const WeakEntryPtr& weakEntry, muduo::Timestamp receiveTime);
+	void asyncHttpHandler(muduo::net::WeakTcpConnectionPtr const& weakConn, muduo::Timestamp receiveTime);
 	
 	static std::string getRequestStr(muduo::net::HttpRequest const& req);
 	
@@ -287,15 +283,15 @@ private:
 		muduo::net::Buffer* buf, muduo::Timestamp receiveTime);
 
 	void asyncHallHandler(
-		WeakEntryPtr const& weakEntry,
+		muduo::net::WeakTcpConnectionPtr const& weakConn,
 		BufferPtr& buf,
 		muduo::Timestamp receiveTime);
 
 	void sendHallMessage(
-		WeakEntryPtr const& weakEntry,
+		const muduo::net::TcpConnectionPtr& conn,
 		BufferPtr& buf, int64_t userid);
 
-	void onUserOfflineHall(WeakEntryPtr const& weakEntry);
+	void onUserOfflineHall(const muduo::net::TcpConnectionPtr& conn);
 
 	//网关服[C]端 -> 游戏服[S]端
 private:
@@ -306,15 +302,15 @@ private:
 		muduo::net::Buffer* buf, muduo::Timestamp receiveTime);
 
 	void asyncGameHandler(
-		WeakEntryPtr const& weakEntry,
+		muduo::net::WeakTcpConnectionPtr const& weakConn,
 		BufferPtr& buf,
 		muduo::Timestamp receiveTime);
 
 	void sendGameMessage(
-		WeakEntryPtr const& weakEntry,
+		const muduo::net::TcpConnectionPtr& conn,
 		BufferPtr& buf, int64_t userid);
 
-	void onUserOfflineGame(WeakEntryPtr const& weakEntry, bool leave = 0);
+	void onUserOfflineGame(const muduo::net::TcpConnectionPtr& conn, bool leave = 0);
 private:
 	//监听客户端TCP请求(websocket)
 	muduo::net::websocket::Server server_;
@@ -346,7 +342,7 @@ private:
 	//worker线程池，内部任务消息队列
 	std::vector<std::shared_ptr<muduo::ThreadPool>> threadPool_;
 
-	//map[session] = entry，entry超时/session过期/玩家离线清理
+	//map[session] = weakConn
 	STR::Entities entities_;
 	//map[userid] = session
 	INT::Sessions sessions_;

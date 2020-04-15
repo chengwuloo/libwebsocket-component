@@ -70,8 +70,6 @@ namespace muduo {
 				IBytesBuffer* buf,
 				char const* data, size_t len);
 
-			void websocket_test_demo();
-
 		}//namespace websocket
 	}//namespace net
 }//namespace muduo

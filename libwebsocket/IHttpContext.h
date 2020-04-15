@@ -104,7 +104,7 @@ namespace muduo {
 			};
 
 			//@@ IContext
-			class IContext : public std::enable_shared_from_this<IContext> {
+			class IContext {
 			public:
 				//ParseState
 				enum ParseState {

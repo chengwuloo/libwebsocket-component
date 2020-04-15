@@ -12,6 +12,7 @@
 #define MUDUO_NET_HTTP_HTTPCONTEXT_H
 
 #include "muduo/base/copyable.h"
+#include "muduo/base/noncopyable.h"
 
 #include "muduo/net/http/HttpRequest.h"
 

@@ -7,11 +7,13 @@
 
 #include <muduo/base/Logging.h>
 #include <muduo/net/EventLoop.h>
-#include "muduo/net/TcpConnection.h"
+#include <muduo/net/TcpConnection.h>
+#include <muduo/base/noncopyable.h>
+#include <muduo/base/Mutex.h>
 
 #include <boost/filesystem.hpp>
 #include <boost/circular_buffer.hpp>
-#include <boost/unordered_set.hpp>
+//#include <boost/unordered_set.hpp>
 #include <boost/algorithm/algorithm.hpp>
 #include <boost/algorithm/string.hpp>
 #include <boost/thread.hpp>
@@ -33,6 +35,7 @@
 #include <sstream>
 #include <iomanip>
 #include <assert.h>
+#include <unordered_set>
 
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -83,25 +86,15 @@ public:
 
 typedef std::shared_ptr<Entry> EntryPtr;
 typedef std::weak_ptr<Entry> WeakEntryPtr;
-typedef boost::unordered_set<EntryPtr> Bucket;
+//boost::unordered_set改用std::unordered_set
+typedef std::unordered_set<EntryPtr> Bucket;
 typedef boost::circular_buffer<Bucket> WeakConnList;
-
-namespace detail {
-
-	//resetEntry std::bind(&detail::resetEntry, weakEntry);
-	static void resetEntry(WeakEntryPtr const weakEntry) {
-		EntryPtr entry(weakEntry.lock());
-		if (likely(entry)) {
-			entry.reset();
-		}
-	}
-}
 
 //////////////////////////////////////////////////////////////////////////
 //@@ ConnectionBucket
 struct ConnectionBucket {
-	explicit ConnectionBucket(muduo::net::EventLoop& loop, int index, size_t size)
-		:loop_(loop), index_(index) {
+	explicit ConnectionBucket(muduo::net::EventLoop* loop, int index, size_t size)
+		:loop_(CHECK_NOTNULL(loop)), index_(index) {
 		//指定时间轮盘大小(bucket桶大小)
 		//即环形数组大小(size) >=
 		//心跳超时清理时间(timeout) >
@@ -113,21 +106,24 @@ struct ConnectionBucket {
 	}
 	//tick检查，间隔1s，踢出超时conn
 	void onTimer() {
-		loop_.assertInLoopThread();
+		loop_->assertInLoopThread();
+		//////////////////////////////////////////////////////////////////////////
+		//shared_ptr非线程安全，引用计数持有/递减操作务必在相同线程内进行
+		//////////////////////////////////////////////////////////////////////////
 		buckets_.push_back(Bucket());
 #ifdef _DEBUG_BUCKETS_
 		LOG_WARN << __FUNCTION__ << " loop[" << index_ << "] timeout[" << buckets_.size() << "]";
 #endif
 		//重启连接超时定时器检查，间隔1s
-		loop_.runAfter(1.0f, std::bind(&ConnectionBucket::onTimer, this));
+		loop_->runAfter(1.0f, std::bind(&ConnectionBucket::onTimer, this));
 	}
 	//连接成功，压入桶元素
-	void pushBucket(EntryPtr const& entry) {
-		loop_.assertInLoopThread();
+	void pushBucket(EntryPtr const/*&*/ entry) {
+		loop_->assertInLoopThread();
 		if (likely(entry)) {
 			muduo::net::TcpConnectionPtr conn(entry->weakConn_.lock());
 			if (likely(conn)) {
-				assert(conn->getLoop() == &loop_);
+				assert(conn->getLoop() == loop_);
 				//必须使用shared_ptr，持有entry引用计数(加1)
 				buckets_.back().insert(entry);
 #ifdef _DEBUG_BUCKETS_
@@ -141,12 +137,12 @@ struct ConnectionBucket {
 		}
 	}
 	//收到消息包，更新桶元素
-	void updateBucket(EntryPtr const& entry) {
-		loop_.assertInLoopThread();
+	void updateBucket(EntryPtr const/*&*/ entry) {
+		loop_->assertInLoopThread();
 		if (likely(entry)) {
 			muduo::net::TcpConnectionPtr conn(entry->weakConn_.lock());
 			if (likely(conn)) {
-				assert(conn->getLoop() == &loop_);
+				assert(conn->getLoop() == loop_);
 				//必须使用shared_ptr，持有entry引用计数(加1)
 				buckets_.back().insert(entry);
 #ifdef _DEBUG_BUCKETS_
@@ -162,7 +158,7 @@ struct ConnectionBucket {
 	//bucketsPool_下标
 	int index_;
 	WeakConnList buckets_;
-	muduo::net::EventLoop& loop_;
+	muduo::net::EventLoop* loop_;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -170,45 +166,56 @@ struct ConnectionBucket {
 struct Context : public muduo::copyable {
 	explicit Context()
 		: index_(0XFFFFFFFF) {
+		reset();
 	}
 	explicit Context(WeakEntryPtr const& weakEntry)
 		: index_(0XFFFFFFFF), weakEntry_(weakEntry) {
+		reset();
 	}
 	explicit Context(int index)
 		: index_(index) {
 		assert(index_ >= 0);
+		reset();
 	}
 	explicit Context(const boost::any& context)
 		: index_(0XFFFFFFFF), context_(context) {
 		assert(!context_.empty());
+		reset();
 	}
 	explicit Context(WeakEntryPtr const& weakEntry, int index)
 		: weakEntry_(weakEntry), index_(index) {
 		assert(index_ >= 0);
+		reset();
 	}
 	explicit Context(WeakEntryPtr const& weakEntry, const boost::any& context)
 		: index_(0XFFFFFFFF), weakEntry_(weakEntry), context_(context) {
 		assert(!context_.empty());
+		reset();
 	}
 	explicit Context(int index, const boost::any& context)
 		: index_(index), context_(context) {
 		assert(index_ >= 0);
 		assert(!context_.empty());
+		reset();
 	}
 	explicit Context(WeakEntryPtr const& weakEntry, int index, const boost::any& context)
 		: weakEntry_(weakEntry), index_(index), context_(context) {
 		assert(index_ >= 0);
 		assert(!context_.empty());
+		reset();
 	}
 	~Context() {
 		//LOG_WARN << __FUNCTION__ << " Context::dtor";
-#if 0
-		//此处调用无效
 		reset();
-#endif
 	}
 	//reset
 	inline void reset() {
+		ipaddr_ = 0;
+		userid_ = 0;
+		session_.clear();
+		aeskey_.clear();
+		//此处调用无效
+#if 0
 		//引用计数加1
 		EntryPtr entry(weakEntry_.lock());
 		if (likely(entry)) {
@@ -216,6 +223,7 @@ struct Context : public muduo::copyable {
 			//因为bucket持有引用计数，所以直到entry超时才析构
 			entry.reset();
 		}
+#endif
 	}
 	inline void setWorkerIndex(int index) {
 		index_ = index;
@@ -233,21 +241,21 @@ struct Context : public muduo::copyable {
 	inline boost::any* getMutableContext() {
 		return &context_;
 	}
-	inline WeakEntryPtr const& getWeakEntryPtr() {
-		return weakEntry_;
-	}
+ 	inline WeakEntryPtr const& getWeakEntryPtr() {
+ 		return weakEntry_;
+ 	}
 	//ipaddr
 	void setFromIp(in_addr_t inaddr) { ipaddr_ = inaddr; }
 	in_addr_t getFromIp() { return ipaddr_; }
 	//session
 	inline void setSession(std::string const& session) { session_ = session; }
-	inline std::string const& getSession() const { return session_; }
+	inline std::string const/*&*/ getSession() const { return session_; }
 	//userid
 	inline void setUserID(int64_t userid) { userid_ = userid; }
 	inline int64_t getUserID() const { return userid_; }
 	//aeskey
 	inline void setAesKey(std::string key) { aeskey_ = key; }
-	inline std::string const& getAesKey() const { return aeskey_; }
+	inline std::string const/*&*/ getAesKey() const { return aeskey_; }
 	//setClientConn
 	inline void setClientConn(servTyE ty,
 		std::string const& name,
@@ -261,7 +269,7 @@ struct Context : public muduo::copyable {
 		client_[ty] = client;
 	}
 	//getClientConn
-	inline ClientConn const& getClientConn(servTyE ty) { return client_[ty]; }
+	inline ClientConn const/*&*/ getClientConn(servTyE ty) { return client_[ty]; }
 public:
 	//threadPool_下标
 	int index_;
@@ -315,7 +323,7 @@ public:
 	}
 	~EventLoopContext() {
 	}
-private:
+public:
 	//bucketsPool_下标
 	int index_;
 	//threadPool_下标集合

@@ -109,26 +109,25 @@ void Connector::check(std::string const& name, bool exist) {
 }
 
 //get
-void Connector::get(std::string const& name, ClientConn* client) {
-	assert(client);
+void Connector::get(std::string const& name, ClientConn& client) {
 	bool bok = false;
 	loop_->runInLoop(
-		std::bind(&Connector::getInLoop, this, name, client, &bok));
+		std::bind(&Connector::getInLoop, this, name, std::ref(client), std::ref(bok)));
 	//spin lock until getAllInLoop return
 	while (!bok);
 }
 
 //getAll
-void Connector::getAll(ClientConnList* clients) {
-	assert(clients && clients->size() == 0);
+void Connector::getAll(ClientConnList& clients) {
+	assert(clients.size() == 0);
 	bool bok = false;
 	loop_->runInLoop(
-		std::bind(&Connector::getAllInLoop, this, clients, &bok));
+		std::bind(&Connector::getAllInLoop, this, std::ref(clients), std::ref(bok)));
 	//spin lock until getAllInLoop return
 	while (!bok);
 }
 
-void Connector::getInLoop(std::string const& name, ClientConn* client, bool* bok) {
+void Connector::getInLoop(std::string const& name, ClientConn& client, bool& bok) {
 
 	loop_->assertInLoopThread();
 
@@ -136,16 +135,16 @@ void Connector::getInLoop(std::string const& name, ClientConn* client, bool* bok
 	if (it != clients_.end()) {
 		if (it->second->connection() &&
 			it->second->connection()->connected()) {
-			client->first = it->first;
-			client->second = it->second->connection();
+			client.first = it->first;
+			client.second = it->second->connection();
 		}
 		else {
 		}
 	}
-	*bok = true;
+	bok = true;
 }
 
-void Connector::getAllInLoop(ClientConnList* clients, bool* bok) {
+void Connector::getAllInLoop(ClientConnList& clients, bool& bok) {
 
 	loop_->assertInLoopThread();
 	
@@ -153,12 +152,12 @@ void Connector::getAllInLoop(ClientConnList* clients, bool* bok) {
 		it != clients_.end(); ++it) {
 		if (it->second->connection() &&
 			it->second->connection()->connected()) {
-			clients->emplace_back(ClientConn(it->first, it->second->connection()));
+			clients.emplace_back(ClientConn(it->first, it->second->connection()));
 		}
 		else {
 		}
 	}
-	*bok = true;
+	bok = true;
 }
 
 void Connector::addInLoop(

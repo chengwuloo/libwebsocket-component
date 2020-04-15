@@ -332,7 +332,6 @@ namespace muduo {
 				IBytesBuffer /*const*/* buf,
 				ITimestamp* receiveTime, int* saveErrno);
 #endif
-			void websocket_test_demo();
 
 		}//namespace websocket
 	}//namespace net

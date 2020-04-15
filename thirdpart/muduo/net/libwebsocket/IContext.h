@@ -40,7 +40,7 @@ namespace muduo {
 			//@@ IContext 作为 TcpSession/TcpConnection 连接会话类成员变量
 			//@bref           TcpSession/TcpConnection 连接会话类构造后 context_new() 创建
 			//@bref           TcpSession/TcpConnection 连接会话类析构时 context_free() 销毁
-			class IContext : public std::enable_shared_from_this<IContext> {
+			class IContext {
 			public:
 				friend IContextPtr context_new(
 					WeakICallbackPtr handler,        //callback handler
@@ -71,6 +71,9 @@ namespace muduo {
 				//getHttpContext HTTP Context上下文
 				//@return http::WeakIContextPtr
 				virtual http::WeakIContextPtr getHttpContext() = 0;
+
+				//resetHttpContext HTTP Context上下文
+				virtual void resetHttpContext() = 0;
 			};
 
 		}//namespace websocket

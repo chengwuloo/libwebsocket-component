@@ -22,7 +22,7 @@
 namespace muduo {
 
 	//@@ ITimestamp
-	class ITimestamp : public std::enable_shared_from_this<ITimestamp> {
+	class ITimestamp {
 	public:
 		virtual void swapPtr(ITimestamp* that) = 0;
 		virtual std::string toString() const = 0;

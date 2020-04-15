@@ -1126,6 +1126,13 @@ namespace muduo {
 					return httpContext_;
 				}
 
+				//resetHttpContext HTTP Context上下文
+				inline void resetHttpContext() {
+					if (httpContext_) {
+						httpContext_.reset();
+					}
+				}
+				
 				//getExtendedHeader 正处于解析当中的帧头(当前帧头)
 				//@return websocket::extended_header_t&
 				inline websocket::extended_header_t& getExtendedHeader() {
@@ -3861,8 +3868,6 @@ namespace muduo {
 							handler->sendMessage(rspdata);
 							handler->onConnectedCallback(ipaddr);
 						}
-						//释放httpContext资源 ///
-						httpContext.reset();
 						//握手成功 ///
 #ifdef LIBWEBSOCKET_DEBUG
 						printf("-----------------------------------------------------------------\n");
@@ -3870,6 +3875,11 @@ namespace muduo {
 #endif
 						return true;
 					}
+					//shared_ptr对象创建及reset销毁非线程安全的!
+					//TcpConnectionPtr持有者TcpServer在loop_中创建conn及IContextPtr，
+					//所以应该由TcpServer在loop_中销毁IContextPtr及其中shared_ptr对象
+					//释放HttpContext资源 ///
+					//context.resetHttpContext();
 				} while (0);
 				switch (*saveErrno)
 				{
@@ -3928,25 +3938,6 @@ namespace muduo {
 					return saveErrno;
 				}
 				return HandShakeE::WS_ERROR_CONTEXT;
-			}
-			
-			void websocket_test_demo() {
-				websocket::header_t h = { 0 };
-#if 0
-				h.FIN = 0;
-				h.RSV123 = 1;
-				h.opcode = 1;
-				h.MASK = 0;
-				h.Payloadlen = 1;
-				unsigned short x;
-				memcpy(&x, &h, 2);
-				printf("%#x\n", x);
-#else
-				int x = 0x212;
-				memcpy(&h, &x, 2);
-				printf("FIN = %d\nRSV1 = %d\nRSV2 = %d\nRSV3 = %d\nopcode = %d\nMASK = %d\nPayloadlen=%d\n",
-					h.FIN, h.RSV1, h.RSV2, h.RSV3, h.opcode, h.MASK, h.Payloadlen);
-#endif
 			}
 
 		}//namespace websocket
