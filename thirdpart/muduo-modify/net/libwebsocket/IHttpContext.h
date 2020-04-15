@@ -114,6 +114,8 @@ namespace muduo {
 					kGotAll,
 				};
 			public:
+				//virtual dtor
+				virtual ~IContext() {}
 				virtual bool parseRequestPtr(IBytesBuffer* buf, ITimestamp* receiveTime) = 0;
 				virtual bool gotAll() const = 0;
 				virtual void reset() = 0;

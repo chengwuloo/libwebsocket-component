@@ -48,6 +48,9 @@ namespace muduo {
 					IBytesBufferPtr dataBuffer,
 					IBytesBufferPtr controlBuffer);
 			protected:
+				//virtual dtor
+				virtual ~IContext() {}
+
 				//setDataBuffer 完整数据帧消息体(body)
 				//@return IBytesBufferPtr
 				virtual void setDataBuffer(IBytesBufferPtr buf) = 0;
