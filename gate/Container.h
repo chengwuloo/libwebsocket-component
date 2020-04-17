@@ -2,8 +2,8 @@
 /*    @author create by andy_ro@qq.com                                  */
 /*    @Date		   03.18.2020                                           */
 /************************************************************************/
-#ifndef CONTEXTCONNECTOR_INCLUDE_H
-#define CONTEXTCONNECTOR_INCLUDE_H
+#ifndef CONTAINER_INCLUDE_H
+#define CONTAINER_INCLUDE_H
 
 #include <boost/filesystem.hpp>
 #include <boost/circular_buffer.hpp>
@@ -34,8 +34,8 @@
 #include "connector.h"
 #include "EntryPtr.h"
 
-//@@ ContextConnector
-struct ContextConnector {
+//@@ Container
+struct Container {
 	
 	//add
 	void add(std::vector<std::string> const& names);
@@ -52,7 +52,7 @@ private:
 
 public:
 	servTyE ty_;
-	Connector* connector_;
+	Connector* clients_;
 	std::vector<std::string> names_;
 	mutable boost::shared_mutex mutex_;
 };

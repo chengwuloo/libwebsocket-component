@@ -17,7 +17,7 @@
 
 #include <errno.h>
 
-#include <muduo/net/libwebsocket/websocket.h>
+#include <muduo/net/libwebsocket/context.h>
 #include <muduo/net/libwebsocket/ssl.h>
 
 using namespace muduo;
@@ -74,8 +74,6 @@ TcpConnection::TcpConnection(EventLoop* loop,
 
 TcpConnection::~TcpConnection()
 {
-    //websocket support ///
-    //websocket_ctx_.reset();
     //openSSL support ///
     ssl::SSL_free(ssl_);
 	//////////////////////////////////////////////////////////////////////////
@@ -87,9 +85,9 @@ TcpConnection::~TcpConnection()
     //TcpConnection::dtor ->
     //Socket::dtor -> sockets::close(sockfd_)
     //////////////////////////////////////////////////////////////////////////
-    //LOG_INFO << "TcpConnection::dtor[" <<  name_ << "] at " << this
-    //       << " fd=" << channel_->fd()
-    //        << " state=" << stateToString();
+    LOG_WARN << "TcpConnection::dtor[" <<  name_ << "] at " << this
+           << " fd=" << channel_->fd()
+            << " state=" << stateToString();
     if (state_ != kDisconnected) {
         LOG_ERROR << __FUNCTION__ << " --- *** " << " state_ = " << state_;
     }
@@ -114,71 +112,19 @@ int TcpConnection::getFd() const {
     return socket_->fd();
 }
 
+//setWsContext
+void TcpConnection::setWsContext(WsContextPtr& context) {
+    wsContext_ = std::move(context);
+}
+
+//getWsContext
+WsContextPtr& TcpConnection::getWsContext() {
+    return wsContext_;
+}
+
 void TcpConnection::send(const void* data, int len)
 {
   send(StringPiece(static_cast<const char*>(data), len));
-}
-
-//overide
-void TcpConnection::sendMessage(std::string const& message) {
-	send(message.data(), message.size());
-}
-//overide
-void TcpConnection::sendMessage(IBytesBuffer* message) {
-    assert(message);
-    Buffer* buf = reinterpret_cast<Buffer*>(message);
-    assert(buf);
-    send(buf);
-}
-//overide
-std::string TcpConnection::peerIpAddrToString() const {
-    return peerAddr_.toIp();
-}
-
-bool TcpConnection::initWebsocketContext(bool enable) {
-	bool bok = false;
- 	if (enable) {
-        TcpConnectionPtr conn(shared_from_this());
-        websocket_ctx_.reset();
-        websocket_ctx_ = websocket::context_new(
-                WeakTcpConnectionPtr(conn),
-		        http::IContextPtr(new HttpContext()),
-		        IBytesBufferPtr(new Buffer()),
-		        IBytesBufferPtr(new Buffer()));
-        return websocket_ctx_ ? true : false;
-    }
-	return false;
-}
-
-//overide
-void TcpConnection::onConnectedCallback(std::string const& ipaddr) {
-    if (wsConnectedCallback_) {
-        wsConnectedCallback_(shared_from_this(), ipaddr);
-    }
-}
-//overide
-void TcpConnection::onMessageCallback(IBytesBufferPtr buf, int msgType, ITimestamp* receiveTime) {
-	if (wsMessageCallback_) {
-		Buffer* buff = reinterpret_cast<Buffer*>(buf.get());
-		assert(buff);
-
-        Timestamp* preceiveTime = reinterpret_cast<Timestamp*>(receiveTime);
-        assert(preceiveTime);
-
-        wsMessageCallback_(shared_from_this(), buff, msgType, *preceiveTime);
-	}
-}
-//overide
-void TcpConnection::onClosedCallback(IBytesBufferPtr buf, ITimestamp* receiveTime) {
-	if (wsClosedCallback_) {
-		Buffer* buff = reinterpret_cast<Buffer*>(buf.get());
-		assert(buff);
-
-		Timestamp* preceiveTime = reinterpret_cast<Timestamp*>(receiveTime);
-		assert(preceiveTime);
-
-        wsClosedCallback_(shared_from_this(), buff, *preceiveTime);
-	}
 }
 
 void TcpConnection::send(const StringPiece& message)

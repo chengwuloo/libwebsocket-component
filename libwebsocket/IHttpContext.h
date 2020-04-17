@@ -1,5 +1,5 @@
 /************************************************************************/
-/*    @author create by andy_ro@qq.com/Qwuloo@qq.com                    */
+/*    @author create by andy_ro@qq.com                                  */
 /*    @Date		   03.03.2020                                           */
 /************************************************************************/
 #ifndef _MUDUO_NET_IHTTPCONTEXT_H_
@@ -103,8 +103,8 @@ namespace muduo {
 				virtual void appendToBufferPtr(IBytesBuffer* output) const = 0;
 			};
 
-			//@@ IContext
-			class IContext {
+			//@@ IContext_
+			class IContext_ {
 			public:
 				//ParseState
 				enum ParseState {
@@ -114,26 +114,22 @@ namespace muduo {
 					kGotAll,
 				};
 			public:
-				//virtual dtor 放这里会有bug???
-				//virtual ~IContext() {}
 				virtual bool parseRequestPtr(IBytesBuffer* buf, ITimestamp* receiveTime) = 0;
 				virtual bool gotAll() const = 0;
 				virtual void reset() = 0;
 				virtual IRequest const* requestConstPtr() const = 0;
 				virtual IRequest* requestPtr() = 0;
-				//virtual dtor 为啥要放最后???
-				virtual ~IContext() {}
+				virtual ~IContext_() {
+					printf("%s %s(%d)\n", __FUNCTION__, __FILE__, __LINE__);
+				}
 			};
-			//@@
-			typedef http::IContext IHttpContext;
-			//@@
-			typedef std::shared_ptr<IHttpContext> IContextPtr;
-			typedef std::weak_ptr<IHttpContext> WeakIContextPtr;
-			//@@
-			typedef IContextPtr IHttpContextPtr;
-			typedef WeakIContextPtr WeakIHttpContextPtr;
 
 		}//namespace http
+
+		//@@
+		typedef http::IContext_ IHttpContext;
+		typedef std::unique_ptr<IHttpContext> IHttpContextPtr;
+
 	}//namespace net
 }//namespace muduo
 

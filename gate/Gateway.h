@@ -54,7 +54,7 @@
 #include "connector.h"
 #include "EntryPtr.h"
 #include "Entities.h"
-#include "Context.h"
+#include "Container.h"
 
 #include "public/packet.h"
 #include "public/StdRandom.h"
@@ -201,7 +201,7 @@ private:
 		const muduo::net::TcpConnectionPtr& conn,
 		std::string const& ipaddr);
 
-	void onMessage(
+	void onClientMessage(
 		const muduo::net::TcpConnectionPtr& conn,
 		muduo::net::Buffer* buf, int msgType,
 		muduo::Timestamp receiveTime);
@@ -210,6 +210,9 @@ private:
 		muduo::net::WeakTcpConnectionPtr const& weakConn,
 		BufferPtr& buf,
 		muduo::Timestamp receiveTime);
+
+	void asyncOfflineHandler(
+		muduo::net::WeakTcpConnectionPtr const& weakConn);
 
 	static BufferPtr packClientShutdownMsg(int64_t userid, int status = 0);
 
@@ -313,7 +316,7 @@ private:
 	void onUserOfflineGame(const muduo::net::TcpConnectionPtr& conn, bool leave = 0);
 private:
 	//监听客户端TCP请求(websocket)
-	muduo::net::websocket::Server server_;
+	muduo::net::TcpServer server_;
 	
 	//监听客户端TCP请求，内部推送通知服务
 	muduo::net::TcpServer innServer_;
@@ -328,7 +331,7 @@ private:
 	int numThreads_, numWorkerThreads_;
 	
 	//Bucket池处理连接超时conn对象
-	std::vector<ConnectionBucket> bucketsPool_;
+	std::vector<ConnectionBucketPtr> bucketsPool_;
 	
 	//累计接收请求数，累计未处理请求数
 	muduo::AtomicInt64 numTotalReq_, numTotalBadReq_;
@@ -351,13 +354,13 @@ private:
 	CmdCallbacks handlers_;
 	
 	//连接到所有大厅服
-	Connector hallConnector_;
+	Connector hallClients_;
 	
 	//连接到所有游戏服
-	Connector gameConnector_;
+	Connector gameClients_;
 
 	//所有大厅服/游戏服节点
-	ContextConnector iptable_[kMaxServTy];
+	Container clients_[kMaxServTy];
 
 	//一致性哈希散列
 	//对玩家session进行一致性hash运算，使得玩家worker线程处理均匀分配(worker线程负载均衡)
@@ -367,12 +370,12 @@ private:
 private:
 	void ZookeeperConnectedHandler();
 	
-	void GetHallChildrenWatcherHandler(
+	void onHallWatcherHandler(
 		int type, int state,
 		const std::shared_ptr<ZookeeperClient>& zkClientPtr,
 		const std::string& path, void* context);
 	
-	void GetGameChildrenWatcherHandler(
+	void onGameWatcherHandler(
 		int type, int state,
 		const std::shared_ptr<ZookeeperClient>& zkClientPtr,
 		const std::string& path, void* context);

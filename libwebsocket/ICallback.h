@@ -1,5 +1,5 @@
 /************************************************************************/
-/*    @author create by andy_ro@qq.com/Qwuloo@qq.com                    */
+/*    @author create by andy_ro@qq.com                                  */
 /*    @Date		   03.03.2020                                           */
 /************************************************************************/
 #ifndef _MUDUO_NET_WEBSOCKET_ICALLBACK_H_
@@ -26,7 +26,7 @@ namespace muduo {
 	namespace net {
 		namespace websocket {
 			
-			//@@ ICallback 让 TcpSession/TcpConnection 连接会话类继承，会话连接处理回调
+			//@@ ICallback
 			class ICallback {
 			public:
 				//@overide
@@ -40,17 +40,13 @@ namespace muduo {
 				//@overide
 				virtual std::string peerIpAddrToString() const   = 0;
 				//@overide
-				virtual void onConnectedCallback(std::string const& ipaddr)                               = 0;
-				virtual void onMessageCallback(IBytesBufferPtr buf, int msgType, ITimestamp* receiveTime) = 0;
-				virtual void onClosedCallback(IBytesBufferPtr buf, ITimestamp* receiveTime)               = 0;
+				virtual void onConnectedCallback(std::string const& ipaddr)                             = 0;
+				virtual void onMessageCallback(IBytesBuffer* buf, int msgType, ITimestamp* receiveTime) = 0;
+				virtual void onClosedCallback(IBytesBuffer* buf, ITimestamp* receiveTime)               = 0;
 			};
-			//@@
-			typedef std::shared_ptr<websocket::ICallback> ICallbackPtr;
-			typedef std::weak_ptr<websocket::ICallback> WeakICallbackPtr;
+
 			//@@
 			typedef ICallback IHandler, ICallbackHandler;
-			typedef ICallbackPtr IHandlerPtr, ICallbackHandlerPtr;
-			typedef WeakICallbackPtr WeakIHandlerPtr, WeakICallbackHandlerPtr;
 
 		}//namespace websocket
 	}//namespace net

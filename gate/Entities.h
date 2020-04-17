@@ -29,6 +29,7 @@
 
 #include <muduo/base/noncopyable.h>
 #include <muduo/base/Mutex.h>
+#include <muduo/net/libwebsocket/server.h>
 
 typedef std::shared_ptr<muduo::net::Buffer> BufferPtr;
 
@@ -81,7 +82,7 @@ namespace STR {
 				it != players_.end(); ++it) {
 				muduo::net::TcpConnectionPtr conn(it->second.lock());
 				if (conn) {
-					muduo::net::websocket::Server::send(
+					muduo::net::websocket::send(
 						conn,
 						buf->peek(), buf->readableBytes());
 				}
@@ -160,7 +161,7 @@ namespace INT {
 				it != players_.end(); ++it) {
 				muduo::net::TcpConnectionPtr conn(it->second.lock());
 				if (conn) {
-					muduo::net::websocket::Server::send(
+					muduo::net::websocket::send(
 						conn,
 						buf->peek(), buf->readableBytes());
 				}

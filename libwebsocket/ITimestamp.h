@@ -1,5 +1,5 @@
 /************************************************************************/
-/*    @author create by andy_ro@qq.com/Qwuloo@qq.com                    */
+/*    @author create by andy_ro@qq.com                                  */
 /*    @Date		   03.03.2020                                           */
 /************************************************************************/
 #ifndef _MUDUO_ITIMESTAMP_H_
@@ -31,9 +31,6 @@ namespace muduo {
 		virtual int64_t microSecondsSinceEpoch() const = 0;
 		virtual time_t secondsSinceEpoch() const = 0;
 	};
-	//@@
-	typedef std::shared_ptr<ITimestamp> ITimestampPtr;
-	typedef std::weak_ptr<ITimestamp> WeakITimestampPtr;
 
 }//namespace muduo
 

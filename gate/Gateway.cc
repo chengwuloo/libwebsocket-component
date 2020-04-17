@@ -8,6 +8,8 @@
 #include <sys/types.h>
 
 #include <muduo/net/Reactor.h>
+#include <muduo/net/libwebsocket/context.h>
+#include <muduo/net/libwebsocket/server.h>
 #include <muduo/net/libwebsocket/ssl.h>
 
 #include <boost/archive/iterators/base64_from_binary.hpp>
@@ -45,8 +47,8 @@ Gateway::Gateway(muduo::net::EventLoop* loop,
     : server_(loop, listenAddr, "Gateway[client]")
 	, innServer_(loop, listenAddrInn, "Gateway[inner]")
 	, httpServer_(loop, listenAddrHttp, "Gateway[http]")
-	, hallConnector_(loop)
-	, gameConnector_(loop)
+	, hallClients_(loop)
+	, gameClients_(loop)
 	, kTimeoutSeconds_(3)
 	, kHttpTimeoutSeconds_(3)
 	, kMaxConnections_(15000)
@@ -61,11 +63,9 @@ Gateway::Gateway(muduo::net::EventLoop* loop,
 	//网关服[S]端 <- 客户端[C]端，websocket
 	server_.setConnectionCallback(
 		std::bind(&Gateway::onConnection, this, std::placeholders::_1));
-	server_.setWsConnectedCallback(
-		std::bind(&Gateway::onConnected, this, std::placeholders::_1, std::placeholders::_2));
-	server_.setWsMessageCallback(
-		std::bind(&Gateway::onMessage, this,
-			std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4));
+	server_.setMessageCallback(
+		std::bind(&muduo::net::websocket::onMessage,
+			std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
 	
 	//网关服[S]端 <- 推送服[C]端，推送通知服务
 	innServer_.setConnectionCallback(
@@ -82,22 +82,22 @@ Gateway::Gateway(muduo::net::EventLoop* loop,
 			std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
 	
 	//网关服[C]端 -> 大厅服[S]端，内部交互
-	hallConnector_.setConnectionCallback(
+	hallClients_.setConnectionCallback(
 		std::bind(&Gateway::onHallConnection, this, std::placeholders::_1));
-	hallConnector_.setMessageCallback(
+	hallClients_.setMessageCallback(
 		std::bind(&Gateway::onHallMessage, this,
 			std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
-	iptable_[servTyE::kHallTy].connector_ = &hallConnector_;
-	iptable_[servTyE::kHallTy].ty_ = servTyE::kHallTy;
+	clients_[servTyE::kHallTy].clients_ = &hallClients_;
+	clients_[servTyE::kHallTy].ty_ = servTyE::kHallTy;
 
 	//网关服[C]端 -> 游戏服[S]端，内部交互
-	gameConnector_.setConnectionCallback(
+	gameClients_.setConnectionCallback(
 		std::bind(&Gateway::onGameConnection, this, std::placeholders::_1));
-	gameConnector_.setMessageCallback(
+	gameClients_.setMessageCallback(
 		std::bind(&Gateway::onGameMessage, this,
 			std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
-	iptable_[servTyE::kGameTy].connector_ = &gameConnector_;
-	iptable_[servTyE::kGameTy].ty_ = servTyE::kGameTy;
+	clients_[servTyE::kGameTy].clients_ = &gameClients_;
+	clients_[servTyE::kGameTy].ty_ = servTyE::kGameTy;
 
 	//添加OpenSSL认证支持 httpServer_&server_ 共享证书
 	muduo::net::ssl::SSL_CTX_Init(
@@ -106,7 +106,7 @@ Gateway::Gateway(muduo::net::EventLoop* loop,
 		client_ca_cert_file_path, client_ca_cert_dir_path);
 
 	//指定SSL_CTX
-	server_.server_.set_SSL_CTX(muduo::net::ssl::SSL_CTX_Get());
+	server_.set_SSL_CTX(muduo::net::ssl::SSL_CTX_Get());
 	httpServer_.set_SSL_CTX(muduo::net::ssl::SSL_CTX_Get());
 }
 
@@ -223,7 +223,7 @@ void Gateway::ZookeeperConnectedHandler() {
 		//指定网卡ip:port
 		std::vector<std::string> vec;
 		//server_ ip:port
-		boost::algorithm::split(vec, server_.server_.ipPort(), boost::is_any_of(":"));
+		boost::algorithm::split(vec, server_.ipPort(), boost::is_any_of(":"));
 		nodeValue_ = strIpAddr_ + ":" + vec[1];
 #if 1
 		//innServer_ ip:port
@@ -239,84 +239,76 @@ void Gateway::ZookeeperConnectedHandler() {
 	{
 		//大厅服 ip:port
 		std::vector<std::string> names;
-		
-		//看门狗zk监控节点
 		if (ZOK == zkclient_->getClildren(
 			"/GAME/HallServers",
 			names,
 			std::bind(
-				&Gateway::GetHallChildrenWatcherHandler, this,
+				&Gateway::onHallWatcherHandler, this,
 				std::placeholders::_1, std::placeholders::_2,
 				std::placeholders::_3, std::placeholders::_4,
 				std::placeholders::_5),
 			this)) {
 			
-			iptable_[servTyE::kHallTy].add(names);
+			clients_[servTyE::kHallTy].add(names);
 		}
 	}
 	{
 		//游戏服 ip:port
 		std::vector<std::string> names;
-
-		//看门狗zk监控节点
 		if (ZOK == zkclient_->getClildren(
 			"/GAME/GameServers",
 			names,
 			std::bind(
-				&Gateway::GetGameChildrenWatcherHandler, this,
+				&Gateway::onGameWatcherHandler, this,
 				std::placeholders::_1, std::placeholders::_2,
 				std::placeholders::_3, std::placeholders::_4,
 				std::placeholders::_5),
 			this)) {
 
-			iptable_[servTyE::kGameTy].add(names);
+			clients_[servTyE::kGameTy].add(names);
 		}
 	}
 }
 
-void Gateway::GetHallChildrenWatcherHandler(
+void Gateway::onHallWatcherHandler(
 	int type, int state, const std::shared_ptr<ZookeeperClient>& zkClientPtr,
 	const std::string& path, void* context)
 {
 	LOG_ERROR << __FUNCTION__;
 	//大厅服 ip:port
 	std::vector<std::string> names;
-	
-	//看门狗zk监控节点
 	if (ZOK == zkclient_->getClildren(
 		"/GAME/HallServers",
 		names,
 		std::bind(
-			&Gateway::GetHallChildrenWatcherHandler, this,
+			&Gateway::onHallWatcherHandler, this,
 			std::placeholders::_1, std::placeholders::_2,
 			std::placeholders::_3, std::placeholders::_4,
 			std::placeholders::_5),
 		this)) {
 
-		iptable_[servTyE::kHallTy].process(names);
+		clients_[servTyE::kHallTy].process(names);
 	}
 }
 
-void Gateway::GetGameChildrenWatcherHandler(
+void Gateway::onGameWatcherHandler(
 	int type, int state, const std::shared_ptr<ZookeeperClient>& zkClientPtr,
 	const std::string& path, void* context)
 {
 	LOG_ERROR << __FUNCTION__;
 	//游戏服 roomid:ip:port
 	std::vector<std::string> names;
-
-	//看门狗zk监控节点
 	if (ZOK == zkclient_->getClildren(
 		"/GAME/GameServers",
 		names,
 		std::bind(
-			&Gateway::GetGameChildrenWatcherHandler, this,
+			&Gateway::onGameWatcherHandler, this,
 			std::placeholders::_1, std::placeholders::_2,
 			std::placeholders::_3, std::placeholders::_4,
 			std::placeholders::_5),
 		this)) {
 
-		iptable_[servTyE::kGameTy].process(names);
+		clients_[servTyE::kGameTy].process(names);
 	}
 }
 
@@ -344,13 +336,13 @@ void Gateway::start(int numThreads, int numWorkerThreads, int maxSize)
 	}
 
 	LOG_INFO << __FUNCTION__ << " --- *** "
-		<< "\nGateway = " << server_.server_.ipPort()
+		<< "\nGateway = " << server_.ipPort()
 		<< " 网络I/O线程数 = " << numThreads
 		<< " worker线程数 = " << numWorkerThreads;
 
 	//Accept时候判断，socket底层控制，否则开启异步检查
 	if (blackListControl_ == IpVisitCtrlE::kOpenAccept) {
-		server_.server_.setConditionCallback(std::bind(&Gateway::onCondition, this, std::placeholders::_1));
+		server_.setConditionCallback(std::bind(&Gateway::onCondition, this, std::placeholders::_1));
 	}
 
 	//Accept时候判断，socket底层控制，否则开启异步检查
@@ -375,37 +367,47 @@ void Gateway::start(int numThreads, int numWorkerThreads, int maxSize)
 
 	//获取网络I/O模型EventLoop池
 	std::shared_ptr<muduo::net::EventLoopThreadPool> threadPool = 
-		/*server_.server_.*/muduo::net::ReactorSingleton::threadPool();
+		/*server_.*/muduo::net::ReactorSingleton::threadPool();
 	std::vector<muduo::net::EventLoop*> loops = threadPool->getAllLoops();
 	
 	//为各网络I/O线程绑定Bucket
 	for (size_t index = 0; index < loops.size(); ++index) {
-		bucketsPool_.emplace_back(ConnectionBucket(loops[index], index, kTimeoutSeconds_));
-		loops[index]->setContext(EventLoopContext(index));
+#if 0
+		ConnectionBucketPtr bucket(
+			new ConnectionBucket(
+				loops[index], index, kTimeoutSeconds_));
+		bucketsPool_.emplace_back(std::move(bucket));
+#else
+		bucketsPool_.emplace_back(
+			ConnectionBucketPtr(
+				new ConnectionBucket(
+			loops[index], index, kTimeoutSeconds_)));
+#endif
+		loops[index]->setContext(EventLoopContextPtr(new EventLoopContext(index)));
 	}
-	
 	//为每个网络I/O线程绑定若干worker线程(均匀分配)
-	int next = 0;
-	for (size_t i = 0; i < threadPool_.size(); ++i) {
-		EventLoopContext* context = boost::any_cast<EventLoopContext>(loops[next]->getMutableContext());
-		assert(context);
-		context->addWorkerIndex(i);
-		if (++next >= loops.size()) {
-			next = 0;
+	{
+		int next = 0;
+		for (size_t i = 0; i < threadPool_.size(); ++i) {
+			EventLoopContextPtr context = boost::any_cast<EventLoopContextPtr>(loops[next]->getContext());
+			assert(context);
+			context->addWorkerIndex(i);
+			if (++next >= loops.size()) {
+				next = 0;
+			}
 		}
 	}
-	
 	//启动连接超时定时器检查，间隔1s
 	for (size_t index = 0; index < loops.size(); ++index) {
 		{
-			assert(bucketsPool_[index].index_ == index);
-			assert(bucketsPool_[index].loop_ == loops[index]);
+			assert(bucketsPool_[index]->index_ == index);
+			assert(bucketsPool_[index]->loop_ == loops[index]);
 		}
 		{
-			EventLoopContext* context = boost::any_cast<EventLoopContext>(loops[index]->getMutableContext());
+			EventLoopContextPtr context = boost::any_cast<EventLoopContextPtr>(loops[index]->getContext());
 			assert(context->index_ == index);
 		}
-		loops[index]->runAfter(1.0f, std::bind(&ConnectionBucket::onTimer, &bucketsPool_[index]));
+		loops[index]->runAfter(1.0f, std::bind(&ConnectionBucket::onTimer, bucketsPool_[index].get()));
 	}
 }
 
@@ -477,7 +479,7 @@ void Gateway::onInnMessage(
 			muduo::net::WeakTcpConnectionPtr weakConn = entities_.get(session);
 			muduo::net::TcpConnectionPtr peer(weakConn.lock());
 			if (peer) {
-				Context* entryContext = boost::any_cast<Context>(peer->getMutableContext());
+				ContextPtr entryContext(boost::any_cast<ContextPtr>(peer->getContext()));
 				assert(entryContext);
 
 				int index = entryContext->getWorkerIndex();
@@ -526,7 +528,7 @@ void Gateway::asyncInnHandler(
 			pre_header->ok == 0) {
 
 		}
-		server_.send(peer, (uint8_t const*)buf->peek() + packet::kPrevHeaderLen, header->len);
+		muduo::net::websocket::send(peer, (uint8_t const*)buf->peek() + packet::kPrevHeaderLen, header->len);
 		return;
 	}
 	LOG_ERROR << __FUNCTION__ << " --- *** " << "peer(entry->getWeakConnPtr().lock()) failed";
@@ -601,24 +603,21 @@ void Gateway::onHttpConnection(const muduo::net::TcpConnectionPtr& conn) {
 			numTotalBadReq_.incrementAndGet();
 			return;
 		}
-		EventLoopContext* context = boost::any_cast<EventLoopContext>(conn->getLoop()->getMutableContext());
+		EventLoopContextPtr context = boost::any_cast<EventLoopContextPtr>(conn->getLoop()->getContext());
 		assert(context);
 
 		EntryPtr entry(new Entry(muduo::net::WeakTcpConnectionPtr(conn)));
 		
 		//指定conn上下文信息
-		conn->setContext(Context(WeakEntryPtr(entry)/*, context->allocWorkerIndex()*/,muduo::net::HttpContext()));
+		ContextPtr entryContext(new Context(WeakEntryPtr(entry), muduo::net::HttpContext()));
+		conn->setContext(entryContext);
 		{
-			Context* entryContext = boost::any_cast<Context>(conn->getMutableContext());
-			assert(entryContext);
-#ifndef NDEBUG
 			//给新conn绑定一个worker线程，之后所有conn相关逻辑业务都在该worker线程中处理
 			int index = context->allocWorkerIndex();
 			assert(index >= 0 && index < threadPool_.size());
 
 			//对于HTTP请求来说，每一个conn都应该是独立的，指定一个独立线程处理即可，避免锁开销与多线程竞争抢占共享资源带来的性能损耗
 			entryContext->setWorkerIndex(index);
-#endif
 		}
 		{
 			//获取EventLoop关联的Bucket
@@ -626,7 +625,7 @@ void Gateway::onHttpConnection(const muduo::net::TcpConnectionPtr& conn) {
 			assert(index >= 0 && index < bucketsPool_.size());
 			//连接成功，压入桶元素
 			conn->getLoop()->runInLoop(
-				std::bind(&ConnectionBucket::pushBucket, &bucketsPool_[index], entry));
+				std::bind(&ConnectionBucket::pushBucket, bucketsPool_[index].get(), entry));
 		}
 		{
 			//TCP_NODELAY
@@ -661,7 +660,7 @@ void Gateway::onHttpMessage(
 	//先确定是HTTP数据报文，再解析 ///
 	//assert(buf->readableBytes() > 4 && buf->findCRLFCRLF());
 
-	Context* entryContext = boost::any_cast<Context>(conn->getMutableContext());
+	ContextPtr entryContext(boost::any_cast<ContextPtr>(conn->getContext()));
 	assert(entryContext);
 	muduo::net::HttpContext* httpContext = boost::any_cast<muduo::net::HttpContext>(entryContext->getMutableContext());
 	assert(httpContext);
@@ -757,7 +756,7 @@ void Gateway::onHttpMessage(
 				assert(index >= 0 && index < bucketsPool_.size());
 
 				//收到消息包，更新桶元素
-				conn->getLoop()->runInLoop(std::bind(&ConnectionBucket::updateBucket, &bucketsPool_[index], entry));
+				conn->getLoop()->runInLoop(std::bind(&ConnectionBucket::updateBucket, bucketsPool_[index].get(), entry));
 			}
 			{
 				//获取绑定的worker线程
@@ -845,7 +844,7 @@ void Gateway::asyncHttpHandler(muduo::net::WeakTcpConnectionPtr const& weakConn,
 			}
 		}
 #endif
-		Context* entryContext = boost::any_cast<Context>(conn->getMutableContext());
+		ContextPtr entryContext(boost::any_cast<ContextPtr>(conn->getContext()));
 		assert(entryContext);
 		muduo::net::HttpContext* httpContext = boost::any_cast<muduo::net::HttpContext>(entryContext->getMutableContext());
 		assert(httpContext);
@@ -1292,7 +1291,7 @@ void Gateway::onHallMessage(const muduo::net::TcpConnectionPtr& conn,
 			muduo::net::WeakTcpConnectionPtr weakConn = entities_.get(session);
 			muduo::net::TcpConnectionPtr peer(weakConn.lock());
 			if (peer) {
-				Context* entryContext = boost::any_cast<Context>(peer->getMutableContext());
+				ContextPtr entryContext(boost::any_cast<ContextPtr>(peer->getContext()));
 				assert(entryContext);
 
 				int index = entryContext->getWorkerIndex();
@@ -1321,7 +1320,7 @@ void Gateway::asyncHallHandler(
 	}
 	muduo::net::TcpConnectionPtr peer(weakConn.lock());
 	if (peer) {
-		Context* entryContext = boost::any_cast<Context>(peer->getMutableContext());
+		ContextPtr entryContext(boost::any_cast<ContextPtr>(peer->getContext()));
 		assert(entryContext);
 
 		//内部消息头internal_prev_header_t
@@ -1358,10 +1357,10 @@ void Gateway::asyncHallHandler(
 				muduo::net::TcpConnectionPtr peer_(entities_.get(session_).lock());
 				if (peer_) {
 					assert(peer_ != peer);
-					Context* entryContext_ = boost::any_cast<Context>(peer_->getMutableContext());
+					ContextPtr entryContext_(boost::any_cast<ContextPtr>(peer_->getContext()));
 					assert(entryContext_);
 					BufferPtr buffer = packClientShutdownMsg(userid, 0);
-					server_.send(peer_, buffer->peek(), buffer->readableBytes());
+					muduo::net::websocket::send(peer_, buffer->peek(), buffer->readableBytes());
 #if 0
 					peer_->getLoop()->runAfter(0.2f, [&]() {
 						entry_.reset();
@@ -1385,7 +1384,7 @@ void Gateway::asyncHallHandler(
 				//分配用户游戏服
 				ClientConn client;
 				//异步获取指定游戏服连接
-				iptable_[servTyE::kGameTy].connector_->get(gameIp, client);
+				clients_[servTyE::kGameTy].clients_->get(gameIp, client);
 				muduo::net::TcpConnectionPtr gameConn(client.second.lock());
 				if (gameConn) {
 					entryContext->setClientConn(servTyE::kGameTy, client);
@@ -1395,7 +1394,7 @@ void Gateway::asyncHallHandler(
 				}
 			}
 		}
-		server_.send(peer, (uint8_t const*)buf->peek() + packet::kPrevHeaderLen, header->len);
+		muduo::net::websocket::send(peer, (uint8_t const*)buf->peek() + packet::kPrevHeaderLen, header->len);
 		return;
 	}
 	LOG_ERROR << __FUNCTION__ << " --- *** " << "peer(weakConn.lock()) failed";
@@ -1405,12 +1404,12 @@ void Gateway::asyncHallHandler(
 void Gateway::sendHallMessage(
 	const muduo::net::TcpConnectionPtr& conn,
 	BufferPtr& buf, int64_t userid) {
-	printf("%s %s(%d)\n", __FUNCTION__, __FILE__, __LINE__);
+	//printf("%s %s(%d)\n", __FUNCTION__, __FILE__, __LINE__);
 	if (conn) {
-		printf("%s %s(%d)\n", __FUNCTION__, __FILE__, __LINE__);
-		Context* entryContext = boost::any_cast<Context>(conn->getMutableContext());
+		//printf("%s %s(%d)\n", __FUNCTION__, __FILE__, __LINE__);
+		ContextPtr entryContext(boost::any_cast<ContextPtr>(conn->getContext()));
 		assert(entryContext);
-		printf("%s %s(%d)\n", __FUNCTION__, __FILE__, __LINE__);
+		//printf("%s %s(%d)\n", __FUNCTION__, __FILE__, __LINE__);
 		ClientConn const/*&*/ clientConn = entryContext->getClientConn(servTyE::kHallTy);
 		muduo::net::TcpConnectionPtr hallConn(clientConn.second.lock());
 		if (hallConn) {
@@ -1418,13 +1417,13 @@ void Gateway::sendHallMessage(
 #if 0
 			assert(
 				std::find(
-					std::begin(iptable_[servTyE::kHallTy].ips_),
-					std::end(iptable_[servTyE::kHallTy].ips_),
-					clientConn.first) != iptable_[servTyE::kHallTy].ips_.end());
+					std::begin(clients_[servTyE::kHallTy].ips_),
+					std::end(clients_[servTyE::kHallTy].ips_),
+					clientConn.first) != clients_[servTyE::kHallTy].ips_.end());
 #endif
-			iptable_[servTyE::kHallTy].connector_->check(clientConn.first, true);
+			clients_[servTyE::kHallTy].clients_->check(clientConn.first, true);
 			if (buf) {
-				printf("len = %d\n", buf->readableBytes());
+				//printf("len = %d\n", buf->readableBytes());
 				size_t len = buf->readableBytes();
 				char data[len];
 				memset(data, 0, len);
@@ -1437,7 +1436,7 @@ void Gateway::sendHallMessage(
 			//用户大厅服无效，重新分配
 			ClientConnList clients;
 			//异步获取全部有效大厅连接
-			iptable_[servTyE::kHallTy].connector_->getAll(clients);
+			clients_[servTyE::kHallTy].clients_->getAll(clients);
 			if (clients.size() > 0) {
 				int index = randomHall_.betweenInt(0, clients.size() - 1).randInt_mt();
 				assert(index >= 0 && index < clients.size());
@@ -1459,7 +1458,7 @@ void Gateway::sendHallMessage(
 void Gateway::onUserOfflineHall(const muduo::net::TcpConnectionPtr& conn) {
 	MY_TRY()
 	if (conn) {
-		Context* entryContext = boost::any_cast<Context>(conn->getMutableContext());
+		ContextPtr entryContext(boost::any_cast<ContextPtr>(conn->getContext()));
 		assert(entryContext);
 		//userid
 		int64_t userid = entryContext->getUserID();
@@ -1568,7 +1567,7 @@ void Gateway::onGameMessage(const muduo::net::TcpConnectionPtr& conn,
 			muduo::net::WeakTcpConnectionPtr weakConn = entities_.get(session);
 			muduo::net::TcpConnectionPtr peer(weakConn.lock());
 			if (peer) {
-				Context* entryContext = boost::any_cast<Context>(peer->getMutableContext());
+				ContextPtr entryContext(boost::any_cast<ContextPtr>(peer->getContext()));
 				assert(entryContext);
 
 				int index = entryContext->getWorkerIndex();
@@ -1598,7 +1597,7 @@ void Gateway::asyncGameHandler(
 	}
 	muduo::net::TcpConnectionPtr peer(weakConn.lock());
 	if (peer) {
-		Context* entryContext = boost::any_cast<Context>(peer->getMutableContext());
+		ContextPtr entryContext(boost::any_cast<ContextPtr>(peer->getContext()));
 		assert(entryContext);
 		//内部消息头internal_prev_header_t
 		packet::internal_prev_header_t /*const*/* pre_header = (packet::internal_prev_header_t /*const*/*)buf->peek();
@@ -1625,7 +1624,7 @@ void Gateway::asyncGameHandler(
 			
 		TraceMessageID(header->mainID, header->subID);
 			
-		server_.send(peer, (uint8_t const*)buf->peek() + packet::kPrevHeaderLen, header->len);
+		muduo::net::websocket::send(peer, (uint8_t const*)buf->peek() + packet::kPrevHeaderLen, header->len);
 		return;
 	}
 	LOG_ERROR << __FUNCTION__ << " --- *** " << "peer(entry->getWeakConnPtr().lock()) failed";
@@ -1635,12 +1634,12 @@ void Gateway::asyncGameHandler(
 void Gateway::sendGameMessage(
 	const muduo::net::TcpConnectionPtr& conn,
 	BufferPtr& buf, int64_t userid) {
-	printf("%s %s(%d)\n", __FUNCTION__, __FILE__, __LINE__);
+	//printf("%s %s(%d)\n", __FUNCTION__, __FILE__, __LINE__);
 	if (conn) {
-		printf("%s %s(%d)\n", __FUNCTION__, __FILE__, __LINE__);
-		Context* entryContext = boost::any_cast<Context>(conn->getMutableContext());
+		//printf("%s %s(%d)\n", __FUNCTION__, __FILE__, __LINE__);
+		ContextPtr entryContext(boost::any_cast<ContextPtr>(conn->getContext()));
 		assert(entryContext);
-		printf("%s %s(%d)\n", __FUNCTION__, __FILE__, __LINE__);
+		//printf("%s %s(%d)\n", __FUNCTION__, __FILE__, __LINE__);
 		ClientConn const/*&*/ clientConn = entryContext->getClientConn(servTyE::kGameTy);
 		muduo::net::TcpConnectionPtr gameConn(clientConn.second.lock());
 		if (gameConn) {
@@ -1648,13 +1647,13 @@ void Gateway::sendGameMessage(
 #if 0
 			assert(
 				std::find(
-					std::begin(iptable_[servTyE::kGameTy].ips_),
-					std::end(iptable_[servTyE::kGameTy].ips_),
-					clientConn.first) != iptable_[servTyE::kGameTy].ips_.end());
+					std::begin(clients_[servTyE::kGameTy].ips_),
+					std::end(clients_[servTyE::kGameTy].ips_),
+					clientConn.first) != clients_[servTyE::kGameTy].ips_.end());
 #endif
-			iptable_[servTyE::kGameTy].connector_->check(clientConn.first, true);
+			clients_[servTyE::kGameTy].clients_->check(clientConn.first, true);
 			if (buf) {
-				printf("len = %d\n", buf->readableBytes());
+				//printf("len = %d\n", buf->readableBytes());
 				size_t len = buf->readableBytes();
 				char data[len];
 				memset(data, 0, len);
@@ -1670,7 +1669,7 @@ void Gateway::onUserOfflineGame(
 	const muduo::net::TcpConnectionPtr& conn, bool leave) {
 	MY_TRY()
 	if (conn) {
-		Context* entryContext = boost::any_cast<Context>(conn->getMutableContext());
+		ContextPtr entryContext(boost::any_cast<ContextPtr>(conn->getContext()));
 		assert(entryContext);
 		//userid
 		int64_t userid = entryContext->getUserID();
@@ -1734,29 +1733,44 @@ void Gateway::onConnection(const muduo::net::TcpConnectionPtr& conn) {
 			//延迟0.2s强制关闭连接
 			conn->forceCloseWithDelay(0.2f);
 #endif
-			//会调用onMessage函数
+			//会调用onClientMessage函数
 			assert(conn->getContext().empty());
 
 			//累计未处理请求数
 			numTotalBadReq_.incrementAndGet();
 			return;
 		}
-		EventLoopContext* context = boost::any_cast<EventLoopContext>(conn->getLoop()->getMutableContext());
+		//////////////////////////////////////////////////////////////////////////
+		//websocket::Context::ctor
+		//////////////////////////////////////////////////////////////////////////
+		muduo::net::WsContextPtr wsContext(new muduo::net::websocket::Context(muduo::net::WeakTcpConnectionPtr(conn)));
+		{
+			wsContext->setWsConnectedCallback(
+				std::bind(&Gateway::onConnected, this, std::placeholders::_1, std::placeholders::_2));
+			wsContext->setWsClosedCallback(
+				std::bind(
+					&muduo::net::websocket::onClosed,
+					std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+			wsContext->setWsMessageCallback(
+				std::bind(&Gateway::onClientMessage, this,
+					std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4));
+		}
+		//指定conn websocket
+		conn->setWsContext(wsContext);
+
+		EventLoopContextPtr context = boost::any_cast<EventLoopContextPtr>(conn->getLoop()->getContext());
 		assert(context);
 		
 		EntryPtr entry(new Entry(muduo::net::WeakTcpConnectionPtr(conn)));
 		
 		//指定conn上下文信息
-		conn->setContext(Context(WeakEntryPtr(entry)/*, context->allocWorkerIndex()*/));
+		ContextPtr entryContext(new Context(WeakEntryPtr(entry)));
+		conn->setContext(entryContext);
 		{
-			Context* entryContext = boost::any_cast<Context>(conn->getMutableContext());
-			assert(entryContext);
-#ifndef NDEBUG
 			//给新conn绑定一个worker线程，之后所有conn相关逻辑业务都在该worker线程中处理
 			int index = context->allocWorkerIndex();
 			assert(index >= 0 && index < threadPool_.size());
 			entryContext->setWorkerIndex(index);
-#endif
 		}
 		{
 			//获取EventLoop关联的Bucket
@@ -1764,7 +1778,7 @@ void Gateway::onConnection(const muduo::net::TcpConnectionPtr& conn) {
 			assert(index >= 0 && index < bucketsPool_.size());
 			//连接成功，压入桶元素
 			conn->getLoop()->runInLoop(
-				std::bind(&ConnectionBucket::pushBucket, &bucketsPool_[index], entry));
+				std::bind(&ConnectionBucket::pushBucket, bucketsPool_[index].get(), entry));
 		}
 		{
 			//TCP_NODELAY
@@ -1777,16 +1791,16 @@ void Gateway::onConnection(const muduo::net::TcpConnectionPtr& conn) {
 			<< conn->localAddress().toIpPort() << "] "
 			<< (conn->connected() ? "UP" : "DOWN") << " " << num;
 		assert(!conn->getContext().empty());
-		Context* entryContext = boost::any_cast<Context>(conn->getMutableContext());
+		//////////////////////////////////////////////////////////////////////////
+		//websocket::Context::dtor
+		//////////////////////////////////////////////////////////////////////////
+		conn->getWsContext().reset();
+		ContextPtr entryContext(boost::any_cast<ContextPtr>(conn->getContext()));
 		assert(entryContext);
 		//userid
 		int64_t userid = entryContext->getUserID();
 		//session
 		std::string const/*&*/ session = entryContext->getSession();
-		//offline hall
-		onUserOfflineHall(conn);
-		//offline game
-		onUserOfflineGame(conn);
 		if (userid > 0) {
 			//check before remove
 			sessions_.remove(userid, session);
@@ -1795,6 +1809,20 @@ void Gateway::onConnection(const muduo::net::TcpConnectionPtr& conn) {
 			//remove
 			entities_.remove(session);
 		}
+#if 0
+		//理论上session不过期，worker线程不变，实际上每次断线重连，session都会变更
+		std::string const& session = entryContext->getSession();
+		int index = hash_session_(session) % threadPool_.size();
+#else
+		//获取绑定的worker线程
+		int index = entryContext->getWorkerIndex();
+		assert(index >= 0 && index < threadPool_.size());
+#endif
+		//扔给任务消息队列处理，不要在网络I/O线程中处理业务，容易引发异常
+		threadPool_[index]->run(
+			std::bind(
+				&Gateway::asyncOfflineHandler,
+				this, muduo::net::WeakTcpConnectionPtr(conn)));
 	}
 }
 
@@ -1805,12 +1833,10 @@ void Gateway::onConnected(
 
 	conn->getLoop()->assertInLoopThread();
 
-	int32_t num = numConnected_.decrementAndGet();
-	LOG_INFO << __FUNCTION__ << " --- *** " << "客户端[" << ipaddr << "] -> 网关服["
-		<< conn->localAddress().toIpPort() << "] "
-		<< (conn->connected() ? "UP" : "DOWN") << " " << num;
+	LOG_INFO << __FUNCTION__ << " --- *** " << "客户端真实IP[" << ipaddr << "]";
+
 	assert(!conn->getContext().empty());
-	Context* entryContext = boost::any_cast<Context>(conn->getMutableContext());
+	ContextPtr entryContext(boost::any_cast<ContextPtr>(conn->getContext()));
 	assert(entryContext);
 	{
 		//保存conn真实ipaddr到Entry::Context上下文
@@ -1830,14 +1856,14 @@ void Gateway::onConnected(
 		//////////////////////////////////////////////////////////////////////////
 		//map[session] = entry
 		//////////////////////////////////////////////////////////////////////////
-		Context* entryContext = boost::any_cast<Context>(conn->getMutableContext());
+		ContextPtr entryContext(boost::any_cast<ContextPtr>(conn->getContext()));
 		assert(entryContext);
 		entities_.add(session, muduo::net::WeakTcpConnectionPtr(conn));
 	}
 }
 
 //网关服[S]端 <- 客户端[C]端，websocket
-void Gateway::onMessage(
+void Gateway::onClientMessage(
 	const muduo::net::TcpConnectionPtr& conn,
 	muduo::net::Buffer* buf, int msgType,
 	muduo::Timestamp receiveTime) {
@@ -1879,12 +1905,12 @@ void Gateway::onMessage(
 		numTotalBadReq_.incrementAndGet();
 	}
 	else /*if (likely(len <= buf->readableBytes()))*/ {
-		Context* entryContext = boost::any_cast<Context>(conn->getMutableContext());
+		ContextPtr entryContext(boost::any_cast<ContextPtr>(conn->getContext()));
 		assert(entryContext);
 		EntryPtr entry(entryContext->getWeakEntryPtr().lock());
 		if (likely(entry)) {
 			{
-				EventLoopContext* context = boost::any_cast<EventLoopContext>(conn->getLoop()->getMutableContext());
+				EventLoopContextPtr context = boost::any_cast<EventLoopContextPtr>(conn->getLoop()->getContext());
 				assert(context);
 				
 				int index = context->getBucketIndex();
@@ -1892,7 +1918,7 @@ void Gateway::onMessage(
 				
 				//收到消息包，更新桶元素
 				conn->getLoop()->runInLoop(
-					std::bind(&ConnectionBucket::updateBucket, &bucketsPool_[index], entry));
+					std::bind(&ConnectionBucket::updateBucket, bucketsPool_[index].get(), entry));
 			}
 			{				
 #if 0
@@ -1995,7 +2021,7 @@ void Gateway::asyncClientHandler(
 				//大厅服(HallS)
 				TraceMessageID(header->mainID, header->subID);
 				{
-					Context* entryContext = boost::any_cast<Context>(peer->getMutableContext());
+					ContextPtr entryContext(boost::any_cast<ContextPtr>(peer->getContext()));
 					assert(entryContext);
 					//userid
 					int64_t userid = entryContext->getUserID();
@@ -2046,7 +2072,7 @@ void Gateway::asyncClientHandler(
 				//逻辑服(LogicS，逻辑子游戏libGame_xxx.so)
 				TraceMessageID(header->mainID, header->subID);
 				{
-					Context* entryContext = boost::any_cast<Context>(peer->getMutableContext());
+					ContextPtr entryContext(boost::any_cast<ContextPtr>(peer->getContext()));
 					assert(entryContext);
 					//userid
 					int64_t userid = entryContext->getUserID();
@@ -2104,6 +2130,17 @@ void Gateway::asyncClientHandler(
 	numTotalBadReq_.incrementAndGet();
 }
 
+void Gateway::asyncOfflineHandler(
+	muduo::net::WeakTcpConnectionPtr const& weakConn) {
+	muduo::net::TcpConnectionPtr peer(weakConn.lock());
+	if (peer) {
+		//offline hall
+		onUserOfflineHall(peer);
+		//offline game
+		onUserOfflineGame(peer);
+	}
+}
+
 //网关服[S]端 <- 客户端[C]端，websocket
 BufferPtr Gateway::packClientShutdownMsg(int64_t userid, int status) {
 
@@ -2156,7 +2193,7 @@ void Gateway::broadcastMessage(int mainID, int subID, ::google::protobuf::Messag
 void Gateway::refreshBlackList() {
 	if (blackListControl_ == IpVisitCtrlE::kOpenAccept) {
 		//Accept时候判断，socket底层控制，否则开启异步检查
-		server_.server_.getLoop()->runInLoop(std::bind(&Gateway::refreshBlackListInLoop, this));
+		server_.getLoop()->runInLoop(std::bind(&Gateway::refreshBlackListInLoop, this));
 	}
 	else if (blackListControl_ == IpVisitCtrlE::kOpen) {
 		//同步刷新IP访问黑名单
@@ -2184,7 +2221,7 @@ bool Gateway::refreshBlackListSync() {
 bool Gateway::refreshBlackListInLoop() {
 	//Accept时候判断，socket底层控制，否则开启异步检查
 	assert(blackListControl_ == IpVisitCtrlE::kOpenAccept);
-	server_.server_.getLoop()->assertInLoopThread();
+	server_.getLoop()->assertInLoopThread();
 	blackList_.clear();
 	for (std::map<in_addr_t, IpVisitE>::const_iterator it = blackList_.begin();
 		it != blackList_.end(); ++it) {

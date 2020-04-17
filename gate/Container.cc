@@ -4,10 +4,10 @@
 /************************************************************************/
 #include <muduo/base/Logging.h>
 #include "public/global.h"
-#include "Context.h"
+#include "Container.h"
 
 //add
-void ContextConnector::add(std::vector<std::string> const& names) {
+void Container::add(std::vector<std::string> const& names) {
 	{
 		WRITE_LOCK(mutex_);
 		names_.assign(names.begin(), names.end());
@@ -20,13 +20,13 @@ void ContextConnector::add(std::vector<std::string> const& names) {
 		for (std::string const& name : names) {
 #endif
 			//添加新节点
-			ContextConnector::add(name);
+			Container::add(name);
 		}
 	}
 }
 
 //process
-void ContextConnector::process(std::vector<std::string> const& names) {
+void Container::process(std::vector<std::string> const& names) {
 	std::set<std::string> oldset, newset(names.begin(), names.end());
 	{
 		READ_LOCK(mutex_);
@@ -45,7 +45,7 @@ void ContextConnector::process(std::vector<std::string> const& names) {
 		//names中没有
 		assert(std::find(std::begin(names), std::end(names), name) == names.end());
 		//失效则移除
-		ContextConnector::remove(name);
+		Container::remove(name);
 	}
 	//活动节点：names中有，而names_中没有
 	diff.clear();
@@ -58,7 +58,7 @@ void ContextConnector::process(std::vector<std::string> const& names) {
 		//names中有
 		assert(std::find(std::begin(names), std::end(names), name) != names.end());
 		//添加新节点
-		ContextConnector::add(name);
+		Container::add(name);
 	}
 	{
 		//添加names到names_
@@ -68,48 +68,44 @@ void ContextConnector::process(std::vector<std::string> const& names) {
 }
 
 //add
-void ContextConnector::add(std::string const& name) {
+void Container::add(std::string const& name) {
 	switch (ty_) {
 	case servTyE::kHallTy: {
-		//大厅服
 		std::vector<std::string> vec;
 		boost::algorithm::split(vec, name, boost::is_any_of(":"));
 		//name：ip:port
 		muduo::net::InetAddress serverAddr(vec[0], atoi(vec[1].c_str()));
 		LOG_WARN << __FUNCTION__ << " >>> 大厅服[" << vec[0] << ":" << vec[1] << "]";
 		//try add & connect
-		connector_->add(name, serverAddr);
+		clients_->add(name, serverAddr);
 		break;
 	}
 	case servTyE::kGameTy: {
-		//游戏服 
 		std::vector<std::string> vec;
 		boost::algorithm::split(vec, name, boost::is_any_of(":"));
 		//name：roomid:ip:port
 		muduo::net::InetAddress serverAddr(vec[1], atoi(vec[2].c_str()));
 		LOG_WARN << __FUNCTION__ << " >>> 游戏服[" << vec[1] << ":" << vec[2] << "] 房间号[" << vec[0] << "]";
 		//try add & connect
-		connector_->add(name, serverAddr);
+		clients_->add(name, serverAddr);
 		break;
 	}
 	}
 }
 
 //remove
-void ContextConnector::remove(std::string const& name) {
+void Container::remove(std::string const& name) {
 	switch (ty_) {
 	case servTyE::kHallTy: {
-		//大厅服
 		LOG_WARN << __FUNCTION__ << " >>> 大厅服[" << name << "]";
 		//try remove
-		connector_->remove(name, false);
+		clients_->remove(name, false);
 		break;
 	}
 	case servTyE::kGameTy: {
-		//游戏服
 		LOG_WARN << __FUNCTION__ << " >>> 游戏服[" << name << "]";
 		//try remove
-		connector_->remove(name, true);
+		clients_->remove(name, true);
 		break;
 	}
 	}

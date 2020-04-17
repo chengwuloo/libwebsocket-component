@@ -83,7 +83,7 @@ buf[0] = 0x78  - 低地址 = 低位
 */
 
 /************************************************************************/
-/*    @author create by andy_ro@qq.com/Qwuloo@qq.com                    */
+/*    @author create by andy_ro@qq.com                                  */
 /*    @Date		   03.03.2020                                           */
 /************************************************************************/
 
@@ -881,9 +881,9 @@ namespace muduo {
 					, segmentOffset_(0) {
 				}
 				explicit Message(MessageE messageType,
-					IBytesBuffer* messageBuffer)
+					IBytesBufferPtr& messageBuffer)
 					: messageHeader_(messageType)
-					, messageBuffer_(messageBuffer)
+					, messageBuffer_(std::move(messageBuffer))
 					/*, header_({ 0 })*/
 					/*, unMask_c_(0)*/
 					, segmentOffset_(0) {
@@ -906,19 +906,18 @@ namespace muduo {
 				}
 				//setMessageBuffer 完整websocket消息体(body)
 				//@return IBytesBufferPtr
-				inline void setMessageBuffer(IBytesBufferPtr buf) {
+				inline void setMessageBuffer(IBytesBufferPtr& buf) {
 					//assert must be NULL
 					assert(!messageBuffer_);
-					messageBuffer_ = buf;
+					messageBuffer_ = std::move(buf);
 					//assert must not be NULL
 					assert(messageBuffer_);
 				}
 				//getMessageBuffer 完整websocket消息体(body)
 				//@return IBytesBufferPtr
-				inline IBytesBufferPtr getMessageBuffer() {
+				inline IBytesBufferPtr& getMessageBuffer() {
 					//assert must not be NULL
-					//@@@ Fixed BUG Crash ///
-					//assert(messageBuffer_);
+					assert(messageBuffer_);
 					return messageBuffer_;
 				}
 				//setMessageType 指定消息类型
@@ -1010,118 +1009,85 @@ namespace muduo {
 				size_t segmentOffset_/*, unMask_c_*/;
 			};
 
-			//@@ Context
-			class Context : public base::noncopyable, public IContext {
+			//@@ Context_
+			class Context_ : public base::noncopyable, public IContext {
 			public:
-				//parse_message_frame
-				//@param websocket::IContext* 暴露给外部接口
-				//friend int parse_message_frame(
-				//	websocket::IContext* context,
-				//	IBytesBuffer /*const*/* buf,
-				//	ITimestamp* receiveTime);
-
-				//do_handshake
-				//@param websocket::Context& 组件内部私有接口
-				//friend bool do_handshake(
-				//	websocket::Context& context,
-				//	IBytesBuffer /*const*/* buf,
-				//	ITimestamp* receiveTime, int* saveErrno);
-
-				//parse_frame
-				//@param websocket::Context& 组件内部私有接口
-				//friend int parse_frame(
-				//	websocket::Context& context,
-				//	IBytesBuffer /*const*/* buf,
-				//	ITimestamp* receiveTime, int* savedErrno);
-
-				//parse_uncontrol_frame_body 非控制帧(数据帧) frame body
-				//Maybe include Extended payload length
-				//Maybe include Masking-key
-				//Must include Payload data
-				//@param websocket::Context& 组件内部私有接口
-				//friend bool parse_uncontrol_frame_body(
-				//	websocket::Context& context,
-				//	IBytesBuffer /*const*/* buf,
-				//	ITimestamp* receiveTime, int* savedErrno);
-
-				//parse_control_frame_body 控制帧 frame body
-				//Maybe include Extended payload length(<=126)
-				//Maybe include Masking-key
-				//Maybe include Payload data
-				//@param websocket::Context& 组件内部私有接口
-				//friend bool parse_control_frame_body(
-				//	websocket::Context& context,
-				//	IBytesBuffer /*const*/* buf,
-				//	ITimestamp* receiveTime, int* savedErrno);
-			public:
-				explicit Context(EndianModeE endian = EndianModeE::LittleEndian)
+				explicit Context_(
+					ICallback* handler,
+					IHttpContextPtr& context,
+					IBytesBufferPtr& dataBuffer,
+					IBytesBufferPtr& controlBuffer,
+					EndianModeE endian = EndianModeE::LittleEndian)
 					: step_(StepE::ReadFrameHeader)
 					, state_(StateE::kClosed)
+					, handler_(NULL)
 					, header_({ 0 })
 					, endian_(endian)
 					, dataMessage_(OpcodeE::TextMessage)
 					, controlMessage_(OpcodeE::CloseMessage)
 					//, callbackHandler_(NULL)
 					/*, httpContext_(NULL)*/ {
-				}
-				explicit Context(
-					IBytesBuffer* dataBuffer,
-					IBytesBuffer* controlBuffer,
-					EndianModeE endian = EndianModeE::LittleEndian)
-					: step_(StepE::ReadFrameHeader)
-					, state_(StateE::kClosed)
-					, header_({ 0 })
-					, endian_(endian)
-					, dataMessage_(OpcodeE::TextMessage, dataBuffer)
-					, controlMessage_(OpcodeE::CloseMessage, controlBuffer)
-					//, callbackHandler_(NULL)
-					/*, httpContext_(NULL)*/ {
-				}
-				~Context() {
 #ifdef LIBWEBSOCKET_DEBUG
-					printf("--- *** websocket::Context::dtor ...\n");
+					printf("%s %s(%d)\n", __FUNCTION__, __FILE__, __LINE__);
+#endif
+					init(handler, context, dataBuffer, controlBuffer);
+				}
+				
+				~Context_() {
+#ifdef LIBWEBSOCKET_DEBUG
+					printf("%s %s(%d)\n", __FUNCTION__, __FILE__, __LINE__);
 #endif
 					resetAll();
-					step_ = StepE::ReadFrameHeader;
-					state_ = StateE::kClosed;
+				}
+
+				//@init
+				inline void init(
+					ICallback* handler,
+					IHttpContextPtr& context,
+					IBytesBufferPtr& dataBuffer,
+					IBytesBufferPtr& controlBuffer) {
+					setHttpContext(context);
+					setDataBuffer(dataBuffer);
+					setControlBuffer(controlBuffer);
+					setCallbackHandler(handler);
 				}
 
 				//setDataBuffer 完整数据帧消息体(body)
 				//@return IBytesBufferPtr
-				inline void setDataBuffer(IBytesBufferPtr buf) {
+				inline void setDataBuffer(IBytesBufferPtr& buf) {
 					dataMessage_.setMessageBuffer(buf);
 				}
 
 				//setControlBuffer 完整控制帧消息体(body)
 				//@return IBytesBufferPtr
-				inline void setControlBuffer(IBytesBufferPtr buf) {
+				inline void setControlBuffer(IBytesBufferPtr& buf) {
 					controlMessage_.setMessageBuffer(buf);
 				}
 
 				//setCallbackHandler 代理回调接口
 				//@param WeakICallbackPtr
-				inline void setCallbackHandler(WeakICallbackPtr handler) {
-					callbackHandler_ = handler;
-					//assert(callbackHandler_);
+				inline void setCallbackHandler(ICallbackHandler* handler) {
+					handler_ = handler;
+					assert(handler_);
 				}
 
 				//getCallbackHandler 代理回调接口
 				//@return WeakICallbackPtr
-				inline WeakICallbackPtr getCallbackHandler() {
-					//assert(callbackHandler_);
-					return callbackHandler_;
+				inline ICallbackHandler* getCallbackHandler() {
+					assert(handler_);
+					return handler_;
 				}
 
 				//setHttpContext HTTP Context上下文
 				//@param http::IContextPtr
-				inline void setHttpContext(http::IContextPtr context) {
-					httpContext_ = context;
+				inline void setHttpContext(IHttpContextPtr& context) {
+					httpContext_ = std::move(context);
 					assert(httpContext_);
 				}
 
 				//getHttpContext HTTP Context上下文
 				//@return http::WeakIContextPtr
-				inline http::WeakIContextPtr getHttpContext() {
+				inline IHttpContextPtr& getHttpContext() {
 					assert(httpContext_);
 					return httpContext_;
 				}
@@ -1181,13 +1147,15 @@ namespace muduo {
 
 				//resetAll
 				inline void resetAll() {
+#ifdef LIBWEBSOCKET_DEBUG
+					printf("%s %s(%d)\n", __FUNCTION__, __FILE__, __LINE__);
+#endif
 					resetExtendedHeader();
 					dataMessage_.resetMessage();
 					controlMessage_.resetMessage();
-					//需要握手成功前释放httpContext资源 ///
-					//if (httpContext_) {
-					//	httpContext_.reset();
-					//}
+					step_ = StepE::ReadFrameHeader;
+					state_ = StateE::kClosed;
+					handler_ = NULL;
 				}
 
 				//StateE
@@ -1220,46 +1188,11 @@ namespace muduo {
 				//可以被插入到消息片段中，如果非控制帧分片传输的话 ///
 				//必须满足Payload len<=126字节，且不能被分片 ///
 				websocket::Message controlMessage_;
-				//IContextPtr HTTP handshake for websocket
-				http::IContextPtr httpContext_;
+				//HTTP handshake for websocket
+				IHttpContextPtr httpContext_;
 				//WeakICallbackPtr for callback
-				websocket::WeakICallbackPtr callbackHandler_;
+				ICallbackHandler* handler_;
 			};
-
-			//
-			// for example:
-			//		TcpConnectionPtr conn(shared_from_this());
-			//		websocket::IContextPtr websocket_ctx_ = context_new(
-			//                  WeakTcpConnectionPtr(conn),
-			//					http::IContextPtr(new HttpContext()),
-			//					IBytesBufferPtr(new Buffer()),
-			//					IBytesBufferPtr(new Buffer()));
-			//
-			//context_new create websocket::IContextPtr
-			//@return IContextPtr "websocket context"
-			/*extern*/ /*"C"*/ IContextPtr context_new(
-				WeakICallbackPtr handler,      //callback handler
-				http::IContextPtr context,     //"http Context"
-				IBytesBufferPtr dataBuffer,
-				IBytesBufferPtr controlBuffer) {
-				IContextPtr newobj(new websocket::Context());
-#ifdef LIBWEBSOCKET_DEBUG
-				assert(std::dynamic_pointer_cast<IContext>(newobj));
-#endif
-				if (newobj) {
-					newobj->setHttpContext(context);
-					newobj->setDataBuffer(dataBuffer);
-					newobj->setControlBuffer(controlBuffer);
-					newobj->setCallbackHandler(handler);
-				}
-				else {
-#ifdef LIBWEBSOCKET_DEBUG
-					printf("websocket::context_new() error\n");
-#endif
-				}
-				return newobj;
-			}
-
 
 			//testValidate 测试帧头合法性
 			void frame_header_t::testValidate() {
@@ -2248,10 +2181,10 @@ namespace muduo {
 // 			}
 
 			//validate_message_frame 消息帧有效性安全检查
-			//@param websocket::Context& 组件内部私有接口
+			//@param websocket::Context_& 组件内部私有接口
 			static bool validate_message_frame(
-				websocket::Context& context,
-				IBytesBuffer /*const*/* buf,
+				websocket::Context_& context,
+				IBytesBuffer* buf,
 				ITimestamp* receiveTime, int* savedErrno) {
 
 				//websocket::extended_header_t 正处于解析当中的帧头(当前帧头)
@@ -2393,73 +2326,73 @@ namespace muduo {
 			}
 
 			//parse_frame_ReadExtendedPayloadlenU16
-			//@param websocket::Context& 组件内部私有接口
+			//@param websocket::Context_& 组件内部私有接口
 			static int parse_frame_ReadExtendedPayloadlenU16(
-				websocket::Context& context,
-				IBytesBuffer /*const*/* buf,
+				websocket::Context_& context,
+				IBytesBuffer* buf,
 				ITimestamp* receiveTime, int* savedErrno);
 			
 			//parse_frame_ReadExtendedPayloadlenI64
-			//@param websocket::Context& 组件内部私有接口
+			//@param websocket::Context_& 组件内部私有接口
 			static int parse_frame_ReadExtendedPayloadlenI64(
-				websocket::Context& context,
-				IBytesBuffer /*const*/* buf,
+				websocket::Context_& context,
+				IBytesBuffer* buf,
 				ITimestamp* receiveTime, int* savedErrno);
 			
 			//parse_frame_ReadMaskingkey
-			//@param websocket::Context& 组件内部私有接口
+			//@param websocket::Context_& 组件内部私有接口
 			static int parse_frame_ReadMaskingkey(
-				websocket::Context& context,
-				IBytesBuffer /*const*/* buf,
+				websocket::Context_& context,
+				IBytesBuffer* buf,
 				ITimestamp* receiveTime, int* savedErrno);
 			
 			//parse_control_frame_ReadPayloadData
-			//@param websocket::Context& 组件内部私有接口
+			//@param websocket::Context_& 组件内部私有接口
 			static bool parse_control_frame_ReadPayloadData(
-				websocket::Context& context,
-				IBytesBuffer /*const*/* buf,
+				websocket::Context_& context,
+				IBytesBuffer* buf,
 				ITimestamp* receiveTime, int* savedErrno);
 			
 			//parse_uncontrol_frame_ReadPayloadData
-			//@param websocket::Context& 组件内部私有接口
+			//@param websocket::Context_& 组件内部私有接口
 			static bool parse_uncontrol_frame_ReadPayloadData(
-				websocket::Context& context,
-				IBytesBuffer /*const*/* buf,
+				websocket::Context_& context,
+				IBytesBuffer* buf,
 				ITimestamp* receiveTime, int* savedErrno);
 
 			//parse_uncontrol_frame_ReadExtendedPayloadDataU16
-			//@param websocket::Context& 组件内部私有接口
+			//@param websocket::Context_& 组件内部私有接口
 			static bool parse_uncontrol_frame_ReadExtendedPayloadDataU16(
-				websocket::Context& context,
-				IBytesBuffer /*const*/* buf,
+				websocket::Context_& context,
+				IBytesBuffer* buf,
 				ITimestamp* receiveTime, int* savedErrno);
 
 			//parse_uncontrol_frame_ReadExtendedPayloadDataI64
-			//@param websocket::Context& 组件内部私有接口
+			//@param websocket::Context_& 组件内部私有接口
 			static bool parse_uncontrol_frame_ReadExtendedPayloadDataI64(
-				websocket::Context& context,
-				IBytesBuffer /*const*/* buf,
+				websocket::Context_& context,
+				IBytesBuffer* buf,
 				ITimestamp* receiveTime, int* savedErrno);
 
 			//parse_control_frame_ReadPayloadData
-			//@param websocket::Context& 组件内部私有接口
+			//@param websocket::Context_& 组件内部私有接口
 			static bool parse_control_frame_ReadPayloadData(
-				websocket::Context& context,
-				IBytesBuffer /*const*/* buf,
+				websocket::Context_& context,
+				IBytesBuffer* buf,
 				ITimestamp* receiveTime, int* savedErrno);
 
 			//parse_control_frame_ReadExtendedPayloadDataU16
-			//@param websocket::Context& 组件内部私有接口
+			//@param websocket::Context_& 组件内部私有接口
 			static bool parse_control_frame_ReadExtendedPayloadDataU16(
-				websocket::Context& context,
-				IBytesBuffer /*const*/* buf,
+				websocket::Context_& context,
+				IBytesBuffer* buf,
 				ITimestamp* receiveTime, int* savedErrno);
 
 			//parse_control_frame_ReadExtendedPayloadDataI64
-			//@param websocket::Context& 组件内部私有接口
+			//@param websocket::Context_& 组件内部私有接口
 			static bool parse_control_frame_ReadExtendedPayloadDataI64(
-				websocket::Context& context,
-				IBytesBuffer /*const*/* buf,
+				websocket::Context_& context,
+				IBytesBuffer* buf,
 				ITimestamp* receiveTime, int* savedErrno);
 
 			//update_frame_body_parse_step 更新帧体(body)消息流解析步骤step
@@ -2471,10 +2404,10 @@ namespace muduo {
 			//		Maybe include Extended payload length(<=126)
 			//		Maybe include Masking-key
 			//		Maybe include Payload data
-			//@param websocket::Context& 组件内部私有接口
+			//@param websocket::Context_& 组件内部私有接口
 			static bool update_frame_body_parse_step(
-				websocket::Context& context,
-				IBytesBuffer /*const*/* buf,
+				websocket::Context_& context,
+				IBytesBuffer* buf,
 				ITimestamp* receiveTime, int* savedErrno) {
 				//websocket::extended_header_t 正处于解析当中的帧头(当前帧头)
 				websocket::extended_header_t& extended_header = context.getExtendedHeader();
@@ -2540,8 +2473,8 @@ namespace muduo {
 			//	更新帧体(body)消息流解析步骤step
 			//@param websocket::Context& 组件内部私有接口
 			static bool parse_frame_ReadFrameHeader(
-				websocket::Context& context,
-				IBytesBuffer /*const*/* buf,
+				websocket::Context_& context,
+				IBytesBuffer* buf,
 				ITimestamp* receiveTime, int* savedErrno) {
 				//websocket::extended_header_t 正处于解析当中的帧头(当前帧头)
 				websocket::extended_header_t& extended_header = context.getExtendedHeader();
@@ -2592,10 +2525,10 @@ namespace muduo {
 			}
 
 			//parse_frame_ReadExtendedPayloadlenU16
-			//@param websocket::Context& 组件内部私有接口
+			//@param websocket::Context_& 组件内部私有接口
 			static int parse_frame_ReadExtendedPayloadlenU16(
-				websocket::Context& context,
-				IBytesBuffer /*const*/* buf,
+				websocket::Context_& context,
+				IBytesBuffer* buf,
 				ITimestamp* receiveTime, int* savedErrno) {
 				//websocket::extended_header_t 正处于解析当中的帧头(当前帧头)
 				websocket::extended_header_t& extended_header = context.getExtendedHeader();
@@ -2643,10 +2576,10 @@ namespace muduo {
 			}
 			
 			//parse_frame_ReadExtendedPayloadlenI64
-			//@param websocket::Context& 组件内部私有接口
+			//@param websocket::Context_& 组件内部私有接口
 			static int parse_frame_ReadExtendedPayloadlenI64(
-				websocket::Context& context,
-				IBytesBuffer /*const*/* buf,
+				websocket::Context_& context,
+				IBytesBuffer* buf,
 				ITimestamp* receiveTime, int* savedErrno) {
 				//websocket::extended_header_t 正处于解析当中的帧头(当前帧头)
 				websocket::extended_header_t& extended_header = context.getExtendedHeader();
@@ -2694,10 +2627,10 @@ namespace muduo {
 			}
 
 			//parse_frame_ReadMaskingkey
-			//@param websocket::Context& 组件内部私有接口
+			//@param websocket::Context_& 组件内部私有接口
 			static int parse_frame_ReadMaskingkey(
-				websocket::Context& context,
-				IBytesBuffer /*const*/* buf,
+				websocket::Context_& context,
+				IBytesBuffer* buf,
 				ITimestamp* receiveTime, int* savedErrno) {
 				//websocket::extended_header_t 正处于解析当中的帧头(当前帧头)
 				websocket::extended_header_t& extended_header = context.getExtendedHeader();
@@ -2780,16 +2713,16 @@ namespace muduo {
 			}
 
 			//parse_uncontrol_frame_ReadPayloadData
-			//@param websocket::Context& 组件内部私有接口
+			//@param websocket::Context_& 组件内部私有接口
 			static bool parse_uncontrol_frame_ReadPayloadData(
-				websocket::Context& context,
-				IBytesBuffer /*const*/* buf,
+				websocket::Context_& context,
+				IBytesBuffer* buf,
 				ITimestamp* receiveTime, int* savedErrno) {
 				//websocket::extended_header_t 正处于解析当中的帧头(当前帧头)
 				websocket::extended_header_t& extended_header = context.getExtendedHeader();
 				//websocket::header_t，uint16_t
 				websocket::header_t& header = extended_header.get_header();
-				websocket::ICallbackPtr handler(context.getCallbackHandler().lock());
+				websocket::ICallbackHandler* handler = context.getCallbackHandler();
 				//数据帧(非控制帧)，携带应用/扩展数据
 				//websocket::Message& dataMessage = context.getDataMessage();
 				//数据帧(非控制帧)，完整websocket消息头(header)
@@ -2877,7 +2810,7 @@ namespace muduo {
 							}
 							if (handler) {
 								handler->onMessageCallback(
-									context.getDataMessage().getMessageBuffer(),
+									context.getDataMessage().getMessageBuffer().get(),
 									context.getDataMessage().getMessageType(), receiveTime);
 							}
 							if (context.getDataMessage().getMessageBuffer()->readableBytes() == header.Payloadlen) {
@@ -2905,16 +2838,16 @@ namespace muduo {
 			}
 
 			//parse_uncontrol_frame_ReadExtendedPayloadDataU16
-			//@param websocket::Context& 组件内部私有接口
+			//@param websocket::Context_& 组件内部私有接口
 			static bool parse_uncontrol_frame_ReadExtendedPayloadDataU16(
-				websocket::Context& context,
-				IBytesBuffer /*const*/* buf,
+				websocket::Context_& context,
+				IBytesBuffer* buf,
 				ITimestamp* receiveTime, int* savedErrno) {
 				//websocket::extended_header_t 正处于解析当中的帧头(当前帧头)
 				websocket::extended_header_t& extended_header = context.getExtendedHeader();
 				//websocket::header_t，uint16_t
 				websocket::header_t& header = extended_header.get_header();
-				websocket::ICallbackPtr handler(context.getCallbackHandler().lock());
+				websocket::ICallbackHandler* handler = context.getCallbackHandler();
 				//数据帧(非控制帧)，携带应用/扩展数据
 				//websocket::Message& dataMessage = context.getDataMessage();
 				//数据帧(非控制帧)，完整websocket消息头(header)
@@ -3002,7 +2935,7 @@ namespace muduo {
 							}
 							if (handler) {
 								handler->onMessageCallback(
-									context.getDataMessage().getMessageBuffer(),
+									context.getDataMessage().getMessageBuffer().get(),
 									context.getDataMessage().getMessageType(), receiveTime);
 							}
 							if (context.getDataMessage().getMessageBuffer()->readableBytes() == extended_header.getExtendedPayloadlenU16()) {
@@ -3030,16 +2963,16 @@ namespace muduo {
 			}
 
 			//parse_uncontrol_frame_ReadExtendedPayloadDataI64
-			//@param websocket::Context& 组件内部私有接口
+			//@param websocket::Context_& 组件内部私有接口
 			static bool parse_uncontrol_frame_ReadExtendedPayloadDataI64(
-				websocket::Context& context,
-				IBytesBuffer /*const*/* buf,
+				websocket::Context_& context,
+				IBytesBuffer* buf,
 				ITimestamp* receiveTime, int* savedErrno) {
 				//websocket::extended_header_t 正处于解析当中的帧头(当前帧头)
 				websocket::extended_header_t& extended_header = context.getExtendedHeader();
 				//websocket::header_t，uint16_t
 				websocket::header_t& header = extended_header.get_header();
-				websocket::ICallbackPtr handler(context.getCallbackHandler().lock());
+				websocket::ICallbackHandler* handler = context.getCallbackHandler();
 				//数据帧(非控制帧)，携带应用/扩展数据
 				//websocket::Message& dataMessage = context.getDataMessage();
 				//数据帧(非控制帧)，完整websocket消息头(header)
@@ -3128,7 +3061,7 @@ namespace muduo {
 							}
 							if (handler) {
 								handler->onMessageCallback(
-									context.getDataMessage().getMessageBuffer(),
+ 									context.getDataMessage().getMessageBuffer().get(),
 									context.getDataMessage().getMessageType(), receiveTime);
 							}
 							if (context.getDataMessage().getMessageBuffer()->readableBytes() == extended_header.getExtendedPayloadlenI64()) {
@@ -3156,16 +3089,16 @@ namespace muduo {
 			}
 
 			//parse_control_frame_ReadPayloadData
-			//@param websocket::Context& 组件内部私有接口
+			//@param websocket::Context_& 组件内部私有接口
 			static bool parse_control_frame_ReadPayloadData(
-				websocket::Context& context,
-				IBytesBuffer /*const*/* buf,
+				websocket::Context_& context,
+				IBytesBuffer* buf,
 				ITimestamp* receiveTime, int* savedErrno) {
 				//websocket::extended_header_t 正处于解析当中的帧头(当前帧头)
 				websocket::extended_header_t& extended_header = context.getExtendedHeader();
 				//websocket::header_t，uint16_t
 				websocket::header_t& header = extended_header.get_header();
-				websocket::ICallbackPtr handler(context.getCallbackHandler().lock());
+				websocket::ICallbackHandler* handler = context.getCallbackHandler();
 				//控制帧，携带应用/扩展数据
 				//websocket::Message& controlMessage = context.getControlMessage();
 				//控制帧，完整websocket消息头(header)
@@ -3245,7 +3178,7 @@ namespace muduo {
 										context.getControlMessage().getMessageBuffer()->readableBytes());
 									handler->sendMessage(&rspdata);
 #endif
-									handler->onClosedCallback(context.getControlMessage().getMessageBuffer(), receiveTime);
+									handler->onClosedCallback(context.getControlMessage().getMessageBuffer().get(), receiveTime);
 #if 0
 									//不再发送数据
 									handler->shutdown();
@@ -3268,7 +3201,7 @@ namespace muduo {
 								//心跳PING探测帧
 								if (handler) {
 									handler->onMessageCallback(
-										context.getControlMessage().getMessageBuffer(),
+ 										context.getControlMessage().getMessageBuffer().get(),
 										context.getControlMessage().getMessageType(), receiveTime);
 								}
 								break;
@@ -3277,7 +3210,7 @@ namespace muduo {
 								//心跳PONG探测帧
 								if (handler) {
 									handler->onMessageCallback(
-										context.getControlMessage().getMessageBuffer(),
+ 										context.getControlMessage().getMessageBuffer().get(),
 										context.getControlMessage().getMessageType(), receiveTime);
 								}
 								break;
@@ -3311,16 +3244,16 @@ namespace muduo {
 			}
 
 			//parse_control_frame_ReadExtendedPayloadDataU16
-			//@param websocket::Context& 组件内部私有接口
+			//@param websocket::Context_& 组件内部私有接口
 			static bool parse_control_frame_ReadExtendedPayloadDataU16(
-				websocket::Context& context,
-				IBytesBuffer /*const*/* buf,
+				websocket::Context_& context,
+				IBytesBuffer* buf,
 				ITimestamp* receiveTime, int* savedErrno) {
 				//websocket::extended_header_t 正处于解析当中的帧头(当前帧头)
 				websocket::extended_header_t& extended_header = context.getExtendedHeader();
 				//websocket::header_t，uint16_t
 				websocket::header_t& header = extended_header.get_header();
-				websocket::ICallbackPtr handler(context.getCallbackHandler().lock());
+				websocket::ICallbackHandler* handler = context.getCallbackHandler();
 				//控制帧，携带应用/扩展数据
 				//websocket::Message& controlMessage = context.getControlMessage();
 				//控制帧，完整websocket消息头(header)
@@ -3400,7 +3333,7 @@ namespace muduo {
 										context.getControlMessage().getMessageBuffer()->readableBytes());
 									handler->sendMessage(&rspdata);
 #endif
-									handler->onClosedCallback(context.getControlMessage().getMessageBuffer(), receiveTime);
+									handler->onClosedCallback(context.getControlMessage().getMessageBuffer().get(), receiveTime);
 #if 0
 									//不再发送数据
 									handler->shutdown();
@@ -3423,7 +3356,7 @@ namespace muduo {
 								//心跳PING探测帧
 								if (handler) {
 									handler->onMessageCallback(
-										context.getControlMessage().getMessageBuffer(),
+ 										context.getControlMessage().getMessageBuffer().get(),
 										context.getControlMessage().getMessageType(), receiveTime);
 								}
 								break;
@@ -3432,7 +3365,7 @@ namespace muduo {
 								//心跳PONG探测帧
 								if (handler) {
 									handler->onMessageCallback(
-										context.getControlMessage().getMessageBuffer(),
+ 										context.getControlMessage().getMessageBuffer().get(),
 										context.getControlMessage().getMessageType(), receiveTime);
 								}
 								break;
@@ -3466,16 +3399,16 @@ namespace muduo {
 			}
 
 			//parse_control_frame_ReadExtendedPayloadDataI64
-			//@param websocket::Context& 组件内部私有接口
+			//@param websocket::Context_& 组件内部私有接口
 			static bool parse_control_frame_ReadExtendedPayloadDataI64(
-				websocket::Context& context,
-				IBytesBuffer /*const*/* buf,
+				websocket::Context_& context,
+				IBytesBuffer* buf,
 				ITimestamp* receiveTime, int* savedErrno) {
 				//websocket::extended_header_t 正处于解析当中的帧头(当前帧头)
 				websocket::extended_header_t& extended_header = context.getExtendedHeader();
 				//websocket::header_t，uint16_t
 				websocket::header_t& header = extended_header.get_header();
-				websocket::ICallbackPtr handler(context.getCallbackHandler().lock());
+				websocket::ICallbackHandler* handler = context.getCallbackHandler();
 				//控制帧，携带应用/扩展数据
 				//websocket::Message& controlMessage = context.getControlMessage();
 				//控制帧，完整websocket消息头(header)
@@ -3556,7 +3489,7 @@ namespace muduo {
 										context.getControlMessage().getMessageBuffer()->readableBytes());
 									handler->sendMessage(&rspdata);
 #endif
-									handler->onClosedCallback(context.getControlMessage().getMessageBuffer(), receiveTime);
+									handler->onClosedCallback(context.getControlMessage().getMessageBuffer().get(), receiveTime);
 #if 0
 									//不再发送数据
 									handler->shutdown();
@@ -3579,7 +3512,7 @@ namespace muduo {
 								//心跳PING探测帧
 								if (handler) {
 									handler->onMessageCallback(
-										context.getControlMessage().getMessageBuffer(),
+ 										context.getControlMessage().getMessageBuffer().get(),
 										context.getControlMessage().getMessageType(), receiveTime);
 								}
 								break;
@@ -3588,7 +3521,7 @@ namespace muduo {
 								//心跳PONG探测帧
 								if (handler) {
 									handler->onMessageCallback(
-										context.getControlMessage().getMessageBuffer(),
+ 										context.getControlMessage().getMessageBuffer().get(),
 										context.getControlMessage().getMessageType(), receiveTime);
 								}
 								break;
@@ -3622,29 +3555,29 @@ namespace muduo {
 			}
 
 			//parse_frame
-			//@param websocket::Context& 组件内部私有接口
+			//@param websocket::Context_& 组件内部私有接口
 			static int parse_frame(
-				websocket::Context& context,
-				IBytesBuffer /*const*/* buf,
+				websocket::Context_& context,
+				IBytesBuffer* buf,
 				ITimestamp* receiveTime, int* savedErrno) {
 				//websocket::extended_header_t 正处于解析当中的帧头(当前帧头)
 				websocket::extended_header_t& extended_header = context.getExtendedHeader();
 				//websocket::header_t，uint16_t
 				websocket::header_t& header = extended_header.get_header();
-				websocket::ICallbackPtr handler(context.getCallbackHandler().lock());
+				websocket::ICallbackHandler* handler = context.getCallbackHandler();
 				//数据帧(非控制帧)，携带应用/扩展数据
 				websocket::Message& dataMessage = context.getDataMessage();
 				//数据帧(非控制帧)，完整websocket消息头(header)
 				websocket::message_header_t& messageHeader = dataMessage.getMessageHeader();
 				//数据帧(非控制帧)，完整websocket消息体(body)
-				IBytesBufferPtr messageBuffer = dataMessage.getMessageBuffer();
+				IBytesBuffer* messageBuffer = dataMessage.getMessageBuffer().get();
 				assert(messageBuffer);
 				//控制帧，Payload len<=126字节，且不能被分片
 				websocket::Message& controlMessage = context.getControlMessage();
 				//控制帧，完整websocket消息头(header)
 				//websocket::message_header_t& controlHeader = controlMessage.getMessageHeader();
 				//控制帧，完整websocket消息体(body)
-				IBytesBufferPtr controlBuffer = controlMessage.getMessageBuffer();
+				IBytesBuffer* controlBuffer = controlMessage.getMessageBuffer().get();
 				assert(controlBuffer);
 				std::pair<FrameControlE, MessageFrameE> ty = get_frame_control_message_type(header);
 				bool enough = true;
@@ -3761,12 +3694,12 @@ namespace muduo {
 			}
 
 			//do_handshake
-			//@param websocket::Context& 组件内部私有接口
+			//@param websocket::Context_& 组件内部私有接口
 			static bool do_handshake(
-				websocket::Context& context,
-				IBytesBuffer /*const*/* buf,
+				websocket::Context_& context,
+				IBytesBuffer* buf,
 				ITimestamp* receiveTime, int* saveErrno) {
-				websocket::ICallbackPtr handler(context.getCallbackHandler().lock());
+				websocket::ICallbackHandler* handler = context.getCallbackHandler();
 				do {
 					//先确定是HTTP数据报文，再解析 ///
 					//assert(buf->readableBytes() > 4 && buf->findCRLFCRLF());
@@ -3790,7 +3723,7 @@ namespace muduo {
 #endif
 						break;
 					}
-					//查找\r\n\r\n ///
+					//查找\r\n\r\n，务必先找到CRLFCRLF结束符得到完整HTTP请求，否则unique_ptr对象失效
 					const char* crlfcrlf = buf->findCRLFCRLF();
 					if (!crlfcrlf) {
 						*saveErrno = HandShakeE::WS_ERROR_CRLFCRLF;
@@ -3805,28 +3738,28 @@ namespace muduo {
 					printf("----------------------------------------------\n");
 					printf("bufsize = %d\n\n%.*s\n", buf->readableBytes(), buf->readableBytes(), buf->peek());
 #endif
-					//http::IContext ///
-					http::IContextPtr httpContext(context.getHttpContext().lock());
-					if (!httpContext) {
+					//务必先找到CRLFCRLF结束符得到完整HTTP请求，否则unique_ptr对象失效
+					if (!context.getHttpContext()) {
+#ifdef LIBWEBSOCKET_DEBUG
 						printf("%s %s(%d) err: httpContext == null\n", __FUNCTION__, __FILE__, __LINE__);
+#endif
 					}
-					assert(httpContext);
-					if (!httpContext->parseRequestPtr(buf, receiveTime)) {
+					assert(context.getHttpContext());
+					if (!context.getHttpContext()->parseRequestPtr(buf, receiveTime)) {
 						//发生错误
-						printf("%s %s(%d) parseRequestPtr failed\n", __FUNCTION__, __FILE__, __LINE__);
 						*saveErrno = HandShakeE::WS_ERROR_PARSE;
 #ifdef LIBWEBSOCKET_DEBUG
 						printf("-----------------------------------------------------------------------------\n");
-						printf("websocket::do_handshake WS_ERROR_PARSE\n");
+						printf("%s %s %s(%d)\n", __FUNCTION__, Handshake_to_string(*saveErrno).c_str(), __FILE__, __LINE__);
 #endif
 						break;
 					}
-					else if (httpContext->gotAll()) {
+					else if (context.getHttpContext()->gotAll()) {
 						std::string ipaddr;
 						std::string rspdata;
 						//填充websocket握手成功响应头信息 ///
-						create_websocket_response(httpContext->requestConstPtr(), rspdata);
-						std::string ipaddrs = httpContext->requestPtr()->getHeader("X-Forwarded-For");
+						create_websocket_response(context.getHttpContext()->requestConstPtr(), rspdata);
+						std::string ipaddrs = context.getHttpContext()->requestPtr()->getHeader("X-Forwarded-For");
 						if (ipaddrs.empty()) {
 							if (handler) {
 								ipaddr = handler->peerIpAddrToString();
@@ -3877,43 +3810,44 @@ namespace muduo {
 						printf("-----------------------------------------------------------------\n");
 						printf("websocket::do_handshake succ\n");
 #endif
+						//shared_ptr/unique_ptr new与reset写操作，非线程安全，必须在相同线程!
+						//shared_ptr/weak_ptr 持有lock是读操作，线程安全!
+						//释放HttpContext资源 ///
+						context.getHttpContext().reset();
 						return true;
 					}
-					//shared_ptr对象创建及reset销毁非线程安全的!
-					//TcpConnectionPtr持有者TcpServer在loop_中创建conn及IContextPtr，
-					//所以应该由TcpServer在loop_中销毁IContextPtr及其中shared_ptr对象
-					//释放HttpContext资源 ///
-					//context.resetHttpContext();
 				} while (0);
 				switch (*saveErrno)
 				{
 				case HandShakeE::WS_ERROR_PARSE:
 				case HandShakeE::WS_ERROR_PACKSZ:
 					//握手失败 ///
-//#ifdef LIBWEBSOCKET_DEBUG
+#ifdef LIBWEBSOCKET_DEBUG
 					printf("-----------------------------------------------------------------\n");
 					printf("websocket::do_handshake(%d) failed[%s]\n", __LINE__, Handshake_to_string(*saveErrno).c_str());
-//#endif
+#endif
 					break;
 				}
+				//shared_ptr/unique_ptr new与reset写操作，非线程安全，必须在相同线程!
+				//shared_ptr/weak_ptr 持有lock是读操作，线程安全!
+				//释放HttpContext资源 ///
+				context.getHttpContext().reset();
 				return false;
 			}
 
 			//parse_message_frame
 			//@param WeakIContextPtr const& "websocket context"
 			int parse_message_frame(
-				WeakIContextPtr const/*&*/ weakContext,
-				IBytesBuffer /*const*/* buf,
+				IContext* context_,
+				IBytesBuffer* buf,
 				ITimestamp* receiveTime) {
-				websocket::IContextPtr ctx(weakContext.lock());
-				if (ctx) {
-					//assert(context_ && dynamic_cast<libwebsocket::Context*>(ctx.get());
-					websocket::Context* pctx = reinterpret_cast<websocket::Context*>(ctx.get());
-					websocket::Context& context = *pctx;
+				if (context_) {
+					//assert(dynamic_cast<websocket::Context_*>(ctx));
+					websocket::Context_* context = reinterpret_cast<websocket::Context_*>(context_);
 					int saveErrno = 0;
-					if (context.getWebsocketState() == websocket::StateE::kClosed) {
+					if (context->getWebsocketState() == websocket::StateE::kClosed) {
 						//do_handshake 握手
-						bool wsConnected = websocket::do_handshake(context, buf, receiveTime, &saveErrno);
+						bool wsConnected = websocket::do_handshake(*context, buf, receiveTime, &saveErrno);
 						switch (saveErrno)
 						{
 						case HandShakeE::WS_ERROR_WANT_MORE:
@@ -3921,9 +3855,8 @@ namespace muduo {
 							break;
 						case HandShakeE::WS_ERROR_PARSE:
 						case HandShakeE::WS_ERROR_PACKSZ: {
-							websocket::ICallbackPtr handler(context.getCallbackHandler().lock());
+							websocket::ICallbackHandler* handler(context->getCallbackHandler());
 							if (handler) {
-								printf("%s %s(%d) shutdown\n", __FUNCTION__, __FILE__, __LINE__);
 								handler->sendMessage("HTTP/1.1 400 Bad Request\r\n\r\n");
 								handler->shutdown();
 							}
@@ -3936,13 +3869,31 @@ namespace muduo {
 						}
 					}
 					else {
-						assert(context.getWebsocketState() == websocket::StateE::kConnected);
+						assert(context->getWebsocketState() == websocket::StateE::kConnected);
 						//parse_frame 解析帧
-						websocket::parse_frame(context, buf, receiveTime, &saveErrno);
+						websocket::parse_frame(*context, buf, receiveTime, &saveErrno);
 					}
 					return saveErrno;
 				}
 				return HandShakeE::WS_ERROR_CONTEXT;
+			}
+
+			IContext* create(
+				ICallback* handler,
+				IHttpContextPtr& context,
+				IBytesBufferPtr& dataBuffer,
+				IBytesBufferPtr& controlBuffer) {
+				return new Context_(
+					handler,
+					context,
+					dataBuffer,
+					controlBuffer);
+			}
+
+			void free(IContext* context) {
+				assert(context);
+				context->resetAll();
+				delete context;
 			}
 
 		}//namespace websocket

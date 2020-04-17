@@ -13,6 +13,8 @@
 
 #include <muduo/net/libwebsocket/IBytesBuffer.h>
 #include <muduo/net/libwebsocket/ITimestamp.h>
+#include <muduo/net/libwebsocket/ICallback.h>
+#include <muduo/net/libwebsocket/IHttpContext.h>
 #include <muduo/net/libwebsocket/IContext.h>
 
 //websocket协议，遵循RFC6455规范 ///
@@ -24,29 +26,19 @@ namespace muduo {
 				TyTextMessage = 0, //文本消息
 				TyBinaryMessage = 1, //二进制消息
 			};
-			
-			//
-			// for example:
-			//		TcpConnectionPtr conn(shared_from_this());
-			//		websocket::IContextPtr websocket_ctx_ = websocket::context_new(
-			//                  WeakTcpConnectionPtr(conn),
-			//					http::IContextPtr(new HttpContext()),
-			//					IBytesBufferPtr(new Buffer()),
-			//					IBytesBufferPtr(new Buffer()));
-			//
-			//context_new create websocket::IContextPtr
-			//@return IContextPtr "websocket context"
-			IContextPtr context_new(
-				WeakICallbackPtr handler,        //callback handler
-				http::IContextPtr context,       //"http Context"
-				IBytesBufferPtr dataBuffer,
-				IBytesBufferPtr controlBuffer);
+
+			IContext* create(
+				ICallback* handler,
+				IHttpContextPtr& context, //"http Context"
+				IBytesBufferPtr& dataBuffer,
+				IBytesBufferPtr& controlBuffer);
+
+			void free(IContext* context);
 
 			//parse_message_frame
-			//@param WeakIContextPtr const& "websocket context"
 			int parse_message_frame(
-				WeakIContextPtr const/*&*/ weakContext,
-				IBytesBuffer /*const*/* buf,
+				IContext* context,
+				IBytesBuffer* buf,
 				ITimestamp* receiveTime);
 
 			//pack_unmask_data_frame S2C

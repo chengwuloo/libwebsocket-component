@@ -92,7 +92,7 @@ typedef boost::circular_buffer<Bucket> WeakConnList;
 
 //////////////////////////////////////////////////////////////////////////
 //@@ ConnectionBucket
-struct ConnectionBucket {
+struct ConnectionBucket : public muduo::noncopyable {
 	explicit ConnectionBucket(muduo::net::EventLoop* loop, int index, size_t size)
 		:loop_(CHECK_NOTNULL(loop)), index_(index) {
 		//指定时间轮盘大小(bucket桶大小)
@@ -161,9 +161,11 @@ struct ConnectionBucket {
 	muduo::net::EventLoop* loop_;
 };
 
+typedef std::unique_ptr<ConnectionBucket> ConnectionBucketPtr;
+
 //////////////////////////////////////////////////////////////////////////
 //@@ Context
-struct Context : public muduo::copyable {
+struct Context : public muduo::noncopyable {
 	explicit Context()
 		: index_(0XFFFFFFFF) {
 		reset();
@@ -172,35 +174,13 @@ struct Context : public muduo::copyable {
 		: index_(0XFFFFFFFF), weakEntry_(weakEntry) {
 		reset();
 	}
-	explicit Context(int index)
-		: index_(index) {
-		assert(index_ >= 0);
-		reset();
-	}
 	explicit Context(const boost::any& context)
 		: index_(0XFFFFFFFF), context_(context) {
 		assert(!context_.empty());
 		reset();
 	}
-	explicit Context(WeakEntryPtr const& weakEntry, int index)
-		: weakEntry_(weakEntry), index_(index) {
-		assert(index_ >= 0);
-		reset();
-	}
 	explicit Context(WeakEntryPtr const& weakEntry, const boost::any& context)
 		: index_(0XFFFFFFFF), weakEntry_(weakEntry), context_(context) {
-		assert(!context_.empty());
-		reset();
-	}
-	explicit Context(int index, const boost::any& context)
-		: index_(index), context_(context) {
-		assert(index_ >= 0);
-		assert(!context_.empty());
-		reset();
-	}
-	explicit Context(WeakEntryPtr const& weakEntry, int index, const boost::any& context)
-		: weakEntry_(weakEntry), index_(index), context_(context) {
-		assert(index_ >= 0);
 		assert(!context_.empty());
 		reset();
 	}
@@ -236,6 +216,9 @@ struct Context : public muduo::copyable {
 		context_ = context;
 	}
 	inline const boost::any& getContext() const {
+		return context_;
+	}
+	inline boost::any& getContext() {
 		return context_;
 	}
 	inline boost::any* getMutableContext() {
@@ -282,9 +265,11 @@ public:
 	boost::any context_;
 };
 
+typedef std::shared_ptr<Context> ContextPtr;
+
 //////////////////////////////////////////////////////////////////////////
 //@@ EventLoopContext
-class EventLoopContext : public muduo::copyable {
+class EventLoopContext : public muduo::noncopyable {
 public:
 	explicit EventLoopContext()
 		: index_(0xFFFFFFFF) {
@@ -293,6 +278,7 @@ public:
 		: index_(index) {
 		assert(index_ >= 0);
 	}
+#if 0
 	explicit EventLoopContext(EventLoopContext const& ref) {
 		index_ = ref.index_;
 		pool_.clear();
@@ -302,6 +288,7 @@ public:
 		std::copy(ref.pool_.begin(), ref.pool_.end(), std::back_inserter(pool_));
 #endif
 	}
+#endif
 	inline void setBucketIndex(int index) {
 		index_ = index;
 		assert(index_ >= 0);
@@ -331,5 +318,7 @@ public:
 	//pool_游标
 	muduo::AtomicInt32 nextPool_;
 };
+
+typedef std::shared_ptr<EventLoopContext> EventLoopContextPtr;
 
 #endif

@@ -84,9 +84,9 @@ namespace muduo {
 			//writeFull for EPOLLET
 			static ssize_t writeFull(int sockfd, void const* data, size_t len, int* savedErrno);
 		};
-		
-		typedef std::shared_ptr<IBytesBuffer> IBytesBufferPtr;
-		typedef std::weak_ptr<IBytesBuffer> WeakIBytesBufferPtr;
+
+		//@@
+		typedef std::unique_ptr<IBytesBuffer> IBytesBufferPtr;
 
 	}  // namespace net
 }  // namespace muduo

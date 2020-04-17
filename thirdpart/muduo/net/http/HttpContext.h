@@ -25,7 +25,7 @@ namespace net
 
 class Buffer;
 
-class HttpContext : public muduo::copyable, public http::IContext
+class HttpContext : public muduo::copyable, public IHttpContext
 {
  public:
 //   enum HttpRequestParseState
@@ -35,12 +35,14 @@ class HttpContext : public muduo::copyable, public http::IContext
 //     kExpectBody,
 //     kGotAll,
 //   };
-     typedef http::IContext::ParseState HttpRequestParseState;
+     typedef IHttpContext::ParseState HttpRequestParseState;
   HttpContext()
-    : state_(http::IContext::kExpectRequestLine)
+    : state_(IHttpContext::kExpectRequestLine)
   {
   }
-
+  ~HttpContext() {
+      printf("%s %s(%d)\n", __FUNCTION__, __FILE__, __LINE__);
+  }
   // default copy-ctor, dtor and assignment are fine
 
   // return false if any error
@@ -55,11 +57,11 @@ class HttpContext : public muduo::copyable, public http::IContext
   }
 
   bool gotAll() const
-  { return state_ == http::IContext::kGotAll; }
+  { return state_ == IHttpContext::kGotAll; }
 
   void reset()
   {
-    state_ = http::IContext::kExpectRequestLine;
+    state_ = IHttpContext::kExpectRequestLine;
     HttpRequest dummy;
     request_.swap(dummy);
   }
@@ -81,7 +83,7 @@ class HttpContext : public muduo::copyable, public http::IContext
  private:
   bool processRequestLine(const char* begin, const char* end);
 
-  http::IContext::ParseState state_;
+  IHttpContext::ParseState state_;
   HttpRequest request_;
 };
 

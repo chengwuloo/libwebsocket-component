@@ -63,7 +63,7 @@ bool HttpContext::parseRequest(Buffer* buf, Timestamp receiveTime)
   bool hasMore = true;
   while (hasMore)
   {
-    if (state_ == http::IContext::kExpectRequestLine)
+    if (state_ == IHttpContext::kExpectRequestLine)
     {
       const char* crlf = buf->findCRLF();
       if (crlf)
@@ -73,7 +73,7 @@ bool HttpContext::parseRequest(Buffer* buf, Timestamp receiveTime)
         {
           request_.setReceiveTime(receiveTime);
           buf->retrieveUntil(crlf + 2);
-          state_ = http::IContext::kExpectHeaders;
+          state_ = IHttpContext::kExpectHeaders;
         }
         else
         {
@@ -85,7 +85,7 @@ bool HttpContext::parseRequest(Buffer* buf, Timestamp receiveTime)
         hasMore = false;
       }
     }
-    else if (state_ == http::IContext::kExpectHeaders)
+    else if (state_ == IHttpContext::kExpectHeaders)
     {
       const char* crlf = buf->findCRLF();
       if (crlf)
@@ -99,7 +99,7 @@ bool HttpContext::parseRequest(Buffer* buf, Timestamp receiveTime)
         {
           // empty line, end of header
           // FIXME:
-          state_ = http::IContext::kGotAll;
+          state_ = IHttpContext::kGotAll;
           hasMore = false;
         }
         buf->retrieveUntil(crlf + 2);
@@ -109,7 +109,7 @@ bool HttpContext::parseRequest(Buffer* buf, Timestamp receiveTime)
         hasMore = false;
       }
     }
-    else if (state_ == http::IContext::kExpectBody)
+    else if (state_ == IHttpContext::kExpectBody)
     {
       // FIXME:
     }

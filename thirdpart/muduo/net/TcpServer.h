@@ -71,26 +71,6 @@ class TcpServer : noncopyable
   { conditionCallback_ = cb; }
   ConditionCallback conditionCallback_;
 
-  void enableWebsocket(bool enable) {
-      enableWebsocket_ = enable;
-  }
-  bool isWebsocketSupport() {
-      isWebsocketSupport_;
-  }
-  //websocket callback ///
-  void setWsConnectedCallback(WsConnectedCallback const& cb) {
-	  wsConnectedCallback_ = cb;
-  }
-  void setWsMessageCallback(WsMessageCallback const& cb) {
-	  wsMessageCallback_ = cb;
-  }
-  void setWsClosedCallback(WsClosedCallback const& cb) {
-	  wsClosedCallback_ = cb;
-  }
-  WsConnectedCallback wsConnectedCallback_;
-  WsMessageCallback wsMessageCallback_;
-  WsClosedCallback wsClosedCallback_;
-  bool enableWebsocket_, isWebsocketSupport_;
   /// valid after calling start()
   std::shared_ptr<EventLoopThreadPool> threadPool()
   { return ReactorSingleton::threadPool();/*threadPool_;*/ }

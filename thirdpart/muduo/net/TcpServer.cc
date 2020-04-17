@@ -31,9 +31,7 @@ TcpServer::TcpServer(EventLoop* loop,
     connectionCallback_(defaultConnectionCallback),
     messageCallback_(defaultMessageCallback),
     nextConnId_(1),
-    ssl_ctx_(NULL),
-    enableWebsocket_(false),
-    isWebsocketSupport_(false)
+    ssl_ctx_(NULL)
 {
   ReactorSingleton::inst(loop, name_);
   acceptor_->setNewConnectionCallback(
@@ -100,13 +98,6 @@ void TcpServer::newConnection(int sockfd, const InetAddress& peerAddr)
                                           ssl_ctx_,
                                           enable_et_));
   connections_[connName] = conn;
-  isWebsocketSupport_ = conn->initWebsocketContext(enableWebsocket_);
-  if (isWebsocketSupport_) {
-	  //websocket callback ///
-	  conn->setWsConnectedCallback(wsConnectedCallback_);
-	  conn->setWsMessageCallback(wsMessageCallback_);
-	  conn->setWsClosedCallback(wsClosedCallback_);
-  }
   conn->setConnectionCallback(connectionCallback_);
   conn->setMessageCallback(messageCallback_);
   conn->setWriteCompleteCallback(writeCompleteCallback_);

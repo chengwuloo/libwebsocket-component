@@ -19,8 +19,6 @@
 #include "muduo/net/InetAddress.h"
 #include "muduo/net/http/HttpContext.h"
 
-#include "muduo/net/libwebsocket/IContext.h"
-
 #include <memory>
 
 #include <boost/any.hpp>
@@ -39,12 +37,17 @@ class Channel;
 class EventLoop;
 class Socket;
 
+namespace websocket {
+	class Context;
+}
+
+typedef std::unique_ptr<websocket::Context> WsContextPtr;
+
 ///
 /// TCP connection, for both client and server usage.
 ///
 /// This is an interface class, so don't expose too much details.
 class TcpConnection : noncopyable,
-                      public websocket::ICallbackHandler,
                       public std::enable_shared_from_this<TcpConnection>
 {
  public:
@@ -71,20 +74,6 @@ class TcpConnection : noncopyable,
   string getTcpInfoString() const;
   //
   int getFd() const;
-  
-  //overide
-  /*virtual*/ void sendMessage(std::string const& message);
-  //overide
-  /*virtual*/ void sendMessage(IBytesBuffer* message);
-  //overide
-  /*virtual*/ std::string peerIpAddrToString() const;
-  //overide
-  /*virtual*/ void onConnectedCallback(std::string const& ipaddr);
-  //overide
-  /*virtual*/ void onMessageCallback(IBytesBufferPtr buf, int msgType, ITimestamp* receiveTime);
-  //overide
-  /*virtual*/ void onClosedCallback(IBytesBufferPtr buf, ITimestamp* receiveTime);
-
   // void send(string&& message); // C++11
   void send(const void* message, int len);
   void send(const StringPiece& message);
@@ -121,20 +110,6 @@ class TcpConnection : noncopyable,
   void setHighWaterMarkCallback(const HighWaterMarkCallback& cb, size_t highWaterMark)
   { highWaterMarkCallback_ = cb; highWaterMark_ = highWaterMark; }
 
-  //websocket callback ///
-  void setWsConnectedCallback(WsConnectedCallback const& cb) {
-      wsConnectedCallback_ = cb;
-  }
-  void setWsMessageCallback(WsMessageCallback const& cb) {
-      wsMessageCallback_ = cb;
-  }
-  void setWsClosedCallback(WsClosedCallback const& cb) {
-      wsClosedCallback_ = cb;
-  }
-  WsConnectedCallback wsConnectedCallback_;
-  WsMessageCallback wsMessageCallback_;
-  WsClosedCallback wsClosedCallback_;
-
   /// Advanced interface
   Buffer* inputBuffer()
   { return &inputBuffer_; }
@@ -151,18 +126,18 @@ class TcpConnection : noncopyable,
   // called when TcpServer has removed me from its map
   void connectDestroyed();  // should be called only once
   
-  bool initWebsocketContext(bool enable);
+  //setWsContext
+  void setWsContext(WsContextPtr& context);
 
-  websocket::WeakIContextPtr getWebsocketContext() {
-      return websocket_ctx_;
-  }
+  //getWsContext
+  WsContextPtr& getWsContext();
 
 private:
   bool enable_et_;
   SSL* ssl_;
   SSL_CTX* ssl_ctx_;
   bool sslConnected_;
-  websocket::IContextPtr websocket_ctx_;
+  WsContextPtr wsContext_;
  private:
   enum StateE { kDisconnected, kConnecting, kConnected, kDisconnecting };
   void handleRead(Timestamp receiveTime);
