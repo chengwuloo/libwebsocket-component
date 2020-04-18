@@ -28,16 +28,23 @@ namespace muduo {
 				explicit Context(const muduo::net::WeakTcpConnectionPtr& weakConn);
 				~Context();
 			public:
-				void setWsConnectedCallback(WsConnectedCallback const& cb) {
+				inline void setWsConnectedCallback(WsConnectedCallback const& cb) {
 					wsConnectedCallback_ = cb;
 				}
-				void setWsMessageCallback(WsMessageCallback const& cb) {
+				inline void setWsMessageCallback(WsMessageCallback const& cb) {
 					wsMessageCallback_ = cb;
 				}
-				void setWsClosedCallback(WsClosedCallback const& cb) {
+				inline void setWsClosedCallback(WsClosedCallback const& cb) {
 					wsClosedCallback_ = cb;
 				}
-			public:
+				//parse_message_frame
+				inline void parse_message_frame(IBytesBuffer* buf, ITimestamp* receiveTime) {
+					//////////////////////////////////////////////////////////////////////////
+					//parse_message_frame
+					//////////////////////////////////////////////////////////////////////////
+					websocket::parse_message_frame(getContext(), buf, receiveTime);
+				}
+			private:
 				//@overide
 				void send(const void* message, int len);
 				void sendMessage(std::string const& message);
@@ -52,9 +59,6 @@ namespace muduo {
 				void onConnectedCallback(std::string const& ipaddr);
 				void onMessageCallback(IBytesBuffer* buf, int msgType, ITimestamp* receiveTime);
 				void onClosedCallback(IBytesBuffer* buf, ITimestamp* receiveTime);
-			public:
-				//parse_message_frame
-				void parse_message_frame(IBytesBuffer* buf, ITimestamp* receiveTime);
 			private:
 				inline websocket::IContext* getContext() {
 					assert(holder_);

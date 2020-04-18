@@ -175,11 +175,30 @@ static double floors(std::string const& s) {
 		}
 		std::string x = prefix + "." + dot;
 		return atof(x.c_str());
-		void(0);
 	}
 	else {
 		return atof(s.c_str());
 	}
+}
+
+//截取double小数点后2位，直接截断并乘以100转int64_t
+static int64_t rate100(std::string const& s) {
+	std::string::size_type npos = s.find_first_of('.');
+	if (npos != std::string::npos) {
+		std::string prefix = s.substr(0, npos);
+		std::string sufix = s.substr(npos + 1, -1);
+		std::string x;
+		if (!sufix.empty()) {
+			if (sufix.length() >= 2) {
+				x = prefix + sufix.substr(0, 2);
+			}
+			else {
+				x = prefix + sufix.substr(0, 1) + "0";
+			}
+		}
+		return atoll(x.c_str());
+	}
+	return atoll(s.c_str()) * 100;
 }
 
 //启动HTTP业务线程 ///

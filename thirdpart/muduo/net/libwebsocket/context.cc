@@ -138,14 +138,6 @@ namespace muduo {
 				}
 			}
 
-			//parse_message_frame
-			void Context::parse_message_frame(IBytesBuffer* buf, ITimestamp* receiveTime) {
-				//////////////////////////////////////////////////////////////////////////
-				//parse_message_frame
-				//////////////////////////////////////////////////////////////////////////
-				websocket::parse_message_frame(getContext(), buf, receiveTime);
-			}
-
 		}//namespace websocket
 	}//namespace net
 }//namespace muduo
