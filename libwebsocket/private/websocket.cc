@@ -3878,6 +3878,7 @@ namespace muduo {
 				return HandShakeE::WS_ERROR_CONTEXT;
 			}
 
+			//create
 			IContext* create(
 				ICallback* handler,
 				IHttpContextPtr& context,
@@ -3889,7 +3890,8 @@ namespace muduo {
 					dataBuffer,
 					controlBuffer);
 			}
-
+			
+			//free
 			void free(IContext* context) {
 				assert(context);
 				context->resetAll();

@@ -132,6 +132,56 @@ ApiServer::~ApiServer()
 	muduo::net::ssl::SSL_CTX_free();
 }
 
+//截取double小数点后bit位，直接截断
+static double floorx(double d, int bit) {
+	int rate = pow(10, bit);
+	int64_t x = int64_t(d * rate);
+	return (((double)x) / rate);
+}
+
+//截取double小数点后bit位，四舍五入
+static double roundx(double d, int bit) {
+	int rate = pow(10, bit);
+	int64_t x = int64_t(d * rate + 0.5f);
+	return (((double)x) / rate);
+}
+
+//截取double小数点后bit位，直接截断
+static double floorx(double d) {
+#if 0
+	int64_t x = int64_t(d * 100);
+	return (((double)x) / 100);
+#elif 0
+	char c[20] = { 0 };
+	snprintf(c, sizeof c, "%.2f", d);
+	return atof(c);
+#endif
+}
+
+//截取double小数点后2位，直接截断
+static double floors(std::string const& s) {
+	std::string::size_type npos = s.find_first_of('.');
+	if (npos != std::string::npos) {
+		std::string dot;
+		std::string prefix = s.substr(0, npos);
+		std::string sufix = s.substr(npos + 1, -1);
+		if (!sufix.empty()) {
+			if (sufix.length() >= 2) {
+				dot = sufix.substr(0, 2);
+			}
+			else {
+				dot = sufix.substr(0, 1);
+			}
+		}
+		std::string x = prefix + "." + dot;
+		return atof(x.c_str());
+		void(0);
+	}
+	else {
+		return atof(s.c_str());
+	}
+}
+
 //启动HTTP业务线程 ///
 //启动HTTP监听 ///
 void ApiServer::start(int numThreads, int workerNumThreads, int maxSize) {
@@ -1350,7 +1400,7 @@ std::string ApiServer::OrderProcess(std::string const& reqStr, muduo::Timestamp 
 				(score = atoll(scoreKey->second.c_str())) <= 0) {
 #else
 			if (scoreKey == params.end() || scoreKey->second.empty() || !IsDigitStr(scoreKey->second) ||
-				(score = atof(scoreKey->second.c_str())) <= 0 || NotScore(score)) {
+				(score = floors(scoreKey->second.c_str())) <= 0 || NotScore(score)) {
 #endif
 				// 传输参数错误
 				errcode = eApiErrorCode::GameHandleParamsError;
@@ -1586,7 +1636,7 @@ std::string ApiServer::OrderProcess(std::string const& reqStr, muduo::Timestamp 
 				(score = atoll(scoreKey->second.c_str())) <= 0) {
 #else
 			if (scoreKey == decryptParams.end() || scoreKey->second.empty() || !IsDigitStr(scoreKey->second) ||
-				(score = atof(scoreKey->second.c_str())) <= 0 || NotScore(score)) {
+				(score = floors(scoreKey->second.c_str())) <= 0 || NotScore(score)) {
 #endif
 				// 传输参数错误
 				errcode = eApiErrorCode::GameHandleParamsError;

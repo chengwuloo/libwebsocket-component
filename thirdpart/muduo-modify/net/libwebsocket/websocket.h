@@ -27,12 +27,14 @@ namespace muduo {
 				TyBinaryMessage = 1, //二进制消息
 			};
 
+			//create
 			IContext* create(
 				ICallback* handler,
 				IHttpContextPtr& context, //"http Context"
 				IBytesBufferPtr& dataBuffer,
 				IBytesBufferPtr& controlBuffer);
-
+			
+			//free
 			void free(IContext* context);
 
 			//parse_message_frame

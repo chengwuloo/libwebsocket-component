@@ -22,31 +22,16 @@ class EchoServer
 
  private:
   void onConnection(const muduo::net::TcpConnectionPtr& conn);
-  void onMessage(const muduo::net::TcpConnectionPtr& conn,
-                 muduo::net::Buffer* buf,
-                 muduo::Timestamp receiveTime);
 
-  //onWebSocketConnected websocket
-  void onWebSocketConnected(
+  void onConnected(
       const muduo::net::TcpConnectionPtr& conn,
       std::string const& ipaddr);
   
-  //onWebSocketMessage websocket
-  void onWebSocketMessage(
+  void onMessage(
 	  const muduo::net::TcpConnectionPtr& conn,
 	  muduo::net::Buffer* buf, int msgType,
 	  muduo::Timestamp receiveTime);
   
-  //onWebSocketClosed websocket
-  void onWebSocketClosed(
-      const muduo::net::TcpConnectionPtr& conn,
-      muduo::net::Buffer* buf, muduo::Timestamp receiveTime);
-
-  //processRequest
-  void processRequest(const muduo::net::TcpConnectionPtr& conn,
-	  std::vector<uint8_t> &buf,
-	  muduo::Timestamp receiveTime);
-
 private:
     //监听客户端TCP请求
 	muduo::net::TcpServer server_;

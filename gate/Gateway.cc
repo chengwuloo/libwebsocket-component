@@ -1733,7 +1733,7 @@ void Gateway::onConnection(const muduo::net::TcpConnectionPtr& conn) {
 			//延迟0.2s强制关闭连接
 			conn->forceCloseWithDelay(0.2f);
 #endif
-			//会调用onClientMessage函数
+			//会调用onMessage函数
 			assert(conn->getContext().empty());
 
 			//累计未处理请求数
@@ -1743,20 +1743,13 @@ void Gateway::onConnection(const muduo::net::TcpConnectionPtr& conn) {
 		//////////////////////////////////////////////////////////////////////////
 		//websocket::Context::ctor
 		//////////////////////////////////////////////////////////////////////////
-		muduo::net::WsContextPtr wsContext(new muduo::net::websocket::Context(muduo::net::WeakTcpConnectionPtr(conn)));
-		{
-			wsContext->setWsConnectedCallback(
-				std::bind(&Gateway::onConnected, this, std::placeholders::_1, std::placeholders::_2));
-			wsContext->setWsClosedCallback(
-				std::bind(
-					&muduo::net::websocket::onClosed,
-					std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
-			wsContext->setWsMessageCallback(
-				std::bind(&Gateway::onClientMessage, this,
-					std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4));
-		}
-		//指定conn websocket
-		conn->setWsContext(wsContext);
+		muduo::net::websocket::hook(
+			std::bind(&Gateway::onConnected, this,
+				std::placeholders::_1, std::placeholders::_2),
+			std::bind(&Gateway::onMessage, this,
+				std::placeholders::_1, std::placeholders::_2,
+				std::placeholders::_3, std::placeholders::_4),
+			conn);
 
 		EventLoopContextPtr context = boost::any_cast<EventLoopContextPtr>(conn->getLoop()->getContext());
 		assert(context);
@@ -1794,7 +1787,7 @@ void Gateway::onConnection(const muduo::net::TcpConnectionPtr& conn) {
 		//////////////////////////////////////////////////////////////////////////
 		//websocket::Context::dtor
 		//////////////////////////////////////////////////////////////////////////
-		conn->getWsContext().reset();
+		muduo::net::websocket::reset(conn);
 		ContextPtr entryContext(boost::any_cast<ContextPtr>(conn->getContext()));
 		assert(entryContext);
 		//userid
@@ -1863,7 +1856,7 @@ void Gateway::onConnected(
 }
 
 //网关服[S]端 <- 客户端[C]端，websocket
-void Gateway::onClientMessage(
+void Gateway::onMessage(
 	const muduo::net::TcpConnectionPtr& conn,
 	muduo::net::Buffer* buf, int msgType,
 	muduo::Timestamp receiveTime) {

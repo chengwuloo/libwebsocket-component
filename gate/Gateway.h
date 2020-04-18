@@ -201,7 +201,7 @@ private:
 		const muduo::net::TcpConnectionPtr& conn,
 		std::string const& ipaddr);
 
-	void onClientMessage(
+	void onMessage(
 		const muduo::net::TcpConnectionPtr& conn,
 		muduo::net::Buffer* buf, int msgType,
 		muduo::Timestamp receiveTime);
