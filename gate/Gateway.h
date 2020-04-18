@@ -347,6 +347,7 @@ private:
 
 	//map[session] = weakConn
 	STR::Entities entities_;
+	
 	//map[userid] = session
 	INT::Sessions sessions_;
 

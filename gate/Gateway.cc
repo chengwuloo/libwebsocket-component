@@ -474,7 +474,7 @@ void Gateway::onInnMessage(
 			int index = hash_session_(session) % threadPool_.size();
 #else
 			//////////////////////////////////////////////////////////////////////////
-			//session -> entry -> conn -> entryContext -> index
+			//session -> conn -> entryContext -> index
 			//////////////////////////////////////////////////////////////////////////
 			muduo::net::WeakTcpConnectionPtr weakConn = entities_.get(session);
 			muduo::net::TcpConnectionPtr peer(weakConn.lock());
@@ -1286,7 +1286,7 @@ void Gateway::onHallMessage(const muduo::net::TcpConnectionPtr& conn,
 					conn, buffer, receiveTime));
 #else
 			//////////////////////////////////////////////////////////////////////////
-			//session -> entry -> entryContext -> index
+			//session -> conn -> entryContext -> index
 			//////////////////////////////////////////////////////////////////////////
 			muduo::net::WeakTcpConnectionPtr weakConn = entities_.get(session);
 			muduo::net::TcpConnectionPtr peer(weakConn.lock());
@@ -1346,20 +1346,20 @@ void Gateway::asyncHallHandler(
 			//登陆成功，指定userid
 			entryContext->setUserID(userid);
 			//////////////////////////////////////////////////////////////////////////
-			//顶号处理 userid->session->entry->conn
+			//顶号处理 userid -> session -> conn
 			//////////////////////////////////////////////////////////////////////////
-			//userid->session
+			//userid -> session
 			std::string const session_(sessions_.add(userid, session));
 			if (!session_.empty()) {
 				assert(session_.size() == packet::kSessionSZ);
 				assert(session_ != session);
-				//session->entry
+				//session -> conn
 				muduo::net::TcpConnectionPtr peer_(entities_.get(session_).lock());
 				if (peer_) {
 					assert(peer_ != peer);
-					ContextPtr entryContext_(boost::any_cast<ContextPtr>(peer_->getContext()));
-					assert(entryContext_);
-					BufferPtr buffer = packClientShutdownMsg(userid, 0);
+					//ContextPtr entryContext_(boost::any_cast<ContextPtr>(peer_->getContext()));
+					//assert(entryContext_);
+					BufferPtr buffer = packClientShutdownMsg(userid, 0); assert(buffer);
 					muduo::net::websocket::send(peer_, buffer->peek(), buffer->readableBytes());
 #if 0
 					peer_->getLoop()->runAfter(0.2f, [&]() {
@@ -1847,7 +1847,7 @@ void Gateway::onConnected(
 	}
 	{
 		//////////////////////////////////////////////////////////////////////////
-		//map[session] = entry
+		//map[session] = weakConn
 		//////////////////////////////////////////////////////////////////////////
 		ContextPtr entryContext(boost::any_cast<ContextPtr>(conn->getContext()));
 		assert(entryContext);
