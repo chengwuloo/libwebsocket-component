@@ -27,6 +27,7 @@ static void StopService(int signo) {
 	}
 }
 
+#if 1
 int main() {
 	//≥Ã–Ú≈‰÷√
 	if (!boost::filesystem::exists("./conf/game.conf")) {
@@ -182,3 +183,4 @@ int main() {
 		loop.loop();
 	}
 }
+#endif

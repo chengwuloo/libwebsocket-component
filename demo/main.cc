@@ -3,6 +3,7 @@
 #include <muduo/net/EventLoop.h>
 #include <unistd.h>
 
+#if 0
 int main()
 {
 	std::string const cert_path = "./certificate/CA/private/cacert.pem";
@@ -15,3 +16,4 @@ int main()
 	server.start();
 	loop.loop();
 }
+#endif
