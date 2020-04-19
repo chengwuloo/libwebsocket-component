@@ -373,14 +373,12 @@ void Gateway::start(int numThreads, int numWorkerThreads, int maxSize)
 	//为各网络I/O线程绑定Bucket
 	for (size_t index = 0; index < loops.size(); ++index) {
 #if 0
-		ConnectionBucketPtr bucket(
-			new ConnectionBucket(
+		ConnBucketPtr bucket(new ConnBucket(
 				loops[index], index, kTimeoutSeconds_));
 		bucketsPool_.emplace_back(std::move(bucket));
 #else
 		bucketsPool_.emplace_back(
-			ConnectionBucketPtr(
-				new ConnectionBucket(
+			ConnBucketPtr(new ConnBucket(
 			loops[index], index, kTimeoutSeconds_)));
 #endif
 		loops[index]->setContext(EventLoopContextPtr(new EventLoopContext(index)));
@@ -407,7 +405,7 @@ void Gateway::start(int numThreads, int numWorkerThreads, int maxSize)
 			EventLoopContextPtr context = boost::any_cast<EventLoopContextPtr>(loops[index]->getContext());
 			assert(context->index_ == index);
 		}
-		loops[index]->runAfter(1.0f, std::bind(&ConnectionBucket::onTimer, bucketsPool_[index].get()));
+		loops[index]->runAfter(1.0f, std::bind(&ConnBucket::onTimer, bucketsPool_[index].get()));
 	}
 }
 
@@ -625,7 +623,7 @@ void Gateway::onHttpConnection(const muduo::net::TcpConnectionPtr& conn) {
 			assert(index >= 0 && index < bucketsPool_.size());
 			//连接成功，压入桶元素
 			conn->getLoop()->runInLoop(
-				std::bind(&ConnectionBucket::pushBucket, bucketsPool_[index].get(), entry));
+				std::bind(&ConnBucket::pushBucket, bucketsPool_[index].get(), entry));
 		}
 		{
 			//TCP_NODELAY
@@ -756,7 +754,7 @@ void Gateway::onHttpMessage(
 				assert(index >= 0 && index < bucketsPool_.size());
 
 				//收到消息包，更新桶元素
-				conn->getLoop()->runInLoop(std::bind(&ConnectionBucket::updateBucket, bucketsPool_[index].get(), entry));
+				conn->getLoop()->runInLoop(std::bind(&ConnBucket::updateBucket, bucketsPool_[index].get(), entry));
 			}
 			{
 				//获取绑定的worker线程
@@ -1771,7 +1769,7 @@ void Gateway::onConnection(const muduo::net::TcpConnectionPtr& conn) {
 			assert(index >= 0 && index < bucketsPool_.size());
 			//连接成功，压入桶元素
 			conn->getLoop()->runInLoop(
-				std::bind(&ConnectionBucket::pushBucket, bucketsPool_[index].get(), entry));
+				std::bind(&ConnBucket::pushBucket, bucketsPool_[index].get(), entry));
 		}
 		{
 			//TCP_NODELAY
@@ -1911,7 +1909,7 @@ void Gateway::onMessage(
 				
 				//收到消息包，更新桶元素
 				conn->getLoop()->runInLoop(
-					std::bind(&ConnectionBucket::updateBucket, bucketsPool_[index].get(), entry));
+					std::bind(&ConnBucket::updateBucket, bucketsPool_[index].get(), entry));
 			}
 			{				
 #if 0

@@ -91,9 +91,9 @@ typedef std::unordered_set<EntryPtr> Bucket;
 typedef boost::circular_buffer<Bucket> WeakConnList;
 
 //////////////////////////////////////////////////////////////////////////
-//@@ ConnectionBucket
-struct ConnectionBucket : public muduo::noncopyable {
-	explicit ConnectionBucket(muduo::net::EventLoop* loop, int index, size_t size)
+//@@ ConnBucket
+struct ConnBucket : public muduo::noncopyable {
+	explicit ConnBucket(muduo::net::EventLoop* loop, int index, size_t size)
 		:loop_(CHECK_NOTNULL(loop)), index_(index) {
 		//指定时间轮盘大小(bucket桶大小)
 		//即环形数组大小(size) >=
@@ -117,7 +117,7 @@ struct ConnectionBucket : public muduo::noncopyable {
 		LOG_WARN << __FUNCTION__ << " loop[" << index_ << "] timeout[" << buckets_.size() << "]";
 #endif
 		//重启连接超时定时器检查，间隔1s
-		loop_->runAfter(1.0f, std::bind(&ConnectionBucket::onTimer, this));
+		loop_->runAfter(1.0f, std::bind(&ConnBucket::onTimer, this));
 	}
 	//连接成功，压入桶元素
 	void pushBucket(EntryPtr const& entry) {
@@ -163,7 +163,7 @@ struct ConnectionBucket : public muduo::noncopyable {
 	muduo::net::EventLoop* loop_;
 };
 
-typedef std::unique_ptr<ConnectionBucket> ConnectionBucketPtr;
+typedef std::unique_ptr<ConnBucket> ConnBucketPtr;
 
 //////////////////////////////////////////////////////////////////////////
 //@@ Context
