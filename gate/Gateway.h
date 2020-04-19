@@ -348,8 +348,13 @@ private:
 	//map[session] = weakConn
 	STR::Entities entities_;
 	
+#if 0
 	//map[userid] = session
 	INT::Sessions sessions_;
+#else
+	//map[userid] = session
+	INT::Entities sessions_;
+#endif
 
 	//命令消息回调处理函数
 	CmdCallbacks handlers_;

@@ -1343,15 +1343,15 @@ void Gateway::asyncHallHandler(
 			pre_header->ok == 1) {
 			//登陆成功，指定userid
 			entryContext->setUserID(userid);
+			//顶号处理
+#if 0
 			//////////////////////////////////////////////////////////////////////////
-			//顶号处理 userid -> session -> conn
+			//userid -> session -> conn
 			//////////////////////////////////////////////////////////////////////////
-			//userid -> session
 			std::string const session_(sessions_.add(userid, session));
 			if (!session_.empty()) {
 				assert(session_.size() == packet::kSessionSZ);
 				assert(session_ != session);
-				//session -> conn
 				muduo::net::TcpConnectionPtr peer_(entities_.get(session_).lock());
 				if (peer_) {
 					assert(peer_ != peer);
@@ -1363,13 +1363,34 @@ void Gateway::asyncHallHandler(
 					peer_->getLoop()->runAfter(0.2f, [&]() {
 						entry_.reset();
 						});
-#elif 0
-					peer_->getLoop()->runAfter(0.2f, std::bind(&detail::resetEntry, weakEntry_));
 #else
 					peer_->forceCloseWithDelay(0.2);
 #endif
-					}
 				}
+			}
+#else
+			//////////////////////////////////////////////////////////////////////////
+			//userid -> conn
+			//////////////////////////////////////////////////////////////////////////
+			muduo::net::TcpConnectionPtr peer_(sessions_.add(userid, peer).lock());
+			if (peer_) {
+				assert(peer_ != peer);
+				ContextPtr entryContext_(boost::any_cast<ContextPtr>(peer_->getContext()));
+				assert(entryContext_);
+				std::string const& session_ = entryContext_->getSession();
+				assert(session_.size() == packet::kSessionSZ);
+				assert(session_ != session);
+				BufferPtr buffer = packClientShutdownMsg(userid, 0); assert(buffer);
+				muduo::net::websocket::send(peer_, buffer->peek(), buffer->readableBytes());
+#if 0
+				peer_->getLoop()->runAfter(0.2f, [&]() {
+					entry_.reset();
+					});
+#else
+				peer_->forceCloseWithDelay(0.2);
+#endif
+			}
+#endif
 		}
 		else if (
 			header->mainID == ::Game::Common::MAINID::MAIN_MESSAGE_CLIENT_TO_HALL &&
@@ -1793,8 +1814,13 @@ void Gateway::onConnection(const muduo::net::TcpConnectionPtr& conn) {
 		//session
 		std::string const& session = entryContext->getSession();
 		if (userid > 0) {
+#if 0
 			//check before remove
 			sessions_.remove(userid, session);
+#else
+			//check before remove
+			sessions_.remove(userid, conn);
+#endif
 		}
 		if (!session.empty()) {
 			//remove

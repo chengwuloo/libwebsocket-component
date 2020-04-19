@@ -123,18 +123,26 @@ namespace INT {
 	class Entities : muduo::noncopyable {
 	public:
 		//add
-		void add(int64_t userid, muduo::net::WeakTcpConnectionPtr const& weakConn) {
+		//@return old weakConn
+		inline muduo::net::WeakTcpConnectionPtr const add(int64_t userid, muduo::net::WeakTcpConnectionPtr const& weakConn) {
+			muduo::net::WeakTcpConnectionPtr old;
 			{
 #if 0
 				muduo::MutexLockGuard lock(mutex_);
 #else
 				WRITE_LOCK(mutex_);
 #endif
+				WeakConnMap::const_iterator it = peers_.find(userid);
+				if (it != peers_.end()) {
+					old = it->second;
+					peers_.erase(it);
+				}
 				peers_[userid] = weakConn;
 			}
+			return old;
 		}
 		//get
-		inline muduo::net::WeakTcpConnectionPtr get(int64_t userid) {
+		inline muduo::net::WeakTcpConnectionPtr const get(int64_t userid) {
 			muduo::net::WeakTcpConnectionPtr weakConn;
 			{
 #if 0
@@ -159,16 +167,16 @@ namespace INT {
 			assert(buf);
 			for (WeakConnMap::const_iterator it = peers_.begin();
 				it != peers_.end(); ++it) {
-				muduo::net::TcpConnectionPtr conn(it->second.lock());
-				if (conn) {
+				muduo::net::TcpConnectionPtr peer(it->second.lock());
+				if (peer) {
 					muduo::net::websocket::send(
-						conn,
+						peer,
 						buf->peek(), buf->readableBytes());
 				}
 			}
 		}
 		//remove
-		inline void remove(int64_t userid) {
+		inline void remove(int64_t userid, muduo::net::TcpConnectionPtr const& conn) {
 #if 0
 			muduo::MutexLockGuard lock(mutex_);
 #else
@@ -179,7 +187,12 @@ namespace INT {
 #else
 			WeakConnMap::const_iterator it = peers_.find(userid);
 			if (it != peers_.end()) {
-				peers_.erase(it);
+				muduo::net::TcpConnectionPtr peer(it->second.lock());
+				assert(peer);
+				//check before remove
+				if (peer == conn) {
+					peers_.erase(it);
+				}
 			}
 #endif
 		}
