@@ -331,7 +331,7 @@ private:
 	int numThreads_, numWorkerThreads_;
 	
 	//Bucket池处理连接超时conn对象
-	std::vector<ConnectionBucketPtr> bucketsPool_;
+	std::vector<ConnBucketPtr> bucketsPool_;
 	
 	//累计接收请求数，累计未处理请求数
 	muduo::AtomicInt64 numTotalReq_, numTotalBadReq_;
