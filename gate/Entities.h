@@ -24,7 +24,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
-#include "connector.h"
+#include "Clients.h"
 #include "EntryPtr.h"
 
 #include <muduo/base/noncopyable.h>
@@ -49,10 +49,10 @@ namespace STR {
 			WRITE_LOCK(mutex_);
 #endif
 #ifndef NDEBUG
-			WeakConnMap::const_iterator it = players_.find(session);
-			assert(it == players_.end());
+			WeakConnMap::const_iterator it = peers_.find(session);
+			assert(it == peers_.end());
 #endif
-			players_[session] = weakConn;
+			peers_[session] = weakConn;
 		}
 		//get
 		inline muduo::net::WeakTcpConnectionPtr get(std::string const& session) {
@@ -63,8 +63,8 @@ namespace STR {
 #else
 				READ_LOCK(mutex_);
 #endif
-				WeakConnMap::const_iterator it = players_.find(session);
-				if (it != players_.end()) {
+				WeakConnMap::const_iterator it = peers_.find(session);
+				if (it != peers_.end()) {
 					weakConn = it->second;
 				}
 			}
@@ -78,12 +78,12 @@ namespace STR {
 			READ_LOCK(mutex_);
 #endif
 			assert(buf);
-			for (WeakConnMap::const_iterator it = players_.begin();
-				it != players_.end(); ++it) {
-				muduo::net::TcpConnectionPtr conn(it->second.lock());
-				if (conn) {
+			for (WeakConnMap::const_iterator it = peers_.begin();
+				it != peers_.end(); ++it) {
+				muduo::net::TcpConnectionPtr peer(it->second.lock());
+				if (peer) {
 					muduo::net::websocket::send(
-						conn,
+						peer,
 						buf->peek(), buf->readableBytes());
 				}
 			}
@@ -96,16 +96,16 @@ namespace STR {
 			WRITE_LOCK(mutex_);
 #endif
 #if 0
-			players_.erase(session);
+			peers_.erase(session);
 #else
-			WeakConnMap::const_iterator it = players_.find(session);
-			if (it != players_.end()) {
-				players_.erase(it);
+			WeakConnMap::const_iterator it = peers_.find(session);
+			if (it != peers_.end()) {
+				peers_.erase(it);
 			}
 #endif
 		}
 	private:
-		WeakConnMap players_;
+		WeakConnMap peers_;
 #if 0
 		muduo::MutexLock mutex_;
 #else
@@ -130,7 +130,7 @@ namespace INT {
 #else
 				WRITE_LOCK(mutex_);
 #endif
-				players_[userid] = weakConn;
+				peers_[userid] = weakConn;
 			}
 		}
 		//get
@@ -142,8 +142,8 @@ namespace INT {
 #else
 				READ_LOCK(mutex_);
 #endif
-				WeakConnMap::const_iterator it = players_.find(userid);
-				if (it != players_.end()) {
+				WeakConnMap::const_iterator it = peers_.find(userid);
+				if (it != peers_.end()) {
 					weakConn = it->second;
 				}
 			}
@@ -157,8 +157,8 @@ namespace INT {
 			READ_LOCK(mutex_);
 #endif
 			assert(buf);
-			for (WeakConnMap::const_iterator it = players_.begin();
-				it != players_.end(); ++it) {
+			for (WeakConnMap::const_iterator it = peers_.begin();
+				it != peers_.end(); ++it) {
 				muduo::net::TcpConnectionPtr conn(it->second.lock());
 				if (conn) {
 					muduo::net::websocket::send(
@@ -175,16 +175,16 @@ namespace INT {
 			WRITE_LOCK(mutex_);
 #endif
 #if 0
-			players_.erase(userid);
+			peers_.erase(userid);
 #else
-			WeakConnMap::const_iterator it = players_.find(userid);
-			if (it != players_.end()) {
-				players_.erase(it);
+			WeakConnMap::const_iterator it = peers_.find(userid);
+			if (it != peers_.end()) {
+				peers_.erase(it);
 			}
 #endif
 		}
 	private:
-		WeakConnMap players_;
+		WeakConnMap peers_;
 #if 0
 		muduo::MutexLock mutex_;
 #else
@@ -208,12 +208,12 @@ namespace INT {
 #else
 				WRITE_LOCK(mutex_);
 #endif
-				SessionMap::const_iterator it = players_.find(userid);
-				if (it != players_.end()) {
+				SessionMap::const_iterator it = sessions_.find(userid);
+				if (it != sessions_.end()) {
 					old = it->second;
-					players_.erase(it);
+					sessions_.erase(it);
 				}
-				players_[userid] = session;
+				sessions_[userid] = session;
 			}
 			return old;
 		}
@@ -225,8 +225,8 @@ namespace INT {
 #else
 				READ_LOCK(mutex_);
 #endif
-				SessionMap::const_iterator it = players_.find(userid);
-				if (it != players_.end()) {
+				SessionMap::const_iterator it = sessions_.find(userid);
+				if (it != sessions_.end()) {
 					return it->second;
 				}
 			}
@@ -242,17 +242,17 @@ namespace INT {
 #else
 				WRITE_LOCK(mutex_);
 #endif
-				SessionMap::const_iterator it = players_.find(userid);
-				if (it != players_.end()) {
+				SessionMap::const_iterator it = sessions_.find(userid);
+				if (it != sessions_.end()) {
 					//check before remove
 					if (it->second == session) {
-						players_.erase(it);
+						sessions_.erase(it);
 					}
 				}
 			}
 		}
 	private:
-		SessionMap players_;
+		SessionMap sessions_;
 #if 0
 		muduo::MutexLock mutex_;
 #else

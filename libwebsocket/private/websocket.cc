@@ -3810,8 +3810,11 @@ namespace muduo {
 						printf("-----------------------------------------------------------------\n");
 						printf("websocket::do_handshake succ\n");
 #endif
-						//shared_ptr/unique_ptr new与reset写操作，非线程安全，必须在相同线程!
-						//shared_ptr/weak_ptr 持有lock是读操作，线程安全!
+						//////////////////////////////////////////////////////////////////////////
+						//shared_ptr/weak_ptr 引用计数lock持有/递减是读操作，线程安全!
+						//shared_ptr/unique_ptr new创建与reset释放是写操作，非线程安全，操作必须在同一线程!
+						//new时内部引用计数递增，reset时递减，递减为0时销毁对象释放资源
+						//////////////////////////////////////////////////////////////////////////
 						//释放HttpContext资源 ///
 						context.getHttpContext().reset();
 						return true;
@@ -3828,8 +3831,11 @@ namespace muduo {
 #endif
 					break;
 				}
-				//shared_ptr/unique_ptr new与reset写操作，非线程安全，必须在相同线程!
-				//shared_ptr/weak_ptr 持有lock是读操作，线程安全!
+				//////////////////////////////////////////////////////////////////////////
+				//shared_ptr/weak_ptr 引用计数lock持有/递减是读操作，线程安全!
+				//shared_ptr/unique_ptr new创建与reset释放是写操作，非线程安全，操作必须在同一线程!
+				//new时内部引用计数递增，reset时递减，递减为0时销毁对象释放资源
+				//////////////////////////////////////////////////////////////////////////
 				//释放HttpContext资源 ///
 				context.getHttpContext().reset();
 				return false;

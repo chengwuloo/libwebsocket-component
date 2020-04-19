@@ -1410,7 +1410,7 @@ void Gateway::sendHallMessage(
 		ContextPtr entryContext(boost::any_cast<ContextPtr>(conn->getContext()));
 		assert(entryContext);
 		//printf("%s %s(%d)\n", __FUNCTION__, __FILE__, __LINE__);
-		ClientConn const/*&*/ clientConn = entryContext->getClientConn(servTyE::kHallTy);
+		ClientConn const& clientConn = entryContext->getClientConn(servTyE::kHallTy);
 		muduo::net::TcpConnectionPtr hallConn(clientConn.second.lock());
 		if (hallConn) {
 			assert(hallConn->connected());
@@ -1465,9 +1465,9 @@ void Gateway::onUserOfflineHall(const muduo::net::TcpConnectionPtr& conn) {
 		//clientip
 		uint32_t clientip = entryContext->getFromIp();
 		//session
-		std::string const/*&*/ session = entryContext->getSession();
+		std::string const& session = entryContext->getSession();
 		//aeskey
-		std::string const/*&*/ aeskey = entryContext->getAesKey();
+		std::string const& aeskey = entryContext->getAesKey();
 		if (userid > 0 && !session.empty()) {
 			//packMessage
 			BufferPtr buffer = packet::packMessage(
@@ -1640,7 +1640,7 @@ void Gateway::sendGameMessage(
 		ContextPtr entryContext(boost::any_cast<ContextPtr>(conn->getContext()));
 		assert(entryContext);
 		//printf("%s %s(%d)\n", __FUNCTION__, __FILE__, __LINE__);
-		ClientConn const/*&*/ clientConn = entryContext->getClientConn(servTyE::kGameTy);
+		ClientConn const& clientConn = entryContext->getClientConn(servTyE::kGameTy);
 		muduo::net::TcpConnectionPtr gameConn(clientConn.second.lock());
 		if (gameConn) {
 			assert(gameConn->connected());
@@ -1676,9 +1676,9 @@ void Gateway::onUserOfflineGame(
 		//clientip
 		uint32_t clientip = entryContext->getFromIp();
 		//session
-		std::string const/*&*/ session = entryContext->getSession();
+		std::string const& session = entryContext->getSession();
 		//aeskey
-		std::string const/*&*/ aeskey = entryContext->getAesKey();
+		std::string const& aeskey = entryContext->getAesKey();
 		if (userid > 0 && !session.empty()) {
 			//packMessage
 			BufferPtr buffer = packet::packMessage(
@@ -1793,7 +1793,7 @@ void Gateway::onConnection(const muduo::net::TcpConnectionPtr& conn) {
 		//userid
 		int64_t userid = entryContext->getUserID();
 		//session
-		std::string const/*&*/ session = entryContext->getSession();
+		std::string const& session = entryContext->getSession();
 		if (userid > 0) {
 			//check before remove
 			sessions_.remove(userid, session);
@@ -2021,10 +2021,10 @@ void Gateway::asyncClientHandler(
 					//clientip
 					uint32_t clientip = entryContext->getFromIp();
 					//session
-					std::string const/*&*/ session = entryContext->getSession();
+					std::string const& session = entryContext->getSession();
 					//aeskey
-					std::string const/*&*/ aeskey = entryContext->getAesKey();
-					ClientConn const/*&*/ clientConn = entryContext->getClientConn(servTyE::kHallTy);
+					std::string const& aeskey = entryContext->getAesKey();
+					ClientConn const& clientConn = entryContext->getClientConn(servTyE::kHallTy);
 					muduo::net::TcpConnectionPtr hallConn(clientConn.second.lock());
 					assert(header->len == len);
 					assert(header->len >= packet::kHeaderLen);
@@ -2072,10 +2072,10 @@ void Gateway::asyncClientHandler(
 					//clientip
 					uint32_t clientip = entryContext->getFromIp();
 					//session
-					std::string const/*&*/ session = entryContext->getSession();
+					std::string const& session = entryContext->getSession();
 					//aeskey
-					std::string const/*&*/ aeskey = entryContext->getAesKey();
-					ClientConn const/*&*/ clientConn = entryContext->getClientConn(servTyE::kHallTy);
+					std::string const& aeskey = entryContext->getAesKey();
+					ClientConn const& clientConn = entryContext->getClientConn(servTyE::kHallTy);
 					muduo::net::TcpConnectionPtr hallConn(clientConn.second.lock());
 					assert(header->len == len);
 					assert(header->len >= packet::kHeaderLen);

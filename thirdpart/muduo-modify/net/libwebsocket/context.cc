@@ -12,12 +12,16 @@ namespace muduo {
 	namespace net {
 		namespace websocket {
 
-			//Holder ctor
-			Context::Holder::Holder(Context* owner) {
+			static inline IContext* create(Context* owner) {
 				IHttpContextPtr a(new muduo::net::HttpContext());
 				IBytesBufferPtr b(new muduo::net::Buffer());
 				IBytesBufferPtr c(new muduo::net::Buffer());
-				ptr_ = websocket::create(owner, a, b, c);
+				return websocket::create(owner, a, b, c);
+			}
+
+			//Holder ctor
+			Context::Holder::Holder(Context* owner) {
+				ptr_ = create(owner);
 			}
 			
 			//Holder dtor
@@ -31,10 +35,7 @@ namespace muduo {
 			Context::Context(const muduo::net::WeakTcpConnectionPtr& weakConn)
 				: weakConn_(weakConn) {
 #if 1
-				IHttpContextPtr a(new muduo::net::HttpContext());
-				IBytesBufferPtr b(new muduo::net::Buffer());
-				IBytesBufferPtr c(new muduo::net::Buffer());
-				holder_.reset(websocket::create(this, a, b, c));
+				holder_.reset(create(this));
 #else
 				holder_.reset(new Holder(this));
 #endif
@@ -89,9 +90,11 @@ namespace muduo {
 				}
 			}
 
+			//@overide
 			std::string Context::peerIpAddrToString() const {
 				muduo::net::TcpConnectionPtr conn(weakConn_.lock());
 				if (conn) {
+					conn->getLoop()->assertInLoopThread();
 					return conn->peerAddress().toIp();
 				}
 				return "0.0.0.0";
@@ -101,6 +104,7 @@ namespace muduo {
 			void Context::onConnectedCallback(std::string const& ipaddr) {
 				muduo::net::TcpConnectionPtr conn(weakConn_.lock());
 				if (conn) {
+					conn->getLoop()->assertInLoopThread();
 					if (wsConnectedCallback_) {
 						wsConnectedCallback_(conn, ipaddr);
 					}
@@ -110,6 +114,8 @@ namespace muduo {
 			void Context::onMessageCallback(IBytesBuffer* buf, int msgType, ITimestamp* receiveTime) {
 				muduo::net::TcpConnectionPtr conn(weakConn_.lock());
 				if (conn) {
+					conn->getLoop()->assertInLoopThread();
+
 					muduo::net::Buffer* buff = reinterpret_cast<muduo::net::Buffer*>(buf);
 					assert(buff);
 
@@ -125,6 +131,7 @@ namespace muduo {
 			void Context::onClosedCallback(IBytesBuffer* buf, ITimestamp* receiveTime) {
 				muduo::net::TcpConnectionPtr conn(weakConn_.lock());
 				if (conn) {
+					conn->getLoop()->assertInLoopThread();
 
 					muduo::net::Buffer* buff = reinterpret_cast<muduo::net::Buffer*>(buf);
 					assert(buff);

@@ -41,7 +41,7 @@ class HttpContext : public muduo::copyable, public IHttpContext
   {
   }
   ~HttpContext() {
-      printf("%s %s(%d)\n", __FUNCTION__, __FILE__, __LINE__);
+      //printf("%s %s(%d)\n", __FUNCTION__, __FILE__, __LINE__);
   }
   // default copy-ctor, dtor and assignment are fine
 

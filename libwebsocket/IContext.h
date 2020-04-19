@@ -32,7 +32,7 @@ namespace muduo {
 			public:
 				virtual void resetAll() = 0;
 				virtual ~IContext() {
-					printf("%s %s(%d)\n", __FUNCTION__, __FILE__, __LINE__);
+					//printf("%s %s(%d)\n", __FUNCTION__, __FILE__, __LINE__);
 				}
 			};
 

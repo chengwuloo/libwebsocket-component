@@ -41,7 +41,7 @@
 #include <arpa/inet.h>
 
 #include "public/global.h"
-#include "connector.h"
+#include "Clients.h"
 
 //@@ servTyE
 enum servTyE {
@@ -108,7 +108,9 @@ struct ConnectionBucket : public muduo::noncopyable {
 	void onTimer() {
 		loop_->assertInLoopThread();
 		//////////////////////////////////////////////////////////////////////////
-		//shared_ptr非线程安全，引用计数持有/递减操作务必在相同线程内进行
+		//shared_ptr/weak_ptr 引用计数lock持有/递减是读操作，线程安全!
+		//shared_ptr/unique_ptr new创建与reset释放是写操作，非线程安全，操作必须在同一线程!
+		//new时内部引用计数递增，reset时递减，递减为0时销毁对象释放资源
 		//////////////////////////////////////////////////////////////////////////
 		buckets_.push_back(Bucket());
 #ifdef _DEBUG_BUCKETS_
@@ -118,7 +120,7 @@ struct ConnectionBucket : public muduo::noncopyable {
 		loop_->runAfter(1.0f, std::bind(&ConnectionBucket::onTimer, this));
 	}
 	//连接成功，压入桶元素
-	void pushBucket(EntryPtr const/*&*/ entry) {
+	void pushBucket(EntryPtr const& entry) {
 		loop_->assertInLoopThread();
 		if (likely(entry)) {
 			muduo::net::TcpConnectionPtr conn(entry->weakConn_.lock());
@@ -137,7 +139,7 @@ struct ConnectionBucket : public muduo::noncopyable {
 		}
 	}
 	//收到消息包，更新桶元素
-	void updateBucket(EntryPtr const/*&*/ entry) {
+	void updateBucket(EntryPtr const& entry) {
 		loop_->assertInLoopThread();
 		if (likely(entry)) {
 			muduo::net::TcpConnectionPtr conn(entry->weakConn_.lock());
@@ -232,13 +234,13 @@ struct Context : public muduo::noncopyable {
 	in_addr_t getFromIp() { return ipaddr_; }
 	//session
 	inline void setSession(std::string const& session) { session_ = session; }
-	inline std::string const/*&*/ getSession() const { return session_; }
+	inline std::string const& getSession() const { return session_; }
 	//userid
 	inline void setUserID(int64_t userid) { userid_ = userid; }
 	inline int64_t getUserID() const { return userid_; }
 	//aeskey
 	inline void setAesKey(std::string key) { aeskey_ = key; }
-	inline std::string const/*&*/ getAesKey() const { return aeskey_; }
+	inline std::string const& getAesKey() const { return aeskey_; }
 	//setClientConn
 	inline void setClientConn(servTyE ty,
 		std::string const& name,
@@ -252,7 +254,7 @@ struct Context : public muduo::noncopyable {
 		client_[ty] = client;
 	}
 	//getClientConn
-	inline ClientConn const/*&*/ getClientConn(servTyE ty) { return client_[ty]; }
+	inline ClientConn const& getClientConn(servTyE ty) { return client_[ty]; }
 public:
 	//threadPool_下标
 	int index_;

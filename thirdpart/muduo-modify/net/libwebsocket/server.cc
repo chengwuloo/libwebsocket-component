@@ -19,12 +19,12 @@ namespace muduo {
 				assert(conn);
 				conn->getLoop()->assertInLoopThread();
 
-				muduo::net::WsContextPtr& wsContext = conn->getWsContext();
-				assert(wsContext);
+				websocket::ContextPtr& context = conn->getWsContext();
+				assert(context);
 				//////////////////////////////////////////////////////////////////////////
 				//parse_message_frame
 				//////////////////////////////////////////////////////////////////////////
-				wsContext->parse_message_frame(buf, &receiveTime);
+				context->parse_message_frame(buf, &receiveTime);
 			}
 
 			void onClosed(
@@ -48,26 +48,28 @@ namespace muduo {
 				const WsConnectedCallback& ccb,
 				const WsMessageCallback& mcb,
 				const muduo::net::TcpConnectionPtr& conn) {
+				conn->getLoop()->assertInLoopThread();
 				//////////////////////////////////////////////////////////////////////////
 				//websocket::Context::ctor
 				//////////////////////////////////////////////////////////////////////////
-				muduo::net::WsContextPtr wsContext(new muduo::net::websocket::Context(muduo::net::WeakTcpConnectionPtr(conn)));
+				websocket::ContextPtr context(new muduo::net::websocket::Context(muduo::net::WeakTcpConnectionPtr(conn)));
 				{
 					//WsConnectedCallback
-					wsContext->setWsConnectedCallback(ccb);
+					context->setWsConnectedCallback(ccb);
 					//WsClosedCallback
-					wsContext->setWsClosedCallback(
+					context->setWsClosedCallback(
 						std::bind(
 							&muduo::net::websocket::onClosed,
 							std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
 					//WsMessageCallback
-					wsContext->setWsMessageCallback(mcb);
+					context->setWsMessageCallback(mcb);
 				}
-				conn->setWsContext(wsContext);
+				conn->setWsContext(context);
 			}
 
 			//reset
 			void reset(const muduo::net::TcpConnectionPtr& conn) {
+				conn->getLoop()->assertInLoopThread();
 				//////////////////////////////////////////////////////////////////////////
 				//websocket::Context::dtor
 				//////////////////////////////////////////////////////////////////////////

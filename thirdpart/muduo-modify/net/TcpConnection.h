@@ -39,9 +39,10 @@ class Socket;
 
 namespace websocket {
 	class Context;
-}
+    typedef std::unique_ptr<Context> ContextPtr;
+}//namespace websocket
 
-typedef std::unique_ptr<websocket::Context> WsContextPtr;
+typedef websocket::ContextPtr WsContextPtr;
 
 ///
 /// TCP connection, for both client and server usage.
