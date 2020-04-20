@@ -137,12 +137,6 @@ static void setFailedResponse(muduo::net::HttpResponse& rsp,
 }
 
 //@@
-//typedef std::shared_ptr<muduo::net::TcpClient> TcpClientPtr;
-//typedef std::weak_ptr<muduo::net::TcpClient> WeakTcpClientPtr;
-//typedef std::map<std::string, TcpClientPtr> TcpClientMap;
-//typedef std::map<std::string, WeakEntryPtr> SessInfosMap;
-
-//@@
 typedef std::shared_ptr<muduo::net::Buffer> BufferPtr;
 typedef std::map<std::string, std::string> HttpParams;
 
