@@ -386,10 +386,10 @@ void Gateway::start(int numThreads, int numWorkerThreads, int maxSize)
 	//为每个网络I/O线程绑定若干worker线程(均匀分配)
 	{
 		int next = 0;
-		for (size_t i = 0; i < threadPool_.size(); ++i) {
+		for (size_t index = 0; index < threadPool_.size(); ++index) {
 			EventLoopContextPtr context = boost::any_cast<EventLoopContextPtr>(loops[next]->getContext());
 			assert(context);
-			context->addWorkerIndex(i);
+			context->addWorkerIndex(index);
 			if (++next >= loops.size()) {
 				next = 0;
 			}
