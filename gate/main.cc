@@ -140,12 +140,12 @@ int main() {
 	//主线程EventLoop，I/O监听/连接读写 accept(read)/connect(write)
 	muduo::net::EventLoop loop;
 	muduo::net::InetAddress listenAddr(strIpAddr, tcpPort);
-	muduo::net::InetAddress serverAddrInn(strIpAddr, innPort);
+	muduo::net::InetAddress listenAddrInn(strIpAddr, innPort);
 	muduo::net::InetAddress listenAddrHttp(strIpAddr, httpPort);
 	//server
 	Gateway server(
 		&loop,
-		listenAddr, serverAddrInn, listenAddrHttp,
+		listenAddr, listenAddrInn, listenAddrHttp,
 		cert_path, private_key);
 	server.isdebug_ = isdebug;
 	server.strIpAddr_ = strIpAddr;
