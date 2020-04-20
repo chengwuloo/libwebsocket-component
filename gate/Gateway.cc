@@ -1344,7 +1344,7 @@ void Gateway::asyncHallHandler(
 			//登陆成功，指定userid
 			entryContext->setUserID(userid);
 			//顶号处理
-#if 0
+#ifdef MAP_USERID_SESSION
 			//////////////////////////////////////////////////////////////////////////
 			//userid -> session -> conn
 			//////////////////////////////////////////////////////////////////////////
@@ -1799,17 +1799,14 @@ void Gateway::onConnection(const muduo::net::TcpConnectionPtr& conn) {
 		muduo::net::websocket::reset(conn);
 		ContextPtr entryContext(boost::any_cast<ContextPtr>(conn->getContext()));
 		assert(entryContext);
+#ifndef MAP_USERID_SESSION
 		//userid
 		int64_t userid = entryContext->getUserID();
-		if (userid > 0) {
-#if 0
-			//check before remove
-			sessions_.remove(userid, session);
-#else
+		if (userid > 0) {		
 			//check before remove
 			sessions_.remove(userid, conn);
-#endif
 		}
+#endif
 #if 0
 		//理论上session不过期，worker线程不变，实际上每次断线重连，session都会变更
 		std::string const& session = entryContext->getSession();
@@ -2136,6 +2133,14 @@ void Gateway::asyncOfflineHandler(ContextPtr const& entryContext) {
 		LOG_ERROR << __FUNCTION__;
 		//session
 		std::string const& session = entryContext->getSession();
+#ifdef MAP_USERID_SESSION
+		//userid
+		int64_t userid = entryContext->getUserID();
+		if (userid > 0) {
+			//check before remove
+			sessions_.remove(userid, session);
+		}
+#endif
 		if (!session.empty()) {
 			//remove
 			entities_.remove(session);
