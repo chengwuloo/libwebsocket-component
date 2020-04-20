@@ -82,10 +82,14 @@ namespace packet {
 		return ((0xFF & mainID) << 8) | (0xFF & subID);
 	}
 	
-	//deword
-	static inline void deword(int cmd, int& mainID, int& subID) {
-		mainID = (0xFF & (cmd >> 8));
-		subID = (0xFF & cmd);
+	//hiword
+	static inline int hiword(int cmd) {
+		return (0xFF & (cmd >> 8));
+	}
+
+	//loword
+	static inline int loword(int cmd) {
+		return (0xFF & cmd);
 	}
 
 	//getCheckSum 计算校验和
