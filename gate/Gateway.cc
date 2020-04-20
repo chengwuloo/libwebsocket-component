@@ -1801,8 +1801,6 @@ void Gateway::onConnection(const muduo::net::TcpConnectionPtr& conn) {
 		assert(entryContext);
 		//userid
 		int64_t userid = entryContext->getUserID();
-		//session
-		std::string const& session = entryContext->getSession();
 		if (userid > 0) {
 #if 0
 			//check before remove
@@ -1811,10 +1809,6 @@ void Gateway::onConnection(const muduo::net::TcpConnectionPtr& conn) {
 			//check before remove
 			sessions_.remove(userid, conn);
 #endif
-		}
-		if (!session.empty()) {
-			//remove
-			entities_.remove(session);
 		}
 #if 0
 		//理论上session不过期，worker线程不变，实际上每次断线重连，session都会变更
@@ -2140,6 +2134,12 @@ void Gateway::asyncClientHandler(
 void Gateway::asyncOfflineHandler(ContextPtr const& entryContext) {
 	if (entryContext) {
 		LOG_ERROR << __FUNCTION__;
+		//session
+		std::string const& session = entryContext->getSession();
+		if (!session.empty()) {
+			//remove
+			entities_.remove(session);
+		}
 		//offline hall
 		onUserOfflineHall(entryContext);
 		//offline game
