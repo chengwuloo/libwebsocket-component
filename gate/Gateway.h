@@ -211,8 +211,7 @@ private:
 		BufferPtr& buf,
 		muduo::Timestamp receiveTime);
 
-	void asyncOfflineHandler(
-		muduo::net::WeakTcpConnectionPtr const& weakConn);
+	void asyncOfflineHandler(ContextPtr const entryContext);
 
 	static BufferPtr packClientShutdownMsg(int64_t userid, int status = 0);
 
@@ -291,10 +290,10 @@ private:
 		muduo::Timestamp receiveTime);
 
 	void sendHallMessage(
-		const muduo::net::TcpConnectionPtr& conn,
+		ContextPtr const entryContext,
 		BufferPtr& buf, int64_t userid);
 
-	void onUserOfflineHall(const muduo::net::TcpConnectionPtr& conn);
+	void onUserOfflineHall(ContextPtr const entryContext);
 
 	//网关服[C]端 -> 游戏服[S]端
 private:
@@ -310,10 +309,10 @@ private:
 		muduo::Timestamp receiveTime);
 
 	void sendGameMessage(
-		const muduo::net::TcpConnectionPtr& conn,
+		ContextPtr const entryContext,
 		BufferPtr& buf, int64_t userid);
 
-	void onUserOfflineGame(const muduo::net::TcpConnectionPtr& conn, bool leave = 0);
+	void onUserOfflineGame(ContextPtr const entryContext, bool leave = 0);
 private:
 	//监听客户端TCP请求(websocket)
 	muduo::net::TcpServer server_;

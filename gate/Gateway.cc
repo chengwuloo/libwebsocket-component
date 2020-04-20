@@ -1421,13 +1421,10 @@ void Gateway::asyncHallHandler(
 
 //网关服[C]端 -> 大厅服[S]端
 void Gateway::sendHallMessage(
-	const muduo::net::TcpConnectionPtr& conn,
+	ContextPtr const entryContext,
 	BufferPtr& buf, int64_t userid) {
 	//printf("%s %s(%d)\n", __FUNCTION__, __FILE__, __LINE__);
-	if (conn) {
-		//printf("%s %s(%d)\n", __FUNCTION__, __FILE__, __LINE__);
-		ContextPtr entryContext(boost::any_cast<ContextPtr>(conn->getContext()));
-		assert(entryContext);
+	if (entryContext) {
 		//printf("%s %s(%d)\n", __FUNCTION__, __FILE__, __LINE__);
 		ClientConn const& clientConn = entryContext->getClientConn(servTyE::kHallTy);
 		muduo::net::TcpConnectionPtr hallConn(clientConn.second.lock());
@@ -1474,11 +1471,9 @@ void Gateway::sendHallMessage(
 }
 
 //网关服[C]端 -> 大厅服[S]端
-void Gateway::onUserOfflineHall(const muduo::net::TcpConnectionPtr& conn) {
+void Gateway::onUserOfflineHall(ContextPtr const entryContext) {
 	MY_TRY()
-	if (conn) {
-		ContextPtr entryContext(boost::any_cast<ContextPtr>(conn->getContext()));
-		assert(entryContext);
+	if (entryContext) {
 		//userid
 		int64_t userid = entryContext->getUserID();
 		//clientip
@@ -1503,7 +1498,7 @@ void Gateway::onUserOfflineHall(const muduo::net::TcpConnectionPtr& conn) {
 					::Game::Common::MAIN_MESSAGE_PROXY_TO_HALL,
 					::Game::Common::MESSAGE_PROXY_TO_HALL_SUBID::HALL_ON_USER_OFFLINE);
 				assert(buffer->readableBytes() < packet::kMaxPacketSZ);
-				sendHallMessage(conn, buffer, userid);
+				sendHallMessage(entryContext, buffer, userid);
 			}
 		}
 	}
@@ -1651,13 +1646,10 @@ void Gateway::asyncGameHandler(
 
 //网关服[C]端 -> 游戏服[S]端
 void Gateway::sendGameMessage(
-	const muduo::net::TcpConnectionPtr& conn,
+	ContextPtr const entryContext,
 	BufferPtr& buf, int64_t userid) {
 	//printf("%s %s(%d)\n", __FUNCTION__, __FILE__, __LINE__);
-	if (conn) {
-		//printf("%s %s(%d)\n", __FUNCTION__, __FILE__, __LINE__);
-		ContextPtr entryContext(boost::any_cast<ContextPtr>(conn->getContext()));
-		assert(entryContext);
+	if (entryContext) {
 		//printf("%s %s(%d)\n", __FUNCTION__, __FILE__, __LINE__);
 		ClientConn const& clientConn = entryContext->getClientConn(servTyE::kGameTy);
 		muduo::net::TcpConnectionPtr gameConn(clientConn.second.lock());
@@ -1685,11 +1677,9 @@ void Gateway::sendGameMessage(
 
 //网关服[C]端 -> 游戏服[S]端
 void Gateway::onUserOfflineGame(
-	const muduo::net::TcpConnectionPtr& conn, bool leave) {
+	ContextPtr const entryContext, bool leave) {
 	MY_TRY()
-	if (conn) {
-		ContextPtr entryContext(boost::any_cast<ContextPtr>(conn->getContext()));
-		assert(entryContext);
+	if (entryContext) {
 		//userid
 		int64_t userid = entryContext->getUserID();
 		//clientip
@@ -1714,7 +1704,7 @@ void Gateway::onUserOfflineGame(
 					::Game::Common::MAIN_MESSAGE_PROXY_TO_GAME_SERVER,
 					::Game::Common::MESSAGE_PROXY_TO_GAME_SERVER_SUBID::GAME_SERVER_ON_USER_OFFLINE);
 				assert(buffer->readableBytes() < packet::kMaxPacketSZ);
-				sendGameMessage(conn, buffer, userid);
+				sendGameMessage(entryContext, buffer, userid);
 			}
 		}
 	}
@@ -1839,7 +1829,7 @@ void Gateway::onConnection(const muduo::net::TcpConnectionPtr& conn) {
 		threadPool_[index]->run(
 			std::bind(
 				&Gateway::asyncOfflineHandler,
-				this, muduo::net::WeakTcpConnectionPtr(conn)));
+				this, entryContext));
 	}
 }
 
@@ -2078,7 +2068,7 @@ void Gateway::asyncClientHandler(
 						header->len);
 					if (buffer) {
 						//发送大厅消息
-						sendHallMessage(peer, buffer, userid);
+						sendHallMessage(entryContext, buffer, userid);
 					}
 				}
 				break;
@@ -2129,7 +2119,7 @@ void Gateway::asyncClientHandler(
 						header->len);
 					if (buffer) {
 						//发送游戏消息
-						sendGameMessage(peer, buffer, userid);
+						sendGameMessage(entryContext, buffer, userid);
 					}
 				}
 				break;
@@ -2147,15 +2137,12 @@ void Gateway::asyncClientHandler(
 	numTotalBadReq_.incrementAndGet();
 }
 
-void Gateway::asyncOfflineHandler(
-	muduo::net::WeakTcpConnectionPtr const& weakConn) {
-	muduo::net::TcpConnectionPtr peer(weakConn.lock());
-	if (peer) {
-		//offline hall
-		onUserOfflineHall(peer);
-		//offline game
-		onUserOfflineGame(peer);
-	}
+void Gateway::asyncOfflineHandler(ContextPtr const entryContext) {
+	LOG_ERROR << __FUNCTION__;
+	//offline hall
+	onUserOfflineHall(entryContext);
+	//offline game
+	onUserOfflineGame(entryContext);
 }
 
 //网关服[S]端 <- 客户端[C]端，websocket
