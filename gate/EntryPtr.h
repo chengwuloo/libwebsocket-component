@@ -230,8 +230,8 @@ struct Context : public muduo::noncopyable {
  		return weakEntry_;
  	}
 	//ipaddr
-	void setFromIp(in_addr_t inaddr) { ipaddr_ = inaddr; }
-	in_addr_t getFromIp() { return ipaddr_; }
+	inline void setFromIp(in_addr_t inaddr) { ipaddr_ = inaddr; }
+	inline in_addr_t getFromIp() { return ipaddr_; }
 	//session
 	inline void setSession(std::string const& session) { session_ = session; }
 	inline std::string const& getSession() const { return session_; }
