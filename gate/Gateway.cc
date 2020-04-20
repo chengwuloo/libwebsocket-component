@@ -1421,7 +1421,7 @@ void Gateway::asyncHallHandler(
 
 //网关服[C]端 -> 大厅服[S]端
 void Gateway::sendHallMessage(
-	ContextPtr const entryContext,
+	ContextPtr const& entryContext,
 	BufferPtr& buf, int64_t userid) {
 	//printf("%s %s(%d)\n", __FUNCTION__, __FILE__, __LINE__);
 	if (entryContext) {
@@ -1471,7 +1471,7 @@ void Gateway::sendHallMessage(
 }
 
 //网关服[C]端 -> 大厅服[S]端
-void Gateway::onUserOfflineHall(ContextPtr const entryContext) {
+void Gateway::onUserOfflineHall(ContextPtr const& entryContext) {
 	MY_TRY()
 	if (entryContext) {
 		//userid
@@ -1646,7 +1646,7 @@ void Gateway::asyncGameHandler(
 
 //网关服[C]端 -> 游戏服[S]端
 void Gateway::sendGameMessage(
-	ContextPtr const entryContext,
+	ContextPtr const& entryContext,
 	BufferPtr& buf, int64_t userid) {
 	//printf("%s %s(%d)\n", __FUNCTION__, __FILE__, __LINE__);
 	if (entryContext) {
@@ -1677,7 +1677,7 @@ void Gateway::sendGameMessage(
 
 //网关服[C]端 -> 游戏服[S]端
 void Gateway::onUserOfflineGame(
-	ContextPtr const entryContext, bool leave) {
+	ContextPtr const& entryContext, bool leave) {
 	MY_TRY()
 	if (entryContext) {
 		//userid
@@ -2137,12 +2137,14 @@ void Gateway::asyncClientHandler(
 	numTotalBadReq_.incrementAndGet();
 }
 
-void Gateway::asyncOfflineHandler(ContextPtr const entryContext) {
-	LOG_ERROR << __FUNCTION__;
-	//offline hall
-	onUserOfflineHall(entryContext);
-	//offline game
-	onUserOfflineGame(entryContext);
+void Gateway::asyncOfflineHandler(ContextPtr const& entryContext) {
+	if (entryContext) {
+		LOG_ERROR << __FUNCTION__;
+		//offline hall
+		onUserOfflineHall(entryContext);
+		//offline game
+		onUserOfflineGame(entryContext);
+	}
 }
 
 //网关服[S]端 <- 客户端[C]端，websocket

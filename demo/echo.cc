@@ -1,11 +1,7 @@
 #include "demo/echo.h"
 #include <muduo/base/Logging.h>
 #include <muduo/net/libwebsocket/server.h>
-#include <libwebsocket/ssl.h>
-
-using std::placeholders::_1;
-using std::placeholders::_2;
-using std::placeholders::_3;
+#include <muduo/net/libwebsocket/ssl.h>
 
 EchoServer::EchoServer(muduo::net::EventLoop* loop,
                        const muduo::net::InetAddress& listenAddr,
