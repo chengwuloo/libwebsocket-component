@@ -352,7 +352,7 @@ private:
 	//map[userid] = session
 	INT::Sessions sessions_;
 #else
-	//map[userid] = session
+	//map[userid] = weakConn
 	INT::Entities sessions_;
 #endif
 

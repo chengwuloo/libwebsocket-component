@@ -1372,7 +1372,7 @@ void Gateway::asyncHallHandler(
 			//////////////////////////////////////////////////////////////////////////
 			//userid -> conn
 			//////////////////////////////////////////////////////////////////////////
-			muduo::net::TcpConnectionPtr peer_(sessions_.add(userid, peer).lock());
+			muduo::net::TcpConnectionPtr peer_(sessions_.add(userid, muduo::net::WeakTcpConnectionPtr(peer)).lock());
 			if (peer_) {
 				assert(peer_ != peer);
 				ContextPtr entryContext_(boost::any_cast<ContextPtr>(peer_->getContext()));
