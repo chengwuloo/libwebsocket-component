@@ -748,7 +748,7 @@ void Gateway::onHttpMessage(
 		EntryPtr entry(entryContext->getWeakEntryPtr().lock());
 		if (likely(entry)) {
 			{
-				EventLoopContext* context = boost::any_cast<EventLoopContext>(conn->getLoop()->getMutableContext());
+				EventLoopContextPtr context = boost::any_cast<EventLoopContextPtr>(conn->getLoop()->getContext());
 				assert(context);
 				int index = context->getBucketIndex();
 				assert(index >= 0 && index < bucketsPool_.size());
