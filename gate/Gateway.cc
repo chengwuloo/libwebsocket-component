@@ -1493,7 +1493,7 @@ void Gateway::sendHallMessage(
 				muduo::net::TcpConnectionPtr hallConn(clientConn.second.lock());
 				if (hallConn) {
 					if (entryContext->getUserID() > 0) {
-						//账号已经登陆，但登陆大厅失效了，则重新指定账号登陆大厅
+						//账号已经登陆，但登陆大厅失效了，重新指定账号登陆大厅
 						entryContext->setClientConn(servTyE::kHallTy, clientConn);
 					}
 					hallConn->send(buf.get());
