@@ -213,6 +213,11 @@ private:
 		int32_t agentid, std::string const& title,
 		std::string const& content, int msgtype);
 
+	void broadcastNoticeMsg(
+		std::string const& title,
+		std::string const& msg,
+		int32_t agentid, int msgType);
+
 	void broadcastMessage(int mainID, int subID, ::google::protobuf::Message* msg);
 
 	//刷新客户端访问IP黑名单信息
@@ -235,6 +240,10 @@ private:
 		muduo::net::WeakTcpConnectionPtr const& weakConn,
 		BufferPtr& buf,
 		muduo::Timestamp receiveTime);
+
+	void onMarqueeNotify(std::string const& msg);
+
+	void onLuckPushNotify(std::string const& msg);
 
 	//网关服[S]端 <- HTTP客户端[C]端，WEB前端
 private:
@@ -279,6 +288,7 @@ private:
 		muduo::net::Buffer* buf, muduo::Timestamp receiveTime);
 
 	void asyncHallHandler(
+		const muduo::net::TcpConnectionPtr& conn,
 		muduo::net::WeakTcpConnectionPtr const& weakConn,
 		BufferPtr& buf,
 		muduo::Timestamp receiveTime);
@@ -286,6 +296,9 @@ private:
 	void sendHallMessage(
 		ContextPtr const& entryContext,
 		BufferPtr& buf, int64_t userid);
+
+	//跨网关顶号处理(异地登陆)
+	void onUserReLoginNotify(std::string const& msg);
 
 	void onUserOfflineHall(ContextPtr const& entryContext);
 
@@ -337,6 +350,9 @@ private:
 
 	//worker线程池，内部任务消息队列
 	std::vector<std::shared_ptr<muduo::ThreadPool>> threadPool_;
+	
+	//公共定时器
+	std::shared_ptr<muduo::net::EventLoopThread> threadTimer_;
 
 	//map[session] = weakConn
 	STR::Entities entities_;

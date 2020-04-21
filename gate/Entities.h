@@ -182,9 +182,6 @@ namespace INT {
 #else
 			WRITE_LOCK(mutex_);
 #endif
-#if 0
-			peers_.erase(userid);
-#else
 			WeakConnMap::const_iterator it = peers_.find(userid);
 			if (it != peers_.end()) {
 				muduo::net::TcpConnectionPtr peer(it->second.lock());
@@ -194,7 +191,29 @@ namespace INT {
 					peers_.erase(it);
 				}
 			}
+		}
+		//remove
+		inline void remove(int64_t userid, std::string const& session) {
+#if 0
+			muduo::MutexLockGuard lock(mutex_);
+#else
+			WRITE_LOCK(mutex_);
 #endif
+			WeakConnMap::const_iterator it = peers_.find(userid);
+			if (it != peers_.end()) {
+				muduo::net::TcpConnectionPtr peer(it->second.lock());
+				if (peer) {
+					ContextPtr entryContext(boost::any_cast<ContextPtr>(peer->getContext()));
+					assert(entryContext);
+					//check before remove
+					if (entryContext->getSession() == session) {
+						peers_.erase(it);
+					}
+				}
+				else {
+					peers_.erase(it);
+				}
+			}
 		}
 	private:
 		WeakConnMap peers_;

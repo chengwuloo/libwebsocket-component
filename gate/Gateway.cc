@@ -12,6 +12,17 @@
 #include <muduo/net/libwebsocket/server.h>
 #include <muduo/net/libwebsocket/ssl.h>
 
+#include <boost/filesystem.hpp>
+#include <boost/property_tree/ptree.hpp>
+#include <boost/property_tree/json_parser.hpp>
+#include <boost/property_tree/ini_parser.hpp>
+#include <boost/algorithm/algorithm.hpp>
+#include <boost/algorithm/string.hpp>
+#include <boost/proto/detail/ignore_unused.hpp>
+#include <boost/date_time/gregorian/gregorian.hpp>
+#include <boost/date_time.hpp>
+#include <boost/thread.hpp>
+
 #include <boost/archive/iterators/base64_from_binary.hpp>
 #include <boost/archive/iterators/binary_from_base64.hpp>
 #include <boost/archive/iterators/transform_width.hpp>
@@ -53,6 +64,7 @@ Gateway::Gateway(muduo::net::EventLoop* loop,
 	, kHttpTimeoutSeconds_(3)
 	, kMaxConnections_(15000)
 	, serverState_(ServiceStateE::kRunning)
+	, threadTimer_(new muduo::net::EventLoopThread(muduo::net::EventLoopThread::ThreadInitCallback(), "EventLoopThreadTimer"))
 	, isdebug_(false) {
 
 	init();
@@ -121,7 +133,17 @@ void Gateway::init() {
 }
 
 void Gateway::quit() {
-
+	hallClients_.closeAll();
+	gameClients_.closeAll();
+	for (size_t i = 0; i < threadPool_.size(); ++i) {
+		threadPool_[i]->stop();
+	}
+	if (zkclient_) {
+		zkclient_->closeServer();
+	}
+	if (redisClient_) {
+		redisClient_->unsubscribe();
+	}
 }
 
 //zookeeper
@@ -145,6 +167,14 @@ bool Gateway::initRedisCluster(std::string const& ipaddr, std::string const& pas
 	}
 	redisIpaddr_ = ipaddr;
 	redisPasswd_ = passwd;
+	//跨网关顶号处理(异地登陆)
+	redisClient_->subscribeUserLoginMessage(bind(&Gateway::onUserReLoginNotify, this, std::placeholders::_1));
+	//跑马灯通告消息
+	redisClient_->subscribePublishMsg(1, CALLBACK_1(Gateway::onMarqueeNotify, this));
+	//幸运转盘消息
+	redisClient_->subscribePublishMsg(0, [&](std::string const& msg) {
+		threadTimer_->getLoop()->runAfter(10, std::bind(&Gateway::onLuckPushNotify, this, msg));
+		});
 	redisClient_->startSubThread();
 	return true;
 }
@@ -407,6 +437,9 @@ void Gateway::start(int numThreads, int numWorkerThreads, int maxSize)
 		}
 		loops[index]->runAfter(1.0f, std::bind(&ConnBucket::onTimer, bucketsPool_[index].get()));
 	}
+
+	//公共定时器
+	threadTimer_->startLoop();
 }
 
 //网关服[S]端 <- 推送服[C]端，推送通知服务
@@ -530,6 +563,18 @@ void Gateway::asyncInnHandler(
 		return;
 	}
 	LOG_ERROR << __FUNCTION__ << " --- *** " << "peer(entry->getWeakConnPtr().lock()) failed";
+}
+
+//网关服[S]端 <- 推送服[C]端，推送通知服务
+void Gateway::onMarqueeNotify(std::string const& msg) {
+	LOG_WARN << "跑马灯消息\n" << msg;
+	broadcastNoticeMsg("跑马灯消息", msg, 0, 2);
+}
+
+//网关服[S]端 <- 推送服[C]端，推送通知服务
+void Gateway::onLuckPushNotify(std::string const& msg) {
+	LOG_WARN << "免费送金消息\n" << msg;
+	broadcastNoticeMsg("免费送金消息", msg, 0, 1);
 }
 
 //网关服[S]端 <- HTTP客户端[C]端，WEB前端
@@ -981,6 +1026,7 @@ void Gateway::processHttpRequest(
 #endif
 	}
 	else if (req.path() == "/GameHandle") {
+		LOG_ERROR << "--- *** " << req.methodString() << "\n" << req.query();
 		rsp.setContentType("application/xml;charset=utf-8");
 		rsp.setBody(getRequestStr(req));
 	}
@@ -1300,6 +1346,7 @@ void Gateway::onHallMessage(const muduo::net::TcpConnectionPtr& conn,
 					std::bind(
 						&Gateway::asyncHallHandler,
 						this,
+						conn,
 						weakConn, buffer, receiveTime));
 			}
 #endif
@@ -1309,6 +1356,7 @@ void Gateway::onHallMessage(const muduo::net::TcpConnectionPtr& conn,
 
 //网关服[C]端 -> 大厅服[S]端
 void Gateway::asyncHallHandler(
+	const muduo::net::TcpConnectionPtr& conn,
 	muduo::net::WeakTcpConnectionPtr const& weakConn,
 	BufferPtr& buf,
 	muduo::Timestamp receiveTime) {
@@ -1341,9 +1389,23 @@ void Gateway::asyncHallHandler(
 			header->mainID == ::Game::Common::MAINID::MAIN_MESSAGE_CLIENT_TO_HALL &&
 			header->subID == ::Game::Common::MESSAGE_CLIENT_TO_HALL_SUBID::CLIENT_TO_HALL_LOGIN_MESSAGE_RES &&
 			pre_header->ok == 1) {
+			//////////////////////////////////////////////////////////////////////////
 			//登陆成功，指定userid
+			//////////////////////////////////////////////////////////////////////////
 			entryContext->setUserID(userid);
+			//////////////////////////////////////////////////////////////////////////
+			//登陆成功，指定玩家大厅
+			//////////////////////////////////////////////////////////////////////////
+			assert(conn);
+			std::vector<std::string> vec;
+			boost::algorithm::split(vec, conn->name(), boost::is_any_of(":"));
+			std::string const& name = vec[0] + ":" + vec[1];
+			ClientConn clientConn(name, conn);
+			LOG_WARN << "登陆成功，大厅节点 >>> " << name;
+			entryContext->setClientConn(servTyE::kHallTy, clientConn);
+			//////////////////////////////////////////////////////////////////////////
 			//顶号处理
+			//////////////////////////////////////////////////////////////////////////
 #ifdef MAP_USERID_SESSION
 			//////////////////////////////////////////////////////////////////////////
 			//userid -> session -> conn
@@ -1459,7 +1521,6 @@ void Gateway::sendHallMessage(
 				ClientConn const& clientConn = clients[index];
 				muduo::net::TcpConnectionPtr hallConn(clientConn.second.lock());
 				if (hallConn) {
-					entryContext->setClientConn(servTyE::kHallTy, clientConn);
 					hallConn->send(buf.get());
 				}
 				else {
@@ -1467,6 +1528,75 @@ void Gateway::sendHallMessage(
 				}
 			}
 		}
+	}
+}
+
+//网关服[C]端 -> 大厅服[S]端，跨网关顶号处理(异地登陆)
+void Gateway::onUserReLoginNotify(std::string const& msg) {
+	LOG_WARN << __FUNCTION__ << "\n" << msg;
+	std::stringstream ss(msg);
+	boost::property_tree::ptree root;
+	boost::property_tree::read_json(ss, root);
+	try {
+		int64_t userid = root.get<int>("userId");
+		std::string const session_ = root.get<std::string>("session");
+		std::string const servid_ = root.get<std::string>("proxyip");
+		//排除自己
+		std::string const& servid = nodeValue_;
+		if (servid == servid_) {
+			return;
+		}
+		//////////////////////////////////////////////////////////////////////////
+		//顶号处理
+		//////////////////////////////////////////////////////////////////////////
+#ifdef MAP_USERID_SESSION
+		//////////////////////////////////////////////////////////////////////////
+		//session -> conn
+		//////////////////////////////////////////////////////////////////////////
+		muduo::net::TcpConnectionPtr peer_(entities_.get(session_).lock());
+		if (peer_) {
+			ContextPtr entryContext_(boost::any_cast<ContextPtr>(peer_->getContext()));
+			assert(entryContext_);
+			//判断userid/session
+			if (userid == entryContext_->getUserID() &&
+				session_ == entryContext_->getSession()) {
+				BufferPtr buffer = packClientShutdownMsg(userid, 0); assert(buffer);
+				muduo::net::websocket::send(peer_, buffer->peek(), buffer->readableBytes());
+#if 0
+				peer_->getLoop()->runAfter(0.2f, [&]() {
+					entry_.reset();
+					});
+#else
+				peer_->forceCloseWithDelay(0.2);
+#endif
+			}
+		}
+		else {
+			entities_.remove(session_);
+		}
+#else
+		//////////////////////////////////////////////////////////////////////////
+		//userid -> conn -> session
+		//////////////////////////////////////////////////////////////////////////
+		muduo::net::TcpConnectionPtr peer_(sessions_.get(userid).lock());
+		if (peer_) {
+			ContextPtr entryContext_(boost::any_cast<ContextPtr>(peer_->getContext()));
+			assert(entryContext_);
+			if (session_ == entryContext_->getSession()) {
+				BufferPtr buffer = packClientShutdownMsg(userid, 0); assert(buffer);
+				muduo::net::websocket::send(peer_, buffer->peek(), buffer->readableBytes());
+#if 0
+				peer_->getLoop()->runAfter(0.2f, [&]() {
+					entry_.reset();
+					});
+#else
+				peer_->forceCloseWithDelay(0.2);
+#endif
+			}
+		}
+#endif
+	}
+	catch (boost::property_tree::ptree_error & e) {
 	}
 }
 
@@ -1799,7 +1929,7 @@ void Gateway::onConnection(const muduo::net::TcpConnectionPtr& conn) {
 		muduo::net::websocket::reset(conn);
 		ContextPtr entryContext(boost::any_cast<ContextPtr>(conn->getContext()));
 		assert(entryContext);
-#ifndef MAP_USERID_SESSION
+#if !defined(MAP_USERID_SESSION) && 0
 		//userid
 		int64_t userid = entryContext->getUserID();
 		if (userid > 0) {		
@@ -2133,17 +2263,15 @@ void Gateway::asyncOfflineHandler(ContextPtr const& entryContext) {
 		LOG_ERROR << __FUNCTION__;
 		//session
 		std::string const& session = entryContext->getSession();
-#ifdef MAP_USERID_SESSION
+		if (!session.empty()) {
+			//remove
+			entities_.remove(session);
+		}
 		//userid
 		int64_t userid = entryContext->getUserID();
 		if (userid > 0) {
 			//check before remove
 			sessions_.remove(userid, session);
-		}
-#endif
-		if (!session.empty()) {
-			//remove
-			entities_.remove(session);
 		}
 		//offline hall
 		onUserOfflineHall(entryContext);
@@ -2176,9 +2304,9 @@ BufferPtr Gateway::packNoticeMsg(
 	
 	::ProxyServer::Message::NotifyNoticeMessageFromProxyServerMessage msg;
 	msg.mutable_header()->set_sign(PROTO_BUF_SIGN);
+	msg.add_agentid(agentid);
 	msg.set_title(title.c_str());
 	msg.set_message(content);
-	msg.add_agentid(agentid);
 	msg.set_msgtype(msgtype);
 	
 	BufferPtr buffer = packet::packMessage(
@@ -2189,6 +2317,21 @@ BufferPtr Gateway::packNoticeMsg(
 		::Game::Common::PROXY_NOTIFY_PUBLIC_NOTICE_MESSAGE_NOTIFY);
 
 	return buffer;
+}
+
+void Gateway::broadcastNoticeMsg(
+	std::string const& title,
+	std::string const& msg,
+	int32_t agentid, int msgType) {
+	//packNoticeMsg
+	BufferPtr buffer = packNoticeMsg(
+		agentid,
+		title,
+		msg,
+		msgType);
+	if (buffer) {
+		sessions_.broadcast(buffer);
+	}
 }
 
 //网关服[S]端 <- 客户端[C]端，websocket
