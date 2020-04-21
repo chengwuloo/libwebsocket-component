@@ -1547,6 +1547,7 @@ void Gateway::onUserReLoginNotify(std::string const& msg) {
 			}
 		}
 		else {
+#if 0
 			{
 				ContextPtr entryContext(boost::any_cast<ContextPtr>(peer->getContext()));
 				assert(entryContext);
@@ -1561,6 +1562,7 @@ void Gateway::onUserReLoginNotify(std::string const& msg) {
 				assert(entryContext->getUserID() == userid);
 				assert(entryContext->getSession() == session);
 			}
+#endif
 		}
 	}
 	catch (boost::property_tree::ptree_error & e) {
