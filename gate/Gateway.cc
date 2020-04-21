@@ -1404,35 +1404,7 @@ void Gateway::asyncHallHandler(
 			LOG_WARN << "登陆成功，大厅节点 >>> " << name;
 			entryContext->setClientConn(servTyE::kHallTy, clientConn);
 			//////////////////////////////////////////////////////////////////////////
-			//顶号处理
-			//////////////////////////////////////////////////////////////////////////
-#ifdef MAP_USERID_SESSION
-			//////////////////////////////////////////////////////////////////////////
-			//userid -> session -> conn
-			//////////////////////////////////////////////////////////////////////////
-			std::string const session_(sessions_.add(userid, session));
-			if (!session_.empty()) {
-				assert(session_.size() == packet::kSessionSZ);
-				assert(session_ != session);
-				muduo::net::TcpConnectionPtr peer_(entities_.get(session_).lock());
-				if (peer_) {
-					assert(peer_ != peer);
-					//ContextPtr entryContext_(boost::any_cast<ContextPtr>(peer_->getContext()));
-					//assert(entryContext_);
-					BufferPtr buffer = packClientShutdownMsg(userid, 0); assert(buffer);
-					muduo::net::websocket::send(peer_, buffer->peek(), buffer->readableBytes());
-#if 0
-					peer_->getLoop()->runAfter(0.2f, [&]() {
-						entry_.reset();
-						});
-#else
-					peer_->forceCloseWithDelay(0.2);
-#endif
-				}
-			}
-#else
-			//////////////////////////////////////////////////////////////////////////
-			//userid -> conn
+			//顶号处理 userid -> conn
 			//////////////////////////////////////////////////////////////////////////
 			muduo::net::TcpConnectionPtr peer_(sessions_.add(userid, muduo::net::WeakTcpConnectionPtr(peer)).lock());
 			if (peer_) {
@@ -1452,7 +1424,6 @@ void Gateway::asyncHallHandler(
 				peer_->forceCloseWithDelay(0.2);
 #endif
 			}
-#endif
 		}
 		else if (
 			header->mainID == ::Game::Common::MAINID::MAIN_MESSAGE_CLIENT_TO_HALL &&
@@ -1533,70 +1504,67 @@ void Gateway::sendHallMessage(
 
 //网关服[C]端 -> 大厅服[S]端，跨网关顶号处理(异地登陆)
 void Gateway::onUserReLoginNotify(std::string const& msg) {
-	LOG_WARN << __FUNCTION__ << "\n" << msg;
+	LOG_WARN << __FUNCTION__ << " " << msg;
 	std::stringstream ss(msg);
 	boost::property_tree::ptree root;
 	boost::property_tree::read_json(ss, root);
 	try {
 		int64_t userid = root.get<int>("userId");
-		std::string const session_ = root.get<std::string>("session");
+		//////////////////////////////////////////////////////////////////////////
+		//账号最新登陆session
+		//////////////////////////////////////////////////////////////////////////
+		std::string const session = root.get<std::string>("session");
+#if 0
 		std::string const servid_ = root.get<std::string>("proxyip");
 		//排除自己
 		std::string const& servid = nodeValue_;
 		if (servid == servid_) {
 			return;
 		}
-		//////////////////////////////////////////////////////////////////////////
-		//顶号处理
-		//////////////////////////////////////////////////////////////////////////
-#ifdef MAP_USERID_SESSION
-		//////////////////////////////////////////////////////////////////////////
-		//session -> conn
-		//////////////////////////////////////////////////////////////////////////
-		muduo::net::TcpConnectionPtr peer_(entities_.get(session_).lock());
-		if (peer_) {
-			ContextPtr entryContext_(boost::any_cast<ContextPtr>(peer_->getContext()));
-			assert(entryContext_);
-			//判断userid/session
-			if (userid == entryContext_->getUserID() &&
-				session_ == entryContext_->getSession()) {
-				BufferPtr buffer = packClientShutdownMsg(userid, 0); assert(buffer);
-				muduo::net::websocket::send(peer_, buffer->peek(), buffer->readableBytes());
-#if 0
-				peer_->getLoop()->runAfter(0.2f, [&]() {
-					entry_.reset();
-					});
-#else
-				peer_->forceCloseWithDelay(0.2);
 #endif
+		muduo::net::TcpConnectionPtr peer(entities_.get(session).lock());
+		if (!peer) {
+			//////////////////////////////////////////////////////////////////////////
+			//顶号处理 userid -> conn -> session
+			//////////////////////////////////////////////////////////////////////////
+			muduo::net::TcpConnectionPtr peer_(sessions_.get(userid).lock());
+			if (peer_) {
+				ContextPtr entryContext_(boost::any_cast<ContextPtr>(peer_->getContext()));
+				assert(entryContext_);
+				assert(entryContext_->getUserID() == userid);
+				//相同账号，不同session，不关心旧的session是多少，只要不是当前最新，关闭之
+				if (entryContext_->getSession() != session) {
+					BufferPtr buffer = packClientShutdownMsg(userid, 0); assert(buffer);
+					muduo::net::websocket::send(peer_, buffer->peek(), buffer->readableBytes());
+#if 0
+					peer_->getLoop()->runAfter(0.2f, [&]() {
+						entry_.reset();
+						});
+#else
+					peer_->forceCloseWithDelay(0.2);
+#endif
+				}
 			}
 		}
 		else {
-			entities_.remove(session_);
-		}
-#else
-		//////////////////////////////////////////////////////////////////////////
-		//userid -> conn -> session
-		//////////////////////////////////////////////////////////////////////////
-		muduo::net::TcpConnectionPtr peer_(sessions_.get(userid).lock());
-		if (peer_) {
-			ContextPtr entryContext_(boost::any_cast<ContextPtr>(peer_->getContext()));
-			assert(entryContext_);
-			if (session_ == entryContext_->getSession()) {
-				BufferPtr buffer = packClientShutdownMsg(userid, 0); assert(buffer);
-				muduo::net::websocket::send(peer_, buffer->peek(), buffer->readableBytes());
-#if 0
-				peer_->getLoop()->runAfter(0.2f, [&]() {
-					entry_.reset();
-					});
-#else
-				peer_->forceCloseWithDelay(0.2);
-#endif
+			{
+				ContextPtr entryContext(boost::any_cast<ContextPtr>(peer->getContext()));
+				assert(entryContext);
+				assert(entryContext->getUserID() == userid);
+				assert(entryContext->getSession() == session);
+			}
+			{
+				muduo::net::TcpConnectionPtr peer(sessions_.get(userid).lock());
+				assert(peer);
+				ContextPtr entryContext(boost::any_cast<ContextPtr>(peer->getContext()));
+				assert(entryContext);
+				assert(entryContext->getUserID() == userid);
+				assert(entryContext->getSession() == session);
 			}
 		}
-#endif
 	}
 	catch (boost::property_tree::ptree_error & e) {
+		LOG_ERROR << __FUNCTION__ << " " << e.what();
 	}
 }
 
@@ -1987,6 +1955,7 @@ void Gateway::onConnected(
 		ContextPtr entryContext(boost::any_cast<ContextPtr>(conn->getContext()));
 		assert(entryContext);
 		entities_.add(session, muduo::net::WeakTcpConnectionPtr(conn));
+		LOG_WARN << __FUNCTION__ << " session[ " << session << " ]";
 	}
 }
 
