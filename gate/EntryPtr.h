@@ -202,7 +202,7 @@ struct Context : public muduo::noncopyable {
 		EntryPtr entry(weakEntry_.lock());
 		if (likely(entry)) {
 			//引用计数减1，减为0时析构entry对象
-			//因为bucket持有引用计数，所以直到entry超时才析构
+			//因为bucket持有引用计数，所以entry直到超时才析构
 			entry.reset();
 		}
 #endif
