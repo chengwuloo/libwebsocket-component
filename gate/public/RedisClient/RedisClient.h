@@ -196,9 +196,9 @@ public:
     
     // add by caiqing
     //推送公共消息
-   // void pushPublishMsg(eRedisPublicMsg msgId,string msg);
+    void pushPublishMsg(int msgId,string msg);
     //订阅公共消息
-   // void subscribePublishMsg(eRedisPublicMsg msgId,function<void(string)> func);
+    void subscribePublishMsg(int msgId,function<void(string)> func);
     // List 操作
 //     bool lremCmd(eRedisKey keyId, int count, string value);
 //     bool rpopCmd(eRedisKey keyId,string &lastElement);

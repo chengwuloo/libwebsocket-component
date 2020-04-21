@@ -1525,17 +1525,17 @@ void RedisClient::subscribeExchangeScoreToGameServerMessage(function<void(string
 
 
 //推送公共消息
-// void RedisClient::pushPublishMsg(eRedisPublicMsg msgId,string msg)
-// {
-//     publish(REDIS_PUBLIC_MSG + std::to_string((int)msgId), msg);
-// }
+void RedisClient::pushPublishMsg(int msgId,string msg)
+{
+     publish("rs_public_msg_" + std::to_string((int)msgId), msg);
+}
 //订阅公共消息
-// void RedisClient::subscribePublishMsg(eRedisPublicMsg msgId,function<void(string)> func)
-// {
-//     std::string msgName = REDIS_PUBLIC_MSG + std::to_string((int)msgId);
-//     subscribe(msgName);
-//     m_sub_func_map[msgName] = func;
-// }
+void RedisClient::subscribePublishMsg(int msgId,function<void(string)> func)
+{
+    std::string msgName = "rs_public_msg_" + std::to_string((int)msgId);
+    subscribe(msgName);
+    m_sub_func_map[msgName] = func;
+}
 
 void RedisClient::publishUserLoginMessage(string msg)
 {
