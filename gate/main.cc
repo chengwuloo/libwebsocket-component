@@ -16,7 +16,7 @@
 Gateway *gServer = NULL;
 muduo::net::EventLoop *gMainEventLoop = NULL;
 
-//StopService ·şÎñÖÕÖ¹
+//StopService æœåŠ¡ç»ˆæ­¢
 static void StopService(int signo) {
 	if (gServer) {
 		gServer->quit();
@@ -29,7 +29,7 @@ static void StopService(int signo) {
 
 #if 1
 int main() {
-	//³ÌĞòÅäÖÃ
+	//ç¨‹åºé…ç½®
 	if (!boost::filesystem::exists("./conf/game.conf")) {
 		LOG_INFO << "./conf/game.conf not exists";
 		return -1;
@@ -37,23 +37,23 @@ int main() {
 	boost::property_tree::ptree pt;
 	boost::property_tree::read_ini("./conf/game.conf", pt);
 
-	//ÈÕÖ¾Ä¿Â¼ logdir/logname
+	//æ—¥å¿—ç›®å½• logdir/logname
 	std::string logdir = pt.get<std::string>("Gateway.logdir", "./log/Gateway/");
 	std::string logname = pt.get<std::string>("Gateway.logname", "Gateway");
 	if (setEnv(logdir, logname) < 0) {
 		return -1;
 	}
 
-	//ÈÕÖ¾¼¶±ğ
+	//æ—¥å¿—çº§åˆ«
 	int loglevel = pt.get<int>("Gateway.loglevel", 1);
 	muduo::Logger::setLogLevel((muduo::Logger::LogLevel)loglevel);
-	LOG_INFO << __FUNCTION__ << " --- *** " << "ÈÕÖ¾¼¶±ğ = " << loglevel;
+	LOG_INFO << __FUNCTION__ << " --- *** " << "æ—¥å¿—çº§åˆ« = " << loglevel;
 
-	//»ñÈ¡Ö¸¶¨Íø¿¨ipaddr
+	//è·å–æŒ‡å®šç½‘å¡ipaddr
 	std::string strIpAddr;
 	std::string netcardName = pt.get<std::string>("Global.netcardName", "eth0");
 	IpByNetCardName(netcardName, strIpAddr);
-	LOG_INFO << __FUNCTION__ << " --- *** " << "Íø¿¨Ãû³Æ = " << netcardName << " - " << strIpAddr;
+	LOG_INFO << __FUNCTION__ << " --- *** " << "ç½‘å¡åç§° = " << netcardName << " - " << strIpAddr;
 
 	//////////////////////////////////////////////////////////////////////////
 	//zookeeper
@@ -113,31 +113,31 @@ int main() {
 	//MongoDB
 	std::string strMongoDBUrl = pt.get<std::string>("MongoDB.Url");
 
-	//TCP¼àÌı¿Í»§¶Ë£¬websocket server_
+	//TCPç›‘å¬å®¢æˆ·ç«¯ï¼Œwebsocket server_
 	int16_t tcpPort = pt.get<int>("Gateway.port", 8010);
-	//TCP¼àÌı¿Í»§¶Ë£¬ÄÚ²¿ÍÆËÍÍ¨Öª·şÎñ innServer_
+	//TCPç›‘å¬å®¢æˆ·ç«¯ï¼Œå†…éƒ¨æ¨é€é€šçŸ¥æœåŠ¡ innServer_
 	int16_t innPort = pt.get<int>("Gateway.innPort", 9010);
-	//TCP¼àÌı¿Í»§¶Ë£¬HTTP httpServer_
+	//TCPç›‘å¬å®¢æˆ·ç«¯ï¼ŒHTTP httpServer_
 	uint16_t httpPort = pt.get<int>("Gateway.httpPort", 8120);
-	//ÍøÂçI/OÏß³ÌÊı
+	//ç½‘ç»œI/Oçº¿ç¨‹æ•°
 	int16_t numThreads = pt.get<int>("Gateway.numThreads", 10);
-	//workerÏß³ÌÊı
+	//workerçº¿ç¨‹æ•°
 	int16_t numWorkerThreads = pt.get<int>("Gateway.numWorkerThreads", 10);
-	//×î´óÁ¬½ÓÊı
+	//æœ€å¤§è¿æ¥æ•°
 	int kMaxConnections = pt.get<int>("Gateway.kMaxConnections", 15000);
-	//¿Í»§¶ËÁ¬½Ó³¬Ê±Ê±¼ä(s)£¬ĞÄÌø³¬Ê±Ê±¼ä
+	//å®¢æˆ·ç«¯è¿æ¥è¶…æ—¶æ—¶é—´(s)ï¼Œå¿ƒè·³è¶…æ—¶æ—¶é—´
 	int kTimeoutSeconds = pt.get<int>("Gateway.kTimeoutSeconds", 3);
-	//WorkerÏß³Ìµ¥ÈÎÎñ¶ÓÁĞ´óĞ¡
+	//Workerçº¿ç¨‹å•ä»»åŠ¡é˜Ÿåˆ—å¤§å°
 	int kMaxQueueSize = pt.get<int>("Gateway.kMaxQueueSize", 1000);
-	//¹ÜÀíÔ±¹ÒÎ¬»¤/»Ö¸´·şÎñ
+	//ç®¡ç†å‘˜æŒ‚ç»´æŠ¤/æ¢å¤æœåŠ¡
 	std::string strAdminList = pt.get<std::string>("Gateway.adminList", "192.168.2.93,");
-	//Ö¤ÊéÂ·¾¶
+	//è¯ä¹¦è·¯å¾„
 	std::string cert_path = pt.get<std::string>("Gateway.cert_path", "");
-	//Ö¤ÊéË½Ô¿
+	//è¯ä¹¦ç§é’¥
 	std::string private_key = pt.get<std::string>("Gateway.private_key", "");
-	//ÊÇ·ñµ÷ÊÔ
+	//æ˜¯å¦è°ƒè¯•
 	bool isdebug = pt.get<int>("Gateway.debug", 1);
-	//Ö÷Ïß³ÌEventLoop£¬I/O¼àÌı/Á¬½Ó¶ÁĞ´ accept(read)/connect(write)
+	//ä¸»çº¿ç¨‹EventLoopï¼ŒI/Oç›‘å¬/è¿æ¥è¯»å†™ accept(read)/connect(write)
 	muduo::net::EventLoop loop;
 	muduo::net::InetAddress listenAddr(strIpAddr, tcpPort);
 	muduo::net::InetAddress listenAddrInn(strIpAddr, innPort);
@@ -151,7 +151,7 @@ int main() {
 	server.strIpAddr_ = strIpAddr;
 	server.kMaxConnections_ = kMaxConnections;
 	server.kTimeoutSeconds_ = kTimeoutSeconds;
-	//¹ÜÀíÔ±ipµØÖ·ÁĞ±í
+	//ç®¡ç†å‘˜ipåœ°å€åˆ—è¡¨
 	{
 		std::vector<std::string> vec;
 		boost::algorithm::split(vec, strAdminList, boost::is_any_of(","));
@@ -167,7 +167,7 @@ int main() {
 						"(1\\d{2}|2[0-4]\\d|25[0-5]|[1-9]\\d|\\d)$"))) {
 				muduo::net::InetAddress addr(muduo::StringArg(ipaddr), 0, false);
 				server.adminList_[addr.ipNetEndian()] = IpVisitE::kEnable;
-				LOG_INFO << __FUNCTION__ << " --- *** " << "¹ÜÀíÔ±IP[" << ipaddr << "]";
+				LOG_INFO << __FUNCTION__ << " --- *** " << "ç®¡ç†å‘˜IP[" << ipaddr << "]";
 			}
 		}
 	}
@@ -178,7 +178,7 @@ int main() {
 		server.initRedisCluster(strRedisClusterIps, redisPasswd)) {
 		//registerSignalHandler(SIGTERM, StopService);
 		//registerSignalHandler(SIGINT, StopService);
-		//ÍøÂçI/OÏß³Ì³Ø£¬I/OÊÕ·¢¶ÁĞ´ recv(read)/send(write)£¬workerÏß³Ì³Ø£¬´¦ÀíÓÎÏ·ÒµÎñÂß¼­
+		//ç½‘ç»œI/Oçº¿ç¨‹æ± ï¼ŒI/Oæ”¶å‘è¯»å†™ recv(read)/send(write)ï¼Œworkerçº¿ç¨‹æ± ï¼Œå¤„ç†æ¸¸æˆä¸šåŠ¡é€»è¾‘
 		server.start(numThreads, numWorkerThreads, kMaxQueueSize);
 		loop.loop();
 	}
