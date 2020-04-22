@@ -108,6 +108,28 @@ void Connector::check(std::string const& name, bool exist) {
 		std::bind(&Connector::checkInLoop, this, name, exist));
 }
 
+//exists
+bool Connector::exists(std::string const& name) /*const*/ {
+	bool bok = false;
+	bool exist = false;
+	loop_->runInLoop(
+		std::bind(&Connector::existInLoop, this, name, std::ref(exist), std::ref(bok)));
+	//spin lock until getAllInLoop return
+	while (!bok);
+	return exist;
+}
+
+//count
+size_t const Connector::count() /*const*/ {
+	bool bok = false;
+	size_t size = 0;
+	loop_->runInLoop(
+		std::bind(&Connector::countInLoop, this, std::ref(size), std::ref(bok)));
+	//spin lock until getAllInLoop return
+	while (!bok);
+	return size;
+}
+
 //get
 void Connector::get(std::string const& name, ClientConn& client) {
 	bool bok = false;
@@ -203,6 +225,14 @@ void Connector::addInLoop(
 	}
 }
 
+void Connector::countInLoop(size_t& size, bool& bok) {
+
+	loop_->assertInLoopThread();
+
+	size = clients_.size();
+	bok = true;
+}
+
 void Connector::checkInLoop(std::string const& name, bool exist) {
 
 	loop_->assertInLoopThread();
@@ -234,13 +264,18 @@ void Connector::checkInLoop(std::string const& name, bool exist) {
 	}
 }
 
+void Connector::existInLoop(std::string const& name, bool& exist, bool& bok) {
+
+	loop_->assertInLoopThread();
+
+	TcpClientMap::const_iterator it = clients_.find(name);
+	exist = (it != clients_.end());
+	bok = true;
+}
+
 void Connector::closeAll() {
 	loop_->queueInLoop(
-		std::bind(&Connector::cleanupInLoop, this));
-	for (TcpClientMap::const_iterator it = clients_.begin();
-		it != clients_.end(); ++it) {
-		it->second->disconnect();
-	}
+		std::bind(&Connector::closeAllInLoop, this));
 }
 
 void Connector::onConnected(const muduo::net::TcpConnectionPtr& conn, const TcpClientPtr& client) {
@@ -355,6 +390,19 @@ void Connector::cleanupInLoop() {
 		else {
 			removes_[it->first] = true;
 		}
+	}
+}
+
+void Connector::closeAllInLoop() {
+
+	loop_->assertInLoopThread();
+	
+	loop_->runInLoop(
+		std::bind(&Connector::cleanupInLoop, this));
+
+	for (TcpClientMap::const_iterator it = clients_.begin();
+		it != clients_.end(); ++it) {
+		it->second->disconnect();
 	}
 }
 

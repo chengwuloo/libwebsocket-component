@@ -274,10 +274,11 @@ private:
 	bool refreshWhiteListInLoop();
 
 	//请求挂维护/恢复服务 status=0挂维护 status=1恢复服务
-	bool repairServer(std::string const& queryStr);
+	bool repairServer(servTyE servTy, std::string const& servname, std::string const& name, int status, std::string& rspdata);
 
-	//请求挂维护/恢复服务 status=0挂维护 status=1恢复服务
-	void repairServerNotify(std::string const& msg);
+	bool repairServer(std::string const& queryStr, std::string& rspdata);
+
+	void repairServerNotify(std::string const& msg, std::string& rspdata);
 
 	//网关服[C]端 -> 大厅服[S]端
 private:

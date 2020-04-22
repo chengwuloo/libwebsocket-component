@@ -44,10 +44,6 @@
 
 #include "Gateway.h"
 
-using std::placeholders::_1;
-using std::placeholders::_2;
-using std::placeholders::_3;
-
 Gateway::Gateway(muduo::net::EventLoop* loop,
 	const muduo::net::InetAddress& listenAddr,
 	const muduo::net::InetAddress& listenAddrInn,
@@ -237,18 +233,21 @@ void Gateway::threadInit() {
 void Gateway::ZookeeperConnectedHandler() {
 	if (ZNONODE == zkclient_->existsNode("/GAME"))
 		zkclient_->createNode("/GAME", "Landy");
-
+	//网关自己
 	if (ZNONODE == zkclient_->existsNode("/GAME/ProxyServers"))
 		zkclient_->createNode("/GAME/ProxyServers", "ProxyServers");
-
+	//大厅
 	if (ZNONODE == zkclient_->existsNode("/GAME/HallServers"))
 		zkclient_->createNode("/GAME/HallServers", "HallServers");
-
-	if (ZNONODE == zkclient_->existsNode("/GAME/HallServersInvaild"))
-		zkclient_->createNode("/GAME/HallServersInvaild", "HallServersInvaild");
-
+	//大厅维护
+	//if (ZNONODE == zkclient_->existsNode("/GAME/HallServersInvalid"))
+	//	zkclient_->createNode("/GAME/HallServersInvalid", "HallServersInvalid");
+	//游戏
 	if (ZNONODE == zkclient_->existsNode("/GAME/GameServers"))
 		zkclient_->createNode("/GAME/GameServers", "GameServers");
+	//游戏维护
+	//if (ZNONODE == zkclient_->existsNode("/GAME/GameServersInvalid"))
+	//	zkclient_->createNode("/GAME/GameServersInvalid", "GameServersInvalid");
 	{
 		//指定网卡ip:port
 		std::vector<std::string> vec;
@@ -262,7 +261,7 @@ void Gateway::ZookeeperConnectedHandler() {
 #endif
 		nodePath_ = "/GAME/ProxyServers/" + nodeValue_;
 		//启动时自注册自身节点
-		zkclient_->createNode(nodePath_, nodeValue_, true);
+		zkclient_->createNode(nodePath_, nodeValue_, false);
 		//挂维护中的节点
 		invalidNodePath_ = "/GAME/ProxyServersInvalid/" + nodeValue_;
 	}
@@ -1068,12 +1067,10 @@ void Gateway::processHttpRequest(
 		std::map<in_addr_t, IpVisitE>::const_iterator it = adminList_.find(peerAddr.ipNetEndian());
 		if (it != adminList_.end()) {
 			rsp.setContentType("text/plain;charset=utf-8");
-			if (!repairServer(req.query())) {
-				rsp.setBody("failed");
-			}
-			else {
-				rsp.setBody("success");
-			}
+			std::string rspdata;
+			repairServer(req.query(), rspdata);
+			rsp.setContentType("application/json;charset=utf-8");
+			rsp.setBody(rspdata);
 		}
 		else {
 			//HTTP应答包(header/body)
@@ -1092,7 +1089,8 @@ void Gateway::processHttpRequest(
 				"<body>"
 				"<h4>/refreshAgentInfo</h4>"
 				"<h4>/refreshWhiteList</h4>"
-				"<h4>/repairServer?status=0|1(status=0挂维护 status=1恢复服务)</h4>"
+				"<h4>/repairServer?type=HallServer&name=192.168.2.158:20001&status=0|1(status=0挂维护 status=1恢复服务)</h4>"
+				"<h4>/repairServer?type=GameServer&name=4001:192.168.0.1:5847&status=0|1(status=0挂维护 status=1恢复服务)</h4>"
 				"</body>"
 				"</html>");
 		}
@@ -1160,9 +1158,123 @@ bool Gateway::refreshWhiteListInLoop() {
  	return false;
 }
 
+static void replace(std::string& json, const std::string& placeholder, const std::string& value) {
+	boost::replace_all<std::string>(json, "\"" + placeholder + "\"", value);
+}
+
+//构造返回结果
+static std::string createResponse(
+	int opType,//status=1
+	std::string const& servname,//type=HallSever
+	std::string const& name,//name=192.168.2.93:10000
+	int errcode, std::string const& errmsg) {
+	boost::property_tree::ptree root, data;
+	root.put("op", ":op");
+	root.put("type", servname);
+	root.put("name", name);
+	root.put("code", ":code");
+	root.put("errmsg", errmsg);
+	std::stringstream s;
+	boost::property_tree::json_parser::write_json(s, root, false);
+	std::string json = s.str();
+	replace(json, ":op", std::to_string(opType));
+	replace(json, ":code", std::to_string(errcode));
+	boost::replace_all<std::string>(json, "\\", "");
+	return json;
+}
+
+//请求挂维护/恢复服务 status=0挂维护 status=1恢复服务
+bool Gateway::repairServer(servTyE servTy, std::string const& servname, std::string const& name, int status, std::string& rspdata) {
+	LOG_ERROR << __FUNCTION__ << " --- *** " << "name[" << name << "] status[" << status << "]";
+	static std::string path[kMaxServTy] = {
+		"/GAME/HallServers/",
+		"/GAME/GameServers/",
+	};
+	static std::string pathrepair[kMaxServTy] = {
+		"/GAME/HallServersInvalid/",
+		"/GAME/GameServersInvalid/",
+	};
+	do {
+		//请求挂维护
+		if (status == ServiceStateE::kRepairing) {
+			/* 如果之前服务中, 尝试挂维护中, 并返回之前状态
+			* 如果返回服务中, 说明刚好挂维护成功, 否则说明之前已被挂维护 */
+			//if (ServiceStateE::kRunning == __sync_val_compare_and_swap(&serverState_, ServiceStateE::kRunning, ServiceStateE::kRepairing)) {
+			//
+			//在指定类型服务中，并且不在维护节点中
+			//
+			if (clients_[servTy].exist(name) && !clients_[servTy].isRepairing(name)) {
+				//当前仅有一个提供服务的节点，禁止挂维护
+				if (clients_[servTy].remaining() <= 1) {
+					LOG_ERROR << __FUNCTION__ << " --- *** " << "当前仅有一个提供服务的节点，禁止挂维护!!!";
+					rspdata = createResponse(status, servname, name, 2, "仅剩余一个服务节点，禁止挂维护");
+					break;
+				}
+				//添加 repairnode
+				std::string repairnode = pathrepair[servTy] + name;
+				//if (ZNONODE == zkclient_->existsNode(repairnode)) {
+					//创建维护节点
+					//zkclient_->createNode(repairnode, name, false);
+					//挂维护中状态
+					clients_[servTy].repair(name);
+					LOG_ERROR << __FUNCTION__ << " --- *** " << "创建维护节点 " << repairnode;
+				//}
+				//删除 servicenode
+				std::string servicenode = path[servTy] + name;
+				//if (ZNONODE != zkclient_->existsNode(servicenode)) {
+					//删除服务节点
+					//zkclient_->deleteNode(servicenode);
+					LOG_ERROR << __FUNCTION__ << " --- *** " << "删除服务节点 " << servicenode;
+				//}
+				rspdata = createResponse(status, servname, name, 0, "success");
+			}
+			else {
+				rspdata = createResponse(status, servname, name, 0, "节点不存在|已挂了维护");
+			}
+			return true;
+		}
+		//请求恢复服务
+		else if (status == ServiceStateE::kRunning) {
+			/* 如果之前挂维护中, 尝试恢复服务, 并返回之前状态
+			* 如果返回挂维护中, 说明刚好恢复服务成功, 否则说明之前已在服务中 */
+			//if (ServiceStateE::kRepairing == __sync_val_compare_and_swap(&serverState_, ServiceStateE::kRepairing, ServiceStateE::kRunning)) {
+			//
+			//在指定类型服务中，并且在维护节点中
+			//
+			if (clients_[servTy].exist(name) && clients_[servTy].isRepairing(name)) {
+				//添加 servicenode
+				std::string servicenode = path[servTy] + name;
+				//if (ZNONODE == zkclient_->existsNode(servicenode)) {
+					//创建服务节点
+					//zkclient_->createNode(servicenode, name, false);
+					//恢复服务状态
+					clients_[servTy].recover(name);
+					LOG_ERROR << __FUNCTION__ << " --- *** " << "创建服务节点 " << servicenode;
+				//}
+				//删除 repairnode
+				std::string repairnode = pathrepair[servTy] + name;
+				//if (ZNONODE != zkclient_->existsNode(repairnode)) {
+					//删除维护节点
+					//zkclient_->deleteNode(repairnode);
+					LOG_ERROR << __FUNCTION__ << " --- *** " << "删除维护节点 " << repairnode;
+				//}
+				rspdata = createResponse(status, servname, name, 0, "success");
+			}
+			else {
+				rspdata = createResponse(status, servname, name, 0, "节点不存在|已在服务中");
+			}
+			return true;
+		}
+		rspdata = createResponse(status, servname, name, 1, "参数无效，无任何操作");
+	} while (0);
+	return false;
+}
+
 //网关服[S]端 <- HTTP客户端[C]端，WEB前端
-bool Gateway::repairServer(std::string const& queryStr) {
+bool Gateway::repairServer(std::string const& queryStr, std::string& rspdata) {
 	std::string errmsg;
+	servTyE servTy;
+	std::string name;
 	int status;
 	do {
 		//解析参数
@@ -1170,93 +1282,90 @@ bool Gateway::repairServer(std::string const& queryStr) {
 		if (!parseQuery(queryStr, params, errmsg)) {
 			break;
 		}
+		//type
+		//type=HallServer name=192.168.2.158:20001
+		//type=GameServer name=4001:192.168.0.1:5847
+		HttpParams::const_iterator typeKey = params.find("type");
+		if (typeKey == params.end() || typeKey->second.empty()) {
+			rspdata = createResponse(status, typeKey->second, name, 1, "参数无效，无任何操作");
+			break;
+		}
+		else {
+			if (typeKey->second == "HallServer") {
+				servTy = servTyE::kHallTy;
+			}
+			else if (typeKey->second == "GameServer") {
+				servTy = servTyE::kGameTy;
+			}
+			else {
+				rspdata = createResponse(status, typeKey->second, name, 1, "参数无效，无任何操作");
+				break;
+			}
+		}
+		//name
+		HttpParams::const_iterator nameKey = params.find("name");
+		if (nameKey == params.end() || nameKey->second.empty()) {
+			rspdata = createResponse(status, typeKey->second, name, 1, "参数无效，无任何操作");
+			break;
+		}
+		else {
+			name = nameKey->second;
+		}
+		//status
 		HttpParams::const_iterator statusKey = params.find("status");
 		if (statusKey == params.end() || statusKey->second.empty() ||
 			(status = atol(statusKey->second.c_str())) < 0) {
+			rspdata = createResponse(status, typeKey->second, name, 1, "参数无效，无任何操作");
 			break;
 		}
-		//请求挂维护
-		if (status == ServiceStateE::kRepairing) {
-			/* 如果之前服务中, 尝试挂维护中, 并返回之前状态
-			* 如果返回服务中, 说明刚好挂维护成功, 否则说明之前已被挂维护 */
-			if (ServiceStateE::kRunning == __sync_val_compare_and_swap(&serverState_, ServiceStateE::kRunning, ServiceStateE::kRepairing)) {
-				//添加 "/GAME/ProxyServersInvalid/192.168.2.93:8080"
-				if (ZNONODE == zkclient_->existsNode(invalidNodePath_)) {
-					zkclient_->createNode(invalidNodePath_, nodeValue_, true);
-					LOG_ERROR << __FUNCTION__ << " --- *** " << "创建节点 " << invalidNodePath_;
-				}
-				//删除 "/GAME/ProxyServersInvalid/192.168.2.93:8080"
-				if (ZNONODE != zkclient_->existsNode(nodePath_)) {
-					zkclient_->deleteNode(nodePath_);
-					LOG_ERROR << __FUNCTION__ << " --- *** " << "删除节点 " << nodePath_;
-				}
-			}
-			return true;
-		}
-		//请求恢复服务
-		else if (status == ServiceStateE::kRunning) {
-			/* 如果之前挂维护中, 尝试恢复服务, 并返回之前状态
-			* 如果返回挂维护中, 说明刚好恢复服务成功, 否则说明之前已恢复服务 */
-			if (ServiceStateE::kRepairing == __sync_val_compare_and_swap(&serverState_, ServiceStateE::kRepairing, ServiceStateE::kRunning)) {
-				//添加 "/GAME/ProxyServersInvalid/192.168.2.93:8080"
-				if (ZNONODE == zkclient_->existsNode(nodePath_)) {
-					zkclient_->createNode(nodePath_, nodeValue_, true);
-					LOG_ERROR << __FUNCTION__ << " --- *** " << "创建节点 " << nodePath_;
-				}
-				//删除 "/GAME/ProxyServersInvalid/192.168.2.93:8080"
-				if (ZNONODE != zkclient_->existsNode(invalidNodePath_)) {
-					zkclient_->deleteNode(invalidNodePath_);
-					LOG_ERROR << __FUNCTION__ << " --- *** " << "删除节点 " << invalidNodePath_;
-				}
-			}
-			return true;
-		}
+		//repairServer
+		return repairServer(servTy, typeKey->second, name, status, rspdata);
 	} while (0);
 	return false;
 }
 
 //网关服[S]端 <- HTTP客户端[C]端，WEB前端
-void Gateway::repairServerNotify(std::string const& msg) {
+void Gateway::repairServerNotify(std::string const& msg, std::string& rspdata) {
+	std::string errmsg;
+	servTyE servTy;
+	std::string name;
 	int status;
-	do {
-		if (msg.empty() || (status = atol(msg.c_str())) < 0) {
-			break;
-		}
-		//请求挂维护
-		if (status == ServiceStateE::kRepairing) {
-			/* 如果之前服务中, 尝试挂维护中, 并返回之前状态
-			* 如果返回服务中, 说明刚好挂维护成功, 否则说明之前已被挂维护 */
-			if (ServiceStateE::kRunning == __sync_val_compare_and_swap(&serverState_, ServiceStateE::kRunning, ServiceStateE::kRepairing)) {
-				//添加 "/GAME/ProxyServersInvalid/192.168.2.93:8080"
-				if (ZNONODE == zkclient_->existsNode(invalidNodePath_)) {
-					zkclient_->createNode(invalidNodePath_, nodeValue_, true);
-					LOG_ERROR << __FUNCTION__ << " --- *** " << "创建节点 " << invalidNodePath_;
-				}
-				//删除 "/GAME/ProxyServersInvalid/192.168.2.93:8080"
-				if (ZNONODE != zkclient_->existsNode(nodePath_)) {
-					zkclient_->deleteNode(nodePath_);
-					LOG_ERROR << __FUNCTION__ << " --- *** " << "删除节点 " << nodePath_;
-				}
+	std::stringstream ss(msg);
+	boost::property_tree::ptree root;
+	boost::property_tree::read_json(ss, root);
+	try {
+		do {
+			//type
+			std::string servname = root.get<std::string>("type");
+			if (servname == "HallServer") {
+				servTy = servTyE::kHallTy;
 			}
-		}
-		//请求恢复服务
-		else if (status == ServiceStateE::kRunning) {
-			/* 如果之前挂维护中, 尝试恢复服务, 并返回之前状态
-			* 如果返回挂维护中, 说明刚好恢复服务成功, 否则说明之前已恢复服务 */
-			if (ServiceStateE::kRepairing == __sync_val_compare_and_swap(&serverState_, ServiceStateE::kRepairing, ServiceStateE::kRunning)) {
-				//添加 "/GAME/ProxyServersInvalid/192.168.2.93:8080"
-				if (ZNONODE == zkclient_->existsNode(nodePath_)) {
-					zkclient_->createNode(nodePath_, nodeValue_, true);
-					LOG_ERROR << __FUNCTION__ << " --- *** " << "创建节点 " << nodePath_;
-				}
-				//删除 "/GAME/ProxyServersInvalid/192.168.2.93:8080"
-				if (ZNONODE != zkclient_->existsNode(invalidNodePath_)) {
-					zkclient_->deleteNode(invalidNodePath_);
-					LOG_ERROR << __FUNCTION__ << " --- *** " << "删除节点 " << invalidNodePath_;
-				}
+			else if (servname == "GameServer") {
+				servTy = servTyE::kGameTy;
 			}
-		}
-	} while (0);
+			else {
+				rspdata = createResponse(status, servname, name, 1, "参数无效，无任何操作");
+				break;
+			}
+			//name
+			name = root.get<std::string>("name");
+			if (name.empty()) {
+				rspdata = createResponse(status, servname, name, 1, "参数无效，无任何操作");
+				break;
+			}
+			//status
+			status = root.get<int>("status");
+			if (status < 0) {
+				rspdata = createResponse(status, servname, name, 1, "参数无效，无任何操作");
+				break;
+			}
+			//repairServer
+			repairServer(servTy, servname, name, status, rspdata);
+		} while (0);
+	}
+	catch (boost::property_tree::ptree_error & e) {
+		LOG_ERROR << __FUNCTION__ << " " << e.what();
+	}
 }
 
 //网关服[C]端 -> 大厅服[S]端
@@ -1452,6 +1561,7 @@ void Gateway::asyncHallHandler(
 	LOG_ERROR << __FUNCTION__ << " --- *** " << "peer(weakConn.lock()) failed";
 }
 
+#if 0
 //网关服[C]端 -> 大厅服[S]端
 void Gateway::sendHallMessage(
 	ContextPtr const& entryContext,
@@ -1473,11 +1583,7 @@ void Gateway::sendHallMessage(
 			clients_[servTyE::kHallTy].clients_->check(clientConn.first, true);
 			if (buf) {
 				//printf("len = %d\n", buf->readableBytes());
-				size_t len = buf->readableBytes();
-				char data[len];
-				memset(data, 0, len);
-				memcpy(data, buf->peek(), len);
-				hallConn->send(data, len);
+				hallConn->send(buf.get());
 			}
 		}
 		else {
@@ -1496,7 +1602,10 @@ void Gateway::sendHallMessage(
 						//账号已经登陆，但登陆大厅失效了，重新指定账号登陆大厅
 						entryContext->setClientConn(servTyE::kHallTy, clientConn);
 					}
-					hallConn->send(buf.get());
+					if (buf) {
+						//printf("len = %d\n", buf->readableBytes());
+						hallConn->send(buf.get());
+					}
 				}
 				else {
 
@@ -1505,6 +1614,103 @@ void Gateway::sendHallMessage(
 		}
 	}
 }
+#else
+//网关服[C]端 -> 大厅服[S]端
+void Gateway::sendHallMessage(
+	ContextPtr const& entryContext,
+	BufferPtr& buf, int64_t userid) {
+	//printf("%s %s(%d)\n", __FUNCTION__, __FILE__, __LINE__);
+	if (entryContext) {
+		//printf("%s %s(%d)\n", __FUNCTION__, __FILE__, __LINE__);
+		ClientConn const& clientConn = entryContext->getClientConn(servTyE::kHallTy);
+		muduo::net::TcpConnectionPtr hallConn(clientConn.second.lock());
+		if (hallConn) {
+			assert(hallConn->connected());
+			assert(entryContext->getUserID() > 0);
+			//判断节点是否维护中
+			if (!clients_[servTyE::kHallTy].isRepairing(clientConn.first)) {
+#if 0
+				assert(
+					std::find(
+						std::begin(clients_[servTyE::kHallTy].clients_),
+						std::end(clients_[servTyE::kHallTy].clients_),
+						clientConn.first) != clients_[servTyE::kHallTy].clients_.end());
+#endif
+				clients_[servTyE::kHallTy].clients_->check(clientConn.first, true);
+				if (buf) {
+					//printf("len = %d\n", buf->readableBytes());
+					hallConn->send(buf.get());
+				}
+			}
+			else {
+				LOG_ERROR << __FUNCTION__ << " --- *** " << "用户大厅服维护，重新分配";
+				//用户大厅服维护，重新分配
+				ClientConnList clients;
+				//异步获取全部有效大厅连接
+				clients_[servTyE::kHallTy].clients_->getAll(clients);
+				if (clients.size() > 0) {
+					bool bok = false;
+					std::map<std::string, bool> repairs;
+					do {
+						int index = randomHall_.betweenInt(0, clients.size() - 1).randInt_mt();
+						assert(index >= 0 && index < clients.size());
+						ClientConn const& clientConn = clients[index];
+						muduo::net::TcpConnectionPtr hallConn(clientConn.second.lock());
+						if (hallConn) {
+							//判断节点是否维护中
+							if (bok = !clients_[servTyE::kHallTy].isRepairing(clientConn.first)) {
+								//账号已经登陆，但登陆大厅维护中，重新指定账号登陆大厅
+								entryContext->setClientConn(servTyE::kHallTy, clientConn);
+								if (buf) {
+									//printf("len = %d\n", buf->readableBytes());
+									hallConn->send(buf.get());
+								}
+							}
+							else {
+								repairs[clientConn.first] = true;
+							}
+						}
+					} while (!bok && repairs.size() != clients.size());
+				}
+			}
+		}
+		else {
+			LOG_ERROR << __FUNCTION__ << " --- *** " << "用户大厅服失效，重新分配";
+			//用户大厅服失效，重新分配
+			ClientConnList clients;
+			//异步获取全部有效大厅连接
+			clients_[servTyE::kHallTy].clients_->getAll(clients);
+			if (clients.size() > 0) {
+				bool bok = false;
+				std::map<std::string, bool> repairs;
+				do {
+					int index = randomHall_.betweenInt(0, clients.size() - 1).randInt_mt();
+					assert(index >= 0 && index < clients.size());
+					ClientConn const& clientConn = clients[index];
+					muduo::net::TcpConnectionPtr hallConn(clientConn.second.lock());
+					if (hallConn) {
+						assert(hallConn->connected());
+						//判断节点是否维护中
+						if (bok = !clients_[servTyE::kHallTy].isRepairing(clientConn.first)) {
+							if (entryContext->getUserID() > 0) {
+								//账号已经登陆，但登陆大厅失效了，重新指定账号登陆大厅
+								entryContext->setClientConn(servTyE::kHallTy, clientConn);
+							}
+							if (buf) {
+								//printf("len = %d\n", buf->readableBytes());
+								hallConn->send(buf.get());
+							}
+						}
+						else {
+							repairs[clientConn.first] = true;
+						}
+					}
+				} while (!bok && repairs.size() != clients.size());
+			}
+		}
+	}
+}
+#endif
 
 //网关服[C]端 -> 大厅服[S]端，跨网关顶号处理(异地登陆)
 void Gateway::onUserReLoginNotify(std::string const& msg) {

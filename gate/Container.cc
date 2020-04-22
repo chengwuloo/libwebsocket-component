@@ -78,6 +78,7 @@ void Container::add(std::string const& name) {
 		LOG_WARN << __FUNCTION__ << " >>> 大厅服[" << vec[0] << ":" << vec[1] << "]";
 		//try add & connect
 		clients_->add(name, serverAddr);
+		repair_.remove(name);
 		break;
 	}
 	case servTyE::kGameTy: {
@@ -88,6 +89,7 @@ void Container::add(std::string const& name) {
 		LOG_WARN << __FUNCTION__ << " >>> 游戏服[" << vec[1] << ":" << vec[2] << "] 房间号[" << vec[0] << "]";
 		//try add & connect
 		clients_->add(name, serverAddr);
+		repair_.remove(name);
 		break;
 	}
 	}
@@ -99,13 +101,15 @@ void Container::remove(std::string const& name) {
 	case servTyE::kHallTy: {
 		LOG_WARN << __FUNCTION__ << " >>> 大厅服[" << name << "]";
 		//try remove
-		clients_->remove(name, false);
+		clients_->remove(name, true);
+		repair_.remove(name);
 		break;
 	}
 	case servTyE::kGameTy: {
 		LOG_WARN << __FUNCTION__ << " >>> 游戏服[" << name << "]";
 		//try remove
 		clients_->remove(name, true);
+		repair_.remove(name);
 		break;
 	}
 	}
