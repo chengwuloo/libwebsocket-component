@@ -1975,11 +1975,7 @@ void Gateway::sendGameMessage(
 			clients_[servTyE::kGameTy].clients_->check(clientConn.first, true);
 			if (buf) {
 				//printf("len = %d\n", buf->readableBytes());
-				size_t len = buf->readableBytes();
-				char data[len];
-				memset(data, 0, len);
-				memcpy(data, buf->peek(), len);
-				gameConn->send(data, len);
+				gameConn->send(buf.get());
 			}
 		}
 	}
