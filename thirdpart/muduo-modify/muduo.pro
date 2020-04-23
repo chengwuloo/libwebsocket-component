@@ -85,6 +85,7 @@ SOURCES += \
     net/TimerQueue.cc \
     base/CurrentThread.cc \
     net/Reactor.cc \
+	net/libwebsocket/context.cc \
     net/libwebsocket/server.cc
 
 HEADERS += \
@@ -163,6 +164,7 @@ HEADERS += \
     net/libwebsocket/ITimestamp.h \
     net/libwebsocket/ssl.h \
     net/libwebsocket/websocket.h \
+	net/libwebsocket/context.h \
     net/libwebsocket/server.h \
 
 unix {
