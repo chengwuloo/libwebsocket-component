@@ -1573,14 +1573,16 @@ void Gateway::sendHallMessage(
 		muduo::net::TcpConnectionPtr hallConn(clientConn.second.lock());
 		if (hallConn) {
 			assert(hallConn->connected());
+#ifndef NDEBUG
 #if 0
 			assert(
 				std::find(
-					std::begin(clients_[servTyE::kHallTy].ips_),
-					std::end(clients_[servTyE::kHallTy].ips_),
-					clientConn.first) != clients_[servTyE::kHallTy].ips_.end());
+					std::begin(clients_[servTyE::kHallTy].names_),
+					std::end(clients_[servTyE::kHallTy].names_),
+					clientConn.first) != clients_[servTyE::kHallTy].names_.end());
 #endif
 			clients_[servTyE::kHallTy].clients_->check(clientConn.first, true);
+#endif
 			if (buf) {
 				//printf("len = %d\n", buf->readableBytes());
 				hallConn->send(buf.get());
@@ -1629,6 +1631,7 @@ void Gateway::sendHallMessage(
 			assert(entryContext->getUserID() > 0);
 			//判断节点是否维护中
 			if (!clients_[servTyE::kHallTy].isRepairing(clientConn.first)) {
+#ifndef NDEBUG
 #if 0
 				assert(
 					std::find(
@@ -1637,6 +1640,7 @@ void Gateway::sendHallMessage(
 						clientConn.first) != clients_[servTyE::kHallTy].clients_.end());
 #endif
 				clients_[servTyE::kHallTy].clients_->check(clientConn.first, true);
+#endif
 				if (buf) {
 					//printf("len = %d\n", buf->readableBytes());
 					hallConn->send(buf.get());
@@ -1965,14 +1969,16 @@ void Gateway::sendGameMessage(
 		muduo::net::TcpConnectionPtr gameConn(clientConn.second.lock());
 		if (gameConn) {
 			assert(gameConn->connected());
+#ifndef NDEBUG
 #if 0
 			assert(
 				std::find(
-					std::begin(clients_[servTyE::kGameTy].ips_),
-					std::end(clients_[servTyE::kGameTy].ips_),
-					clientConn.first) != clients_[servTyE::kGameTy].ips_.end());
+					std::begin(clients_[servTyE::kGameTy].names_),
+					std::end(clients_[servTyE::kGameTy].names_),
+					clientConn.first) != clients_[servTyE::kGameTy].names_.end());
 #endif
 			clients_[servTyE::kGameTy].clients_->check(clientConn.first, true);
+#endif
 			if (buf) {
 				//printf("len = %d\n", buf->readableBytes());
 				gameConn->send(buf.get());
