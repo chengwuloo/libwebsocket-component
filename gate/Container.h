@@ -111,9 +111,9 @@ struct Container {
 		return repair_.exist(name);
 	}
 	
-	//正在服务节点数
+	//服务中节点数
 	inline ssize_t remaining() /*const*/ {
-		//活动节点数 - 维护节点数
+		//活动节点数 - 维护中节点数
 		return clients_->count() - repair_.count();
 	}
 private:
