@@ -654,7 +654,7 @@ void Gateway::onHttpConnection(const muduo::net::TcpConnectionPtr& conn) {
 		ContextPtr entryContext(new Context(WeakEntryPtr(entry), muduo::net::HttpContext()));
 		conn->setContext(entryContext);
 		{
-			//给新conn绑定一个worker线程，之后所有conn相关逻辑业务都在该worker线程中处理
+			//给新conn绑定一个worker线程，与之相关所有逻辑业务都在该worker线程中处理
 			int index = context->allocWorkerIndex();
 			assert(index >= 0 && index < threadPool_.size());
 
@@ -2075,7 +2075,7 @@ void Gateway::onConnection(const muduo::net::TcpConnectionPtr& conn) {
 		ContextPtr entryContext(new Context(WeakEntryPtr(entry)));
 		conn->setContext(entryContext);
 		{
-			//给新conn绑定一个worker线程，之后所有conn相关逻辑业务都在该worker线程中处理
+			//给新conn绑定一个worker线程，与之相关所有逻辑业务都在该worker线程中处理
 			int index = context->allocWorkerIndex();
 			assert(index >= 0 && index < threadPool_.size());
 			entryContext->setWorkerIndex(index);
