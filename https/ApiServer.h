@@ -154,89 +154,28 @@ public:
 		std::string const& client_ca_cert_file_path = "",
 		std::string const& client_ca_cert_dir_path = "");
     ~ApiServer();
-	//避免恶意连接占用系统sockfd资源不请求处理也不关闭fd情况，超时强行关闭连接 ///
-	//typedef std::weak_ptr<muduo::net::TcpConnection> WeakTcpConnectionPtr;
-	//Entry ///
-	struct Entry : public muduo::copyable {
-		//Context ///
-		struct Context : public muduo::copyable {
-			explicit Context()
-				: index_(0XFFFFFFFF) {
-			}
-			explicit Context(int index)
-				: index_(index) {
-				assert(index_ >= 0);
-			}
-			explicit Context(const boost::any& context)
-				: index_(0XFFFFFFFF) {
-				setContext(context);
-			}
-			explicit Context(int index, const boost::any& context)
-				: index_(index) {
-				assert(index_ >= 0);
-				setContext(context);
-			}
-			inline void setWorkerIndex(int index) {
-				index_ = index;
-				assert(index_ >= 0);
-			}
-			inline int getWorkerIndex() const {
-				return index_;
-			}
-			inline void setContext(const boost::any& context) {
-				context_ = context;
-			}
-			inline const boost::any& getContext() const {
-				return context_;
-			}
-			inline boost::any* getMutableContext() {
-				return &context_;
-			}
-			~Context() {
-			}
-			//threadPool_下标 ///
-			int index_;
-			boost::any context_;
-		};
+	//////////////////////////////////////////////////////////////////////////
+	//@@ Entry 避免恶意连接占用系统sockfd资源不请求处理也不关闭fd情况，超时强行关闭连接
+	struct Entry : public muduo::noncopyable {
+	public:
 		explicit Entry(const muduo::net::WeakTcpConnectionPtr& weakConn)
 			: weakConn_(weakConn) {
 		}
-		explicit Entry(const muduo::net::WeakTcpConnectionPtr& weakConn, int index)
-			: weakConn_(weakConn), ctx_(index) {
-		}
-		explicit Entry(const muduo::net::WeakTcpConnectionPtr& weakConn, const boost::any& context)
-			: weakConn_(weakConn), ctx_(context) {
-		}
-		explicit Entry(const muduo::net::WeakTcpConnectionPtr& weakConn, int index, const boost::any& context)
-			: weakConn_(weakConn), ctx_(index, context) {
-		}
-		inline void setWorkerIndex(int index) {
-			ctx_.setWorkerIndex(index);
-		}
-		inline int getWorkerIndex() const {
-			return ctx_.getWorkerIndex();
-		}
-		inline void setContext(const boost::any& context) {
-			ctx_.setContext(context);
-		}
-		inline const boost::any& getContext() const {
-			return ctx_.getContext();
-		}
-		inline boost::any* getMutableContext() {
-			return ctx_.getMutableContext();
-		}
-		inline WeakTcpConnectionPtr const& getWeakConnPtr() {
+		inline muduo::net::WeakTcpConnectionPtr const& getWeakConnPtr() {
 			return weakConn_;
 		}
+#if 0
 		~Entry() {
 			muduo::net::TcpConnectionPtr conn(weakConn_.lock());
 			if (conn) {
+				conn->getLoop()->assertInLoopThread();
+				LOG_WARN << __FUNCTION__ << " Entry::dtor";
 #ifdef _DEBUG_BUCKETS_
-				LOG_ERROR << __FUNCTION__ << " --- *** " << "WEB端[" << conn->peerAddress().toIpPort() << "] -> HTTP服["
-					<< conn->localAddress().toIpPort() << "] 超时强制关闭";
+				LOG_WARN << __FUNCTION__ << " 客户端[" << conn->peerAddress().toIpPort() << "] -> 网关服["
+					<< conn->localAddress().toIpPort() << "] timeout closing";
 #endif
 #if 0
-				//不再接收数据
+				//不再发送数据
 				conn->shutdown();
 #elif 0
 				//直接强制关闭连接
@@ -252,21 +191,164 @@ public:
 				conn->send(&buf);
 
 				//延迟0.2s强制关闭连接
-				conn->forceCloseWithDelay(0.2f);
+				conn->forceCloseWithDelay(0.4f);
 #endif
 			}
 		}
-		//上下文信息 ///
-		Entry::Context ctx_;
-		//为了安全使用weak_ptr弱指针 ///
-		WeakTcpConnectionPtr weakConn_;
+#else
+		~Entry();
+#endif
+		muduo::net::WeakTcpConnectionPtr weakConn_;
 	};
+
 	typedef std::shared_ptr<Entry> EntryPtr;
 	typedef std::weak_ptr<Entry> WeakEntryPtr;
+	//boost::unordered_set改用std::unordered_set
 	typedef std::unordered_set<EntryPtr> Bucket;
-	typedef boost::circular_buffer<Bucket> WeakConnectionList;
-	//EventLoopContext ///
-	class EventLoopContext : public muduo::copyable {
+	typedef boost::circular_buffer<Bucket> WeakConnList;
+
+	//////////////////////////////////////////////////////////////////////////
+	//@@ ConnBucket
+	struct ConnBucket : public muduo::noncopyable {
+		explicit ConnBucket(muduo::net::EventLoop* loop, int index, size_t size)
+			:loop_(CHECK_NOTNULL(loop)), index_(index) {
+			//指定时间轮盘大小(bucket桶大小)
+			//即环形数组大小(size) >=
+			//心跳超时清理时间(timeout) >
+			//心跳间隔时间(interval)
+			buckets_.resize(size);
+#ifdef _DEBUG_BUCKETS_
+			LOG_WARN << __FUNCTION__ << " loop[" << index << "] timeout = " << size << "s";
+#endif
+		}
+		//tick检查，间隔1s，踢出超时conn
+		void onTimer() {
+			loop_->assertInLoopThread();
+			buckets_.push_back(Bucket());
+#ifdef _DEBUG_BUCKETS_
+			LOG_WARN << __FUNCTION__ << " loop[" << index_ << "] timeout[" << buckets_.size() << "]";
+#endif
+			//重启连接超时定时器检查，间隔1s
+			loop_->runAfter(1.0f, std::bind(&ConnBucket::onTimer, this));
+		}
+		//连接成功，压入桶元素
+		void pushBucket(EntryPtr const& entry) {
+			loop_->assertInLoopThread();
+			if (likely(entry)) {
+				muduo::net::TcpConnectionPtr conn(entry->weakConn_.lock());
+				if (likely(conn)) {
+					assert(conn->getLoop() == loop_);
+					//必须使用shared_ptr，持有entry引用计数(加1)
+					buckets_.back().insert(entry);
+#ifdef _DEBUG_BUCKETS_
+					LOG_WARN << __FUNCTION__ << " loop[" << index_ << "] timeout[" << buckets_.size() << "] 客户端[" << conn->peerAddress().toIpPort() << "] -> 网关服["
+						<< conn->localAddress().toIpPort() << "]";
+#endif
+				}
+			}
+			else {
+				//assert(false);
+			}
+		}
+		//收到消息包，更新桶元素
+		void updateBucket(EntryPtr const& entry) {
+			loop_->assertInLoopThread();
+			if (likely(entry)) {
+				muduo::net::TcpConnectionPtr conn(entry->weakConn_.lock());
+				if (likely(conn)) {
+					assert(conn->getLoop() == loop_);
+					//必须使用shared_ptr，持有entry引用计数(加1)
+					buckets_.back().insert(entry);
+#ifdef _DEBUG_BUCKETS_
+					LOG_WARN << __FUNCTION__ << " loop[" << index_ << "] timeout[" << buckets_.size() << "] 客户端[" << conn->peerAddress().toIpPort() << "] -> 网关服["
+						<< conn->localAddress().toIpPort() << "]";
+#endif
+				}
+			}
+			else {
+				//assert(false);
+			}
+		}
+		//bucketsPool_下标
+		int index_;
+		WeakConnList buckets_;
+		muduo::net::EventLoop* loop_;
+	};
+
+	typedef std::unique_ptr<ConnBucket> ConnBucketPtr;
+
+	//////////////////////////////////////////////////////////////////////////
+	//@@ Context
+	struct Context : public muduo::noncopyable {
+		explicit Context()
+			: index_(0XFFFFFFFF) {
+			reset();
+		}
+		explicit Context(WeakEntryPtr const& weakEntry)
+			: index_(0XFFFFFFFF), weakEntry_(weakEntry) {
+			reset();
+		}
+		explicit Context(const boost::any& context)
+			: index_(0XFFFFFFFF), context_(context) {
+			assert(!context_.empty());
+			reset();
+		}
+		explicit Context(WeakEntryPtr const& weakEntry, const boost::any& context)
+			: index_(0XFFFFFFFF), weakEntry_(weakEntry), context_(context) {
+			assert(!context_.empty());
+			reset();
+		}
+		~Context() {
+			//LOG_WARN << __FUNCTION__ << " Context::dtor";
+			reset();
+		}
+		//reset
+		inline void reset() {
+			ipaddr_ = 0;
+			session_.clear();
+		}
+		inline void setWorkerIndex(int index) {
+			index_ = index;
+			assert(index_ >= 0);
+		}
+		inline int getWorkerIndex() const {
+			return index_;
+		}
+		inline void setContext(const boost::any& context) {
+			context_ = context;
+		}
+		inline const boost::any& getContext() const {
+			return context_;
+		}
+		inline boost::any& getContext() {
+			return context_;
+		}
+		inline boost::any* getMutableContext() {
+			return &context_;
+		}
+		inline WeakEntryPtr const& getWeakEntryPtr() {
+			return weakEntry_;
+		}
+		//ipaddr
+		inline void setFromIp(in_addr_t inaddr) { ipaddr_ = inaddr; }
+		inline in_addr_t getFromIp() { return ipaddr_; }
+		//session
+		inline void setSession(std::string const& session) { session_ = session; }
+		inline std::string const& getSession() const { return session_; }
+	public:
+		//threadPool_下标
+		int index_;
+		uint32_t ipaddr_;
+		std::string session_;
+		WeakEntryPtr weakEntry_;
+		boost::any context_;
+	};
+
+	typedef std::shared_ptr<Context> ContextPtr;
+
+	//////////////////////////////////////////////////////////////////////////
+	//@@ EventLoopContext
+	class EventLoopContext : public muduo::noncopyable {
 	public:
 		explicit EventLoopContext()
 			: index_(0xFFFFFFFF) {
@@ -275,6 +357,7 @@ public:
 			: index_(index) {
 			assert(index_ >= 0);
 		}
+#if 0
 		explicit EventLoopContext(EventLoopContext const& ref) {
 			index_ = ref.index_;
 			pool_.clear();
@@ -284,6 +367,7 @@ public:
 			std::copy(ref.pool_.begin(), ref.pool_.end(), std::back_inserter(pool_));
 #endif
 		}
+#endif
 		inline void setBucketIndex(int index) {
 			index_ = index;
 			assert(index_ >= 0);
@@ -295,11 +379,9 @@ public:
 			pool_.emplace_back(index);
 		}
 		inline int allocWorkerIndex() {
-			//为conn指定一个逻辑处理线程 ///
 			int index = nextPool_.getAndAdd(1) % pool_.size();
-
-			//防止nextPool_类型溢出 ///
-			if (index >= 0XFFFFFFFF) {
+			//nextPool_溢出
+			if (index < 0) {
 				nextPool_.getAndSet(-1);
 				index = nextPool_.addAndGet(1);
 			}
@@ -308,77 +390,19 @@ public:
 		}
 		~EventLoopContext() {
 		}
-	private:
-		//bucketsPool_下标 ///
+	public:
+		//bucketsPool_下标
 		int index_;
-		//threadPool_下标集合 ///
+		//threadPool_下标集合
 		std::vector<int> pool_;
-		//pool_游标 ///
+		//pool_游标
 		muduo::AtomicInt32 nextPool_;
 	};
-	//HashConnectionBucket，通过哈希散列(hash)无锁化(lockfree)处理 ///
-	struct HashConnectionBucket {
-		explicit HashConnectionBucket(muduo::net::EventLoop& loop, int index, size_t size)
-			:loop_(loop), index_(index) {
-			//指定时间轮盘大小(bucket桶大小) ///
-			//即环形数组大小(size) >=
-			//心跳超时清理时间(timeout) >
-			//心跳间隔时间(interval)
-			buckets_.resize(size);
-#ifdef _DEBUG_BUCKETS_
-			LOG_INFO << __FUNCTION__ << " --- *** [" << index << "]WEB端超时清理时间(timeout) = " << size << "s";
-#endif
-		}
-		//tick检查，间隔1s，踢出超时conn ///
-		void onTimer() {
-			//Entry析构时延迟0.2s强制关闭连接 ///
-			buckets_.push_back(Bucket());
-#ifdef _DEBUG_BUCKETS_
-			LOG_INFO << __FUNCTION__ << " --- *** [" << index_ << "]Tick清理超时连接...";
-#endif
-			//重启超时检查定时器 ///
-			loop_.runAfter(1.0f, std::bind(&HashConnectionBucket::onTimer, this));
-		}
-		//连接成功，压入桶元素 ///
-		void pushBucket(EntryPtr const entry) {
-			if (likely(entry)) {
-				//muduo::net::TcpConnectionPtr conn(entry->weakConn_.lock());
-				//if (likely(conn)) {
-					//必须使用shared_ptr，持有entry引用计数(加1) ///
-					buckets_.back().insert(entry);
-#ifdef _DEBUG_BUCKETS_
-					LOG_INFO << __FUNCTION__ << " --- *** [" << index_ << "]WEB端[" << conn->peerAddress().toIpPort() << "] -> HTTP服["
-						<< conn->localAddress().toIpPort() << "] 压入Bucket桶!";
-#endif
-				//}
-			}
-			else {
-				//assert(false);
-			}
-		}
-		//收到消息包，更新桶元素 ///
-		void updateBucket(EntryPtr const entry) {
-			if (likely(entry)) {
-				//muduo::net::TcpConnectionPtr conn(entry->weakConn_.lock());
-				//if (likely(conn)) {
-					//必须使用shared_ptr，持有entry引用计数(加1) ///
-					buckets_.back().insert(entry);
-#ifdef _DEBUG_BUCKETS_
-					LOG_INFO << __FUNCTION__ << " --- *** [" << index_ << "]WEB端[" << conn->peerAddress().toIpPort() << "] -> HTTP服["
-						<< conn->localAddress().toIpPort() << "] 更新Bucket桶!";
-#endif
-				//}
-			}
-			else {
-				//assert(false);
-			}
-		}
-		//bucketsPool_下标 ///
-		int index_;
-		WeakConnectionList buckets_;
-		muduo::net::EventLoop& loop_;
-	};
-	std::vector<HashConnectionBucket> bucketsPool_;
+
+	typedef std::shared_ptr<EventLoopContext> EventLoopContextPtr;
+
+	//Bucket池处理连接超时conn对象
+	std::vector<ConnBucketPtr> bucketsPool_;
 	
 	/// Not thread safe, callback be registered before calling start().
 	void setHttpCallback(const HttpCallback& cb)
@@ -386,30 +410,22 @@ public:
 		httpCallback_ = cb;
 	}
 public:
-	//启动HTTP业务线程 ///
-	//启动HTTP监听 ///
 	void start(int numThreads, int workerNumThreads, int maxSize);
 
-	//白名单检查 ///
-	bool onConnection(const InetAddress& peerAddr);
+	bool onHttpCondition(const InetAddress& peerAddr);
 
-	//Connected/closed事件 ///
 	void onHttpConnection(const muduo::net::TcpConnectionPtr& conn);
 
-	//接收HTTP网络消息回调 ///
 	void onHttpMessage(const muduo::net::TcpConnectionPtr& conn, muduo::net::Buffer* buf, muduo::Timestamp receiveTime);
 
-	//异步回调 ///
-	void asyncHttpHandler(const WeakEntryPtr& weakEntry/*, const muduo::net::HttpRequest& req*/, muduo::Timestamp receiveTime);
+	void onWriteComplete(const muduo::net::TcpConnectionPtr& conn);
 	
-	//处理HTTP回调 ///
+	void asyncHttpHandler(muduo::net::WeakTcpConnectionPtr const& weakConn, muduo::Timestamp receiveTime);
+	
 	void processHttpRequest(const muduo::net::HttpRequest& req, muduo::net::HttpResponse& rsp, muduo::net::InetAddress const& peerAddr, muduo::Timestamp receiveTime);
 
-	//请求字符串 ///
 	static std::string getRequestStr(muduo::net::HttpRequest const& req);
 
-	//解析请求 ///
-	//strQuery string req.query()
 	static bool parseQuery(std::string const& queryStr, HttpParams& params, std::string& errmsg);
 public:
 	//I/O线程数，worker线程数
@@ -475,20 +491,6 @@ private:
 		int64_t requestNum, int64_t requestNumSucc, int64_t requestNumFailed, double ratio,
 		int64_t requestNumTotal, int64_t requestNumTotalSucc, int64_t requestNumTotalFailed, double ratioTotal, int testTPS);
 
-	//判断是否数字组成的字符串 ///
-	static inline bool IsDigitStr(std::string const& str) {
-#if 0
-		boost::regex reg("^[1-9]\d*\,\d*|[1-9]\d*$");
-#elif 1
-		boost::regex reg("^[0-9]+([.]{1}[0-9]+){0,1}$");
-#elif 0
-		boost::regex reg("^[+-]?(0|([1-9]\d*))(\.\d+)?$");
-#elif 0
-		boost::regex reg("[1-9]\d*\.?\d*)|(0\.\d*[1-9]");
-#endif
-		return boost::regex_match(str, reg);
-	}
-	
 public:
 	// 代理信息 ///
 	struct agent_info_t {

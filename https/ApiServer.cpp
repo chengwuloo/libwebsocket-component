@@ -89,6 +89,39 @@ using namespace boost::gregorian;
 using namespace boost::posix_time;
 using namespace boost::local_time;
 
+ApiServer::Entry::~Entry() {
+	muduo::net::TcpConnectionPtr conn(weakConn_.lock());
+	if (conn) {
+		conn->getLoop()->assertInLoopThread();
+#ifdef _DEBUG_BUCKETS_
+		LOG_WARN << __FUNCTION__ << " 客户端[" << conn->peerAddress().toIpPort() << "] -> 网关服["
+			<< conn->localAddress().toIpPort() << "] timeout closing";
+#endif
+		ContextPtr entryContext(boost::any_cast<ContextPtr>(conn->getContext()));
+		assert(entryContext);
+		LOG_WARN << __FUNCTION__ << " Entry::dtor[" << entryContext->getSession() << "]";
+#if 0
+		//不再发送数据
+		conn->shutdown();
+#elif 0
+		//直接强制关闭连接
+		conn->forceClose();
+#else
+		//HTTP应答包(header/body)
+		muduo::net::HttpResponse rsp(false);
+		setFailedResponse(rsp,
+			muduo::net::HttpResponse::k404NotFound,
+			"HTTP/1.1 505 timeout\r\n\r\n");
+		muduo::net::Buffer buf;
+		rsp.appendToBuffer(&buf);
+		conn->send(&buf);
+
+		//延迟0.2s强制关闭连接
+		conn->forceCloseWithDelay(0.2f);
+#endif
+	}
+}
+
 ApiServer::ApiServer(
 	muduo::net::EventLoop* loop,
 	const muduo::net::InetAddress& listenAddr,
@@ -108,11 +141,12 @@ ApiServer::ApiServer(
 	, ttlUserLockSeconds_(1000)
 	, ttlAgentLockSeconds_(500)
 {
-	
-	server_.setConnectionCallback(
-		std::bind(&ApiServer::onConnection, this, std::placeholders::_1));
-	server_.setMessageCallback(
-		std::bind(&ApiServer::onMessage, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+	httpServer_.setConnectionCallback(
+		std::bind(&ApiServer::onHttpConnection, this, std::placeholders::_1));
+	httpServer_.setMessageCallback(
+		std::bind(&ApiServer::onHttpMessage, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+	httpServer_.setWriteCompleteCallback(
+		std::bind(&ApiServer::onWriteComplete, this, std::placeholders::_1));
 		
 	//添加OpenSSL支持 ///
 	muduo::net::ssl::SSL_CTX_Init(
@@ -201,86 +235,107 @@ static int64_t rate100(std::string const& s) {
 	return atoll(s.c_str()) * 100;
 }
 
-//启动HTTP业务线程 ///
-//启动HTTP监听 ///
-void ApiServer::start(int numThreads, int workerNumThreads, int maxSize) {
+//判断是否数字组成的字符串
+static inline bool IsDigitalStr(std::string const& str) {
+#if 0
+	boost::regex reg("^[1-9]\d*\,\d*|[1-9]\d*$");
+#elif 1
+	boost::regex reg("^[0-9]+([.]{1}[0-9]+){0,1}$");
+#elif 0
+	boost::regex reg("^[+-]?(0|([1-9]\d*))(\.\d+)?$");
+#elif 0
+	boost::regex reg("[1-9]\d*\.?\d*)|(0\.\d*[1-9]");
+#endif
+	return boost::regex_match(str, reg);
+}
+
+void ApiServer::start(int numThreads, int numWorkerThreads, int maxSize) {
 	
-	//定时器检查
-	threadTimer_->getLoop()->runAfter(3, std::bind(&OrderServer::refreshAgentInfo, this));
-	threadTimer_->getLoop()->runAfter(3, std::bind(&OrderServer::refreshWhiteList, this));
-	
-	//一个网络IO线程对应一个业务线程，处理改网络IO上所有连接的HTTP请求，不涉及到共享数据可以做到无锁操作 ///
-	for (int i = 0; i < workerNumThreads; ++i) {
+	//网络I/O线程数
+	numThreads_ = numThreads;
+	//worker线程数，最好 numWorkerThreads = n * numThreads
+	workerNumThreads_ = numWorkerThreads;
+
+	//创建若干worker线程，启动worker线程池
+	for (int i = 0; i < numWorkerThreads; ++i) {
 		std::shared_ptr<muduo::ThreadPool> threadPool = std::make_shared<muduo::ThreadPool>("ThreadPool:" + std::to_string(i));
-		threadPool->setThreadInitCallback(std::bind(&ApiServer::threadInit, this));
-		//任务队列大小 ///
+		threadPool->setThreadInitCallback(std::bind(&OrderServer::threadInit, this));
 		threadPool->setMaxQueueSize(maxSize);
 		threadPool->start(1);
 		threadPool_.push_back(threadPool);
 	}
-	//worker线程数
-	workerNumThreads_ = workerNumThreads;
 
 	//网络IO线程数量
-	server_.setThreadNum(numThreads);
+	httpServer_.setThreadNum(numThreads);
 	LOG_INFO << __FUNCTION__ << " --- *** "
-		<< "\nHttpServer = " << server_.ipPort()
-		<< " 网络IO线程数 = " << numThreads
-		<< " worker 线程数 = " << workerNumThreads;
+		<< "\nHttpServer = " << httpServer_.ipPort()
+		<< " 网络I/O线程数 = " << numThreads
+		<< " worker线程数 = " << numWorkerThreads;
 	
-	//I/O线程数
-	numThreads_ = numThreads;
-	
-	//开启了IP访问白名单功能 ///
-	//Accept时候判断，socket底层控制，否则开启异步检查 ///
+	//Accept时候判断，socket底层控制，否则开启异步检查
 	if (whiteListControl_ == eWhiteListCtrl::OpenAccept) {
 		//开启IP访问白名单检查
-		server_.setConditionCallback(std::bind(&ApiServer::onConnection, this, std::placeholders::_1));
+		httpServer_.setConditionCallback(std::bind(&OrderServer::onHttpCondition, this, std::placeholders::_1));
 	}
-	
-	//启动HTTP监听
-	server_.start();
 
-	//必须等server_所有的IO线程都启动起来 ///
+	//启动HTTP监听
+	httpServer_.start();
+
+	//等server_所有的网络I/O线程都启动起来
 	//sleep(2);
 
-	std::shared_ptr<muduo::net::EventLoopThreadPool> threadPool = server_.threadPool();
+	//获取网络I/O模型EventLoop池
+	std::shared_ptr<muduo::net::EventLoopThreadPool> threadPool = httpServer_.threadPool();
 	std::vector<muduo::net::EventLoop*> loops = threadPool->getAllLoops();
 	
-	//初始化HashConnectionBucket池 ///
+	//为各网络I/O线程绑定Bucket
 	for (size_t index = 0; index < loops.size(); ++index) {
-		//为每个HashConnectionBucket对象创建定时器 ///
-		bucketsPool_.push_back(HashConnectionBucket(*loops[index], index, kTimeoutSeconds_));
-		//保存index到EventLoop上下文 ///
-		loops[index]->setContext(EventLoopContext(index));
+#if 0
+		ConnBucketPtr bucket(new ConnBucket(
+			loops[index], index, kTimeoutSeconds_));
+		bucketsPool_.emplace_back(std::move(bucket));
+#else
+		bucketsPool_.emplace_back(
+			ConnBucketPtr(new ConnBucket(
+				loops[index], index, kTimeoutSeconds_)));
+#endif
+		loops[index]->setContext(EventLoopContextPtr(new EventLoopContext(index)));
 	}
-	
-	//最好 workerNumThreads = 2 * numThreads ///
-	int next = 0;
-	for (int i = 0; i < threadPool_.size(); ++i) {
-		EventLoopContext* context = boost::any_cast<EventLoopContext>(loops[next]->getMutableContext());
-		assert(context);
-		context->addWorkerIndex(i);
-		if (++next >= loops.size()) {
-			next = 0;
+	//为每个网络I/O线程绑定若干worker线程(均匀分配)
+	{
+		int next = 0;
+		for (size_t index = 0; index < threadPool_.size(); ++index) {
+			EventLoopContextPtr context = boost::any_cast<EventLoopContextPtr>(loops[next]->getContext());
+			assert(context);
+			context->addWorkerIndex(index);
+			if (++next >= loops.size()) {
+				next = 0;
+			}
 		}
 	}
-	
+	//启动连接超时定时器检查，间隔1s
 	for (size_t index = 0; index < loops.size(); ++index) {
-		//启动超时检查定时器 ///
-		loops[index]->runAfter(1.0f, std::bind(&HashConnectionBucket::onTimer, &bucketsPool_[index]));
+		{
+			assert(bucketsPool_[index]->index_ == index);
+			assert(bucketsPool_[index]->loop_ == loops[index]);
+		}
+		{
+			EventLoopContextPtr context = boost::any_cast<EventLoopContextPtr>(loops[index]->getContext());
+			assert(context->index_ == index);
+		}
+		loops[index]->runAfter(1.0f, std::bind(&ConnBucket::onTimer, bucketsPool_[index].get()));
 	}
+	//输出性能指标日志
+	//threadQPSLog_ = std::make_shared<muduo::ThreadPool>("QPSLogThread:" + std::to_string(0));
+	//threadQPSLog_->start(1);
 }
 
-//白名单检查 ///
-bool ApiServer::onConnection(const InetAddress& peerAddr) {
-	//Accept时候判断，socket底层控制，否则开启异步检查 ///
-	//开启了IP访问白名单功能 ///
+bool ApiServer::onHttpCondition(const InetAddress& peerAddr) {
+	//Accept时候判断，socket底层控制，否则开启异步检查
 	assert(whiteListControl_ == eWhiteListCtrl::OpenAccept);
-	//安全断言 ///
 	server_.getLoop()->assertInLoopThread();
 	{
-		//管理员挂维护/恢复服务 ///
+		//管理员挂维护/恢复服务
 		std::map<in_addr_t, eApiVisit>::const_iterator it = admin_list_.find(peerAddr.ipNetEndian());
 		if (it != admin_list_.end()) {
 			return true;
@@ -289,11 +344,9 @@ bool ApiServer::onConnection(const InetAddress& peerAddr) {
 	{
 		//192.168.2.21:3640 192.168.2.21:3667
 		std::map<in_addr_t, eApiVisit>::const_iterator it = white_list_.find(peerAddr.ipNetEndian());
-		//在IP访问白名单中 ///
 		return (it != white_list_.end()) && (eApiVisit::Enable == it->second);
 	}
 #if 0
-	//节点维护中 ///
 	if (server_state_ == ServiceRepairing) {
 		return false;
 	}
@@ -301,22 +354,301 @@ bool ApiServer::onConnection(const InetAddress& peerAddr) {
 	return true;
 }
 
-//Connected/closed事件 ///
-void ApiServer::onConnection(const muduo::net::TcpConnectionPtr& conn)
+void ApiServer::onHttpConnection(const muduo::net::TcpConnectionPtr& conn)
+{
+	conn->getLoop()->assertInLoopThread();
+
+	if (conn->connected()) {
+		int32_t num = numConnected_.incrementAndGet();
+		LOG_INFO << __FUNCTION__ << " --- *** " << "WEB端[" << conn->peerAddress().toIpPort() << "] -> HTTP服["
+			<< conn->localAddress().toIpPort() << "] "
+			<< (conn->connected() ? "UP" : "DOWN") << " " << num;
+
+		//累计接收请求数
+		numTotalReq_.incrementAndGet();
+
+		//最大连接数限制
+		if (num > kMaxConnections_) {
+#if 0
+			//不再发送数据
+			conn->shutdown();
+#elif 0
+			//直接强制关闭连接
+			conn->forceClose();
+#else
+			//HTTP应答包(header/body)
+			muduo::net::HttpResponse rsp(false);
+			setFailedResponse(rsp,
+				muduo::net::HttpResponse::k404NotFound,
+				"HTTP/1.1 600 访问量限制(" + std::to_string(kMaxConnections_) + ")\r\n\r\n");
+			muduo::net::Buffer buf;
+			rsp.appendToBuffer(&buf);
+			conn->send(&buf);
+
+			//延迟0.2s强制关闭连接
+			//conn->forceCloseWithDelay(0.2f);
+#endif
+			//会调用onHttpMessage函数
+			assert(conn->getContext().empty());
+
+			//累计未处理请求数
+			numTotalBadReq_.incrementAndGet();
+			return;
+		}
+#if 0
+		//Accept时候判断，socket底层控制，否则开启异步检查
+		if (whiteListControl_ == eWhiteListCtrl::Open) {
+			bool is_ip_allowed = false;
+			{
+				READ_LOCK(white_list_mutex_);
+				std::map<in_addr_t, eApiVisit>::const_iterator it = white_list_.find(conn->peerAddress().ipNetEndian());
+				is_ip_allowed = ((it != white_list_.end()) && (eApiVisit::Enable == it->second));
+			}
+			if (!is_ip_allowed) {
+#if 0
+				conn->shutdown();
+#elif 1
+				conn->forceClose();
+#else
+				conn->forceCloseWithDelay(0.2f);
+#endif
+				return;
+			}
+		}
+#endif
+		EventLoopContextPtr context = boost::any_cast<EventLoopContextPtr>(conn->getLoop()->getContext());
+		assert(context);
+
+		EntryPtr entry(new Entry(muduo::net::WeakTcpConnectionPtr(conn)));
+			
+		//指定conn上下文信息
+		ContextPtr entryContext(new Context(WeakEntryPtr(entry), muduo::net::HttpContext()));
+		conn->setContext(entryContext);
+		{
+			//给新conn绑定一个worker线程，与之相关所有逻辑业务都在该worker线程中处理
+			int index = context->allocWorkerIndex();
+			assert(index >= 0 && index < threadPool_.size());
+
+			//对于HTTP请求来说，每一个conn都应该是独立的，指定一个独立线程处理即可，避免锁开销与多线程竞争抢占共享资源带来的性能损耗
+			entryContext->setWorkerIndex(index);
+		}
+		{
+			//获取EventLoop关联的Bucket
+			int index = context->getBucketIndex();
+			assert(index >= 0 && index < bucketsPool_.size());
+				
+			//连接成功，压入桶元素
+			conn->getLoop()->runInLoop(
+				std::bind(&ConnBucket::pushBucket, bucketsPool_[index].get(), entry));
+		}
+		{
+			//TCP_NODELAY
+			conn->setTcpNoDelay(true);
+		}
+	}
+	else {
+		int32_t num = numConnected_.decrementAndGet();
+		LOG_INFO << __FUNCTION__ << " --- *** " << "WEB端[" << conn->peerAddress().toIpPort() << "] -> HTTP服["
+			<< conn->localAddress().toIpPort() << "] "
+			<< (conn->connected() ? "UP" : "DOWN") << " " << num;
+	}
+}
+
+void ApiServer::onWriteComplete(const muduo::net::TcpConnectionPtr& conn) {
+	
+	LOG_WARN << __FUNCTION__;
+
+	conn->getLoop()->assertInLoopThread();
+#if 1
+	//延迟0.2s强制关闭连接
+	conn->forceCloseWithDelay(0.2f);
+#endif
+}
+
+void ApiServer::onHttpMessage(const muduo::net::TcpConnectionPtr& conn,
+	muduo::net::Buffer* buf,
+	muduo::Timestamp receiveTime)
+{
+	conn->getLoop()->assertInLoopThread();
+
+	//超过最大连接数限制
+	if (!conn || conn->getContext().empty()) {
+		//LOG_ERROR << __FUNCTION__ << " --- *** " << "TcpConnectionPtr.conn max";
+		return;
+	}
+	
+	//LOG_ERROR << __FUNCTION__ << " --- *** ";
+	//printf("----------------------------------------------\n");
+	//printf("%.*s\n", buf->readableBytes(), buf->peek());
+
+	//先确定是HTTP数据报文，再解析
+	//assert(buf->readableBytes() > 4 && buf->findCRLFCRLF());
+
+	ContextPtr entryContext(boost::any_cast<ContextPtr>(conn->getContext()));
+	assert(entryContext);
+	muduo::net::HttpContext* httpContext = boost::any_cast<muduo::net::HttpContext>(entryContext->getMutableContext());
+	assert(httpContext);
+
+	//解析HTTP数据包
+	if (!httpContext->parseRequest(buf, receiveTime)) {
+		//发生错误
+		LOG_ERROR << __FUNCTION__ << " 解析HTTP发生错误";
+	}
+	else if (httpContext->gotAll()) {
+		//Accept时候判断，socket底层控制，否则开启异步检查
+		if (whiteListControl_ == eWhiteListCtrl::Open) {
+			std::string ipaddr;
+			{
+				std::string ipaddrs = httpContext->request().getHeader("X-Forwarded-For");
+				if (ipaddrs.empty()) {
+					ipaddr = conn->peerAddress().toIp();
+				}
+				else {
+#if 0
+					//第一个IP为客户端真实IP，可伪装，第二个IP为一级代理IP，第三个IP为二级代理IP
+					std::string::size_type spos = ipaddrs.find_first_of(',');
+					if (spos == std::string::npos) {
+					}
+					else {
+						ipaddr = ipaddrs.substr(0, spos);
+					}
+#else
+					boost::replace_all<std::string>(ipaddrs, " ", "");
+					std::vector<std::string> vec;
+					boost::algorithm::split(vec, ipaddrs, boost::is_any_of(","));
+					for (std::vector<std::string>::const_iterator it = vec.begin();
+						it != vec.end(); ++it) {
+						if (!it->empty() &&
+							boost::regex_match(*it, boost::regex(
+									"^(1\\d{2}|2[0-4]\\d|25[0-5]|[1-9]\\d|[1-9])\\." \
+									"(1\\d{2}|2[0-4]\\d|25[0-5]|[1-9]\\d|\\d)\\." \
+									"(1\\d{2}|2[0-4]\\d|25[0-5]|[1-9]\\d|\\d)\\." \
+									"(1\\d{2}|2[0-4]\\d|25[0-5]|[1-9]\\d|\\d)$"))) {
+								
+							if (strncasecmp(it->c_str(), "10.", 3) != 0 &&
+								strncasecmp(it->c_str(), "192.168", 7) != 0 &&
+								strncasecmp(it->c_str(), "172.16.", 7) != 0) {
+								ipaddr = *it;
+								break;
+							}
+						}
+					}
+#endif
+				}
+			}
+			muduo::net::InetAddress peerAddr(muduo::StringArg(ipaddr), 0, false);
+			bool is_ip_allowed = false;
+			{
+				//管理员挂维护/恢复服务
+				std::map<in_addr_t, eApiVisit>::const_iterator it = admin_list_.find(peerAddr.ipNetEndian());
+				is_ip_allowed = (it != admin_list_.end());
+			}
+			if(!is_ip_allowed) {
+				READ_LOCK(white_list_mutex_);
+				std::map<in_addr_t, eApiVisit>::const_iterator it = white_list_.find(peerAddr.ipNetEndian());
+				is_ip_allowed = ((it != white_list_.end()) && (eApiVisit::Enable == it->second));
+			}
+			if (!is_ip_allowed) {
+#if 0
+				//不再发送数据
+				conn->shutdown();
+#elif 1
+				//直接强制关闭连接
+				conn->forceClose();
+#else
+				//HTTP应答包(header/body)
+				muduo::net::HttpResponse rsp(false);
+				setFailedResponse(rsp,
+					muduo::net::HttpResponse::k404NotFound,
+					"HTTP/1.1 500 IP访问限制\r\n\r\n");
+				muduo::net::Buffer buf;
+				rsp.appendToBuffer(&buf);
+				conn->send(&buf);
+
+				//延迟0.2s强制关闭连接
+				conn->forceCloseWithDelay(0.2f);
+#endif
+				//累计未处理请求数
+				numTotalBadReq_.incrementAndGet();
+				return;
+			}
+		}
+		
+		EntryPtr entry(entryContext->getWeakEntryPtr().lock());
+		if (likely(entry)) {
+			{
+				EventLoopContextPtr context = boost::any_cast<EventLoopContextPtr>(conn->getLoop()->getContext());
+				assert(context);
+				int index = context->getBucketIndex();
+				assert(index >= 0 && index < bucketsPool_.size());
+
+				//收到消息包，更新桶元素
+				conn->getLoop()->runInLoop(std::bind(&ConnBucket::updateBucket, bucketsPool_[index].get(), entry));
+			}
+			{
+				//获取绑定的worker线程
+				int index = entryContext->getWorkerIndex();
+				assert(index >= 0 && index < threadPool_.size());
+				//扔给任务消息队列处理
+				threadPool_[index]->run(
+					std::bind(
+						&OrderServer::asyncHttpHandler,
+						this, muduo::net::WeakTcpConnectionPtr(conn), receiveTime));
+			}
+			return;
+		}
+		//累计未处理请求数
+		numTotalBadReq_.incrementAndGet();
+		LOG_ERROR << __FUNCTION__ << " --- *** " << "entry invalid";
+		return;
+	}
+	//发生错误
+	//HTTP应答包(header/body)
+	muduo::net::HttpResponse rsp(false);
+	setFailedResponse(rsp,
+		muduo::net::HttpResponse::k404NotFound,
+		"HTTP/1.1 400 Bad Request\r\n\r\n");
+	muduo::net::Buffer buffer;
+	rsp.appendToBuffer(&buffer);
+	conn->send(&buffer);
+	//释放HttpContext资源
+	httpContext->reset();
+#if 0
+	//不再发送数据
+	conn->shutdown();
+#elif 0
+	//直接强制关闭连接
+	conn->forceClose();
+#else
+	//延迟0.2s强制关闭连接
+	//conn->forceCloseWithDelay(0.2f);
+#endif
+	//累计未处理请求数
+	numTotalBadReq_.incrementAndGet();
+}
+
+void ApiServer::asyncHttpHandler(muduo::net::WeakTcpConnectionPtr const& weakConn, muduo::Timestamp receiveTime)
 {
 	//MY_TRY()
-	if (conn->connected()) {
-		{
-			int32_t num = numConnected_.incrementAndGet();
-			LOG_INFO << __FUNCTION__ << " --- *** " << "WEB端[" << conn->peerAddress().toIpPort() << "] -> HTTP服["
-				<< conn->localAddress().toIpPort() << "] "
-				<< (conn->connected() ? "UP" : "DOWN") << " " << num;
-			
-			//累计接收请求数 ///
-			numTotalReq_.incrementAndGet();
+	//LOG_ERROR << __FUNCTION__;
+	//刚开始还在想，会不会出现超时conn被异步关闭释放掉，而业务逻辑又被处理了，却发送不了的尴尬情况，
+	//假如因为超时entry弹出bucket，引用计数减1，处理业务之前这里使用shared_ptr，持有entry引用计数(加1)，
+	//如果持有失败，说明弹出bucket计数减为0，entry被析构释放，conn被关闭掉了，也就不会执行业务逻辑处理，
+	//如果持有成功，即使超时entry弹出bucket，引用计数减1，但并没有减为0，entry也就不会被析构释放，conn也不会被关闭，
+	//直到业务逻辑处理完并发送，entry引用计数减1变为0，析构被调用关闭conn(如果conn还存在的话，业务处理完也会主动关闭conn) ///
+	muduo::net::TcpConnectionPtr conn(weakConn.lock());
+	if (conn) {
+#if 0
+		//Accept时候判断，socket底层控制，否则开启异步检查
+		if (whiteListControl_ == eWhiteListCtrl::Open) {
 
-			//最大连接数限制 ///
-			if (num > kMaxConnections_) {
+			bool is_ip_allowed = false;
+			{
+				READ_LOCK(white_list_mutex_);
+				std::map<in_addr_t, eApiVisit>::const_iterator it = white_list_.find(conn->peerAddress().ipNetEndian());
+				is_ip_allowed = ((it != white_list_.end()) && (eApiVisit::Enable == it->second));
+			}
+			if (!is_ip_allowed) {
 #if 0
 				//不再发送数据
 				conn->shutdown();
@@ -328,7 +660,7 @@ void ApiServer::onConnection(const muduo::net::TcpConnectionPtr& conn)
 				muduo::net::HttpResponse rsp(false);
 				setFailedResponse(rsp,
 					muduo::net::HttpResponse::k404NotFound,
-					"HTTP/1.1 600 访问量限制(" + std::to_string(kMaxConnections_) + ")\r\n\r\n");
+					"HTTP/1.1 500 IP访问限制\r\n\r\n");
 				muduo::net::Buffer buf;
 				rsp.appendToBuffer(&buf);
 				conn->send(&buf);
@@ -336,363 +668,53 @@ void ApiServer::onConnection(const muduo::net::TcpConnectionPtr& conn)
 				//延迟0.2s强制关闭连接
 				conn->forceCloseWithDelay(0.2f);
 #endif
-				//会调用onMessage函数 ///
-				assert(conn->getContext().empty());
-				
-				//累计未处理请求数 ///
-				numTotalBadReq_.incrementAndGet();
 				return;
 			}
-			//最好不要在网络IO线程中做逻辑处理 ///
-#if 0
-			//Accept时候判断，socket底层控制，否则开启异步检查 ///
-			//开启了IP访问白名单功能 ///
-			if (whiteListControl_ == eWhiteListCtrl::Open) {
-				{
-					bool is_ip_allowed = false;
-					{
-						READ_LOCK(white_list_mutex_);
-						std::map<in_addr_t, eApiVisit>::const_iterator it = white_list_.find(conn->peerAddress().ipNetEndian());
-						//在IP访问白名单中 ///
-						is_ip_allowed = ((it != white_list_.end()) && (eApiVisit::Enable == it->second));
-					}
-					//不在IP访问白名单中 ///
-					if (!is_ip_allowed) {
-						//强制关闭 ///
-#if 0
-						conn->shutdown();
-#elif 1
-						conn->forceClose();
-#else
-						conn->forceCloseWithDelay(0.2f);
-#endif
-						return;
-					}
-				}
-			}
-#endif
-			//shared_ptr局部对象，出了作用域，引用计数减1 ///
-			//引用计数为0时会销毁Entry对象，触发析构函数调用强制关闭连接 ///
-			EntryPtr entry(new Entry(muduo::net::WeakTcpConnectionPtr(conn), muduo::net::HttpContext()));
-			{
-				//为conn指定一个逻辑处理线程 ///
-				EventLoopContext* context = boost::any_cast<EventLoopContext>(conn->getLoop()->getMutableContext());
-				assert(context);
-				int index = context->allocWorkerIndex();
-				assert(index >= 0 && index < threadPool_.size());
-
-				//为entry指定上下文信息 ///
-				entry->setWorkerIndex(index);
-			}
-			{
-				//对于HTTP请求来说，每一个conn都应该是独立的，指定一个独立线程处理即可，避免锁开销与多线程竞争抢占共享资源带来的性能损耗 ///
-				EventLoopContext* context = boost::any_cast<EventLoopContext>(conn->getLoop()->getMutableContext());
-				assert(context);
-				int index = context->getBucketIndex();
-				assert(index >= 0 && index < bucketsPool_.size());
-				
-				//连接成功，压入桶元素 ///
-				//必须使用shared_ptr，持有entry引用计数(加1) ///
-				//否则entry出了作用域，引用计数减1变为0销毁Entry对象，触发析构函数调用强制关闭连接 ///
-				conn->getLoop()->runInLoop(std::bind(&HashConnectionBucket::pushBucket, &bucketsPool_[index], entry));
-			}
-			{
-				//指定conn上下文信息，必须使用WeakEntryPtr弱指针，否则弹出Bucket无法析构 ///
-				conn->setContext(WeakEntryPtr(entry));
-			}
 		}
-	}
-	else {
-		int32_t num = numConnected_.decrementAndGet();
-		LOG_INFO << __FUNCTION__ << " --- *** " << "WEB端[" << conn->peerAddress().toIpPort() << "] -> HTTP服["
-			<< conn->localAddress().toIpPort() << "] "
-			<< (conn->connected() ? "UP" : "DOWN") << " " << num;
-	}
-	//MY_CATCH()
-}
-
-//接收HTTP网络消息回调 ///
-void ApiServer::onMessage(const muduo::net::TcpConnectionPtr& conn,
-	muduo::net::Buffer* buf,
-	muduo::Timestamp receiveTime)
-{
-	//MY_TRY()
-	//超过最大连接数限制，被强制关闭连接 ///
-	if (!conn || conn->getContext().empty()) {
-		//LOG_ERROR << __FUNCTION__ << " --- *** " << "TcpConnectionPtr.conn max";
-		return;
-	}
-	
-	LOG_ERROR << __FUNCTION__ << " --- *** ";
-	printf("----------------------------------------------\n");
-	printf("%.*s\n", buf->readableBytes(), buf->peek());
-
-	//先确定是HTTP数据报文，再解析 ///
-	//assert(buf->readableBytes() > 4 && buf->findCRLFCRLF());
-
-	WeakEntryPtr weakEntry(boost::any_cast<WeakEntryPtr>(conn->getContext()));
-	EntryPtr entry(weakEntry.lock());
-	if (likely(entry)) {
+#endif
+		ContextPtr entryContext(boost::any_cast<ContextPtr>(conn->getContext()));
+		assert(entryContext);
 		//获取HttpContext对象
-		muduo::net::HttpContext* context = boost::any_cast<muduo::net::HttpContext>(entry->getMutableContext());
-		assert(context);
-		//解析HTTP数据包
-		if (!context->parseRequest(buf, receiveTime)) {
-			//发生错误
-		}
-		else if (context->gotAll()) {
-			//Accept时候判断，socket底层控制，否则开启异步检查 ///
-			//开启了IP访问白名单功能 ///
-			if (whiteListControl_ == eWhiteListCtrl::Open) {
-				std::string ipaddr;
-				{
-					std::string ipaddrs = context->request().getHeader("X-Forwarded-For");
-					if (ipaddrs.empty()) {
-						ipaddr = conn->peerAddress().toIp();
-					}
-					else {
-#if 0
-						//第一个IP为客户端真实IP，可伪装，第二个IP为一级代理IP，第三个IP为二级代理IP
-						std::string::size_type spos = ipaddrs.find_first_of(',');
-						if (spos == std::string::npos) {
-						}
-						else {
-							ipaddr = ipaddrs.substr(0, spos);
-						}
-#else
-						boost::replace_all<std::string>(ipaddrs, " ", "");
-						std::vector<std::string> vec;
-						boost::algorithm::split(vec, ipaddrs, boost::is_any_of(","));
-						for (std::vector<std::string>::const_iterator it = vec.begin();
-							it != vec.end(); ++it) {
-							if (!it->empty() &&
-								boost::regex_match(*it, boost::regex(
-										"^(1\\d{2}|2[0-4]\\d|25[0-5]|[1-9]\\d|[1-9])\\." \
-										"(1\\d{2}|2[0-4]\\d|25[0-5]|[1-9]\\d|\\d)\\." \
-										"(1\\d{2}|2[0-4]\\d|25[0-5]|[1-9]\\d|\\d)\\." \
-										"(1\\d{2}|2[0-4]\\d|25[0-5]|[1-9]\\d|\\d)$"))) {
-								
-								if (strncasecmp(it->c_str(), "10.", 3) != 0 &&
-									strncasecmp(it->c_str(), "192.168", 7) != 0 &&
-									strncasecmp(it->c_str(), "172.16.", 7) != 0) {
-									ipaddr = *it;
-									break;
-								}
-							}
-						}
-#endif
-					}
-				}
-				muduo::net::InetAddress peerAddr(muduo::StringArg(ipaddr), 0, false);
-				bool is_ip_allowed = false;
-				{
-					//管理员挂维护/恢复服务 ///
-					std::map<in_addr_t, eApiVisit>::const_iterator it = admin_list_.find(peerAddr.ipNetEndian());
-					is_ip_allowed = (it != admin_list_.end());
-				}
-				if(!is_ip_allowed) {
-					READ_LOCK(white_list_mutex_);
-					std::map<in_addr_t, eApiVisit>::const_iterator it = white_list_.find(peerAddr.ipNetEndian());
-					//在IP访问白名单中 ///
-					is_ip_allowed = ((it != white_list_.end()) && (eApiVisit::Enable == it->second));
-				}
-				//不在IP访问白名单中 ///
-				if (!is_ip_allowed) {
-					//强制关闭 ///
-#if 0
-					//不再发送数据
-					conn->shutdown();
-#elif 1
-					//直接强制关闭连接
-					conn->forceClose();
-#else
-					//HTTP应答包(header/body)
-					muduo::net::HttpResponse rsp(false);
-					setFailedResponse(rsp,
-						muduo::net::HttpResponse::k404NotFound,
-						"HTTP/1.1 500 IP访问限制\r\n\r\n");
-					muduo::net::Buffer buf;
-					rsp.appendToBuffer(&buf);
-					conn->send(&buf);
-
-					//延迟0.2s强制关闭连接
-					conn->forceCloseWithDelay(0.2f);
-#endif
-					//累计未处理请求数 ///
-					numTotalBadReq_.incrementAndGet();
-					return;
-				}
-			}
-
-			//对于HTTP请求来说，每一个conn都应该是独立的，指定一个独立线程处理即可，避免锁开销与多线程竞争抢占共享资源带来的性能损耗 ///
-			{
-				EventLoopContext* context = boost::any_cast<EventLoopContext>(conn->getLoop()->getMutableContext());
-				assert(context);
-				int index = context->getBucketIndex();
-
-				assert(index >= 0 && index < bucketsPool_.size());
-				
-				//收到消息包，更新桶元素 ///
-				//必须使用shared_ptr，持有entry引用计数(加1) ///
-				//否则entry出了作用域，引用计数减1变为0销毁Entry对象，触发析构函数调用强制关闭连接 ///
-				conn->getLoop()->runInLoop(std::bind(&HashConnectionBucket::updateBucket, &bucketsPool_[index], entry));
-			}
-
-			//扔给任务消息队列处理 ///
-			{
-				int index = entry->getWorkerIndex();
-				assert(index >= 0 && index < threadPool_.size());
-				
-				//无锁化处理，性能更好 ///
-				//使用weak_ptr弱指针，不增加引用计数 ///
-				//必须使用WeakEntryPtr弱指针，否则弹出Bucket无法析构 ///
-				threadPool_[index]->run(std::bind(&ApiServer::asyncHttpHandler, this, weakEntry/*, context->request()*/, receiveTime));
-			}
-#endif
-			return;
-		}
-		//发生错误
+		muduo::net::HttpContext* httpContext = boost::any_cast<muduo::net::HttpContext>(entryContext->getMutableContext());
+		assert(httpContext);
+		assert(httpContext->gotAll());
+		const string& connection = httpContext->request().getHeader("Connection");
+		//是否保持HTTP长连接
+		bool close = false;//(connection == "close") ||
+			//(httpContext->request().getVersion() == muduo::net::HttpRequest::kHttp10 && connection != "Keep-Alive");
 		//HTTP应答包(header/body)
-		muduo::net::HttpResponse rsp(false);
-		setFailedResponse(rsp,
-			muduo::net::HttpResponse::k404NotFound,
-			"HTTP/1.1 400 Bad Request\r\n\r\n");
-		muduo::net::Buffer buf;
-		rsp.appendToBuffer(&buf);
-		conn->send(&buf);
-		//释放HttpContext资源 ///
-		context->reset();
+		muduo::net::HttpResponse rsp(close);
+		//请求处理回调，但非线程安全的
+		processHttpRequest(conn, httpContext->request(), rsp, conn->peerAddress(), receiveTime);
+		//应答消息
+		{
+			muduo::net::Buffer buf;
+			rsp.appendToBuffer(&buf);
+			conn->send(&buf);
+		}
+		//非HTTP长连接则关闭
+		if (rsp.closeConnection()) {
 #if 0
-		//不再发送数据
-		conn->shutdown();
+			//不再发送数据
+			conn->shutdown();
 #elif 0
-		//直接强制关闭连接
-		conn->forceClose();
+			//直接强制关闭连接
+			conn->forceClose();
 #else
-		//延迟0.2s强制关闭连接
-		conn->forceCloseWithDelay(0.2f);
+			//延迟0.2s强制关闭连接
+			//conn->forceCloseWithDelay(0.2f);
 #endif
-		//累计未处理请求数 ///
-		numTotalBadReq_.incrementAndGet();
+		}
+		//释放HttpContext资源
+		httpContext->reset();
 	}
 	else {
-		//累计未处理请求数 ///
+		//累计未处理请求数
 		numTotalBadReq_.incrementAndGet();
-		//Maybe called ///
-		//LOG_ERROR << __FUNCTION__ << " --- *** " << "entry invalid";
+		LOG_ERROR << __FUNCTION__ << " --- *** " << "TcpConnectionPtr.conn invalid";
 	}
-	//MY_CATCH()
 }
 
-//异步回调 ///
-void ApiServer::asyncHttpHandler(const WeakEntryPtr& weakEntry/*, const muduo::net::HttpRequest& req*/, muduo::Timestamp receiveTime)
-{
-	//MY_TRY()
-	//LOG_ERROR << __FUNCTION__;
-	//刚开始还在想，会不会出现超时conn被异步关闭释放掉，而业务逻辑又被处理了，却发送不了的尴尬情况，
-	//假如因为超时entry弹出bucket，引用计数减1，处理业务之前这里使用shared_ptr，持有entry引用计数(加1)，
-	//如果持有失败，说明弹出bucket计数减为0，entry被析构释放，conn被关闭掉了，也就不会执行业务逻辑处理，
-	//如果持有成功，即使超时entry弹出bucket，引用计数减1，但并没有减为0，entry也就不会被析构释放，conn也不会被关闭，
-	//直到业务逻辑处理完并发送，entry引用计数减1变为0，析构被调用关闭conn(如果conn还存在的话，业务处理完也会主动关闭conn) ///
-	EntryPtr entry(weakEntry.lock());
-	if (likely(entry)) {
-		muduo::net::TcpConnectionPtr conn(entry->getWeakConnPtr().lock());
-		if (conn) {
-#if 0
-			//Accept时候判断，socket底层控制，否则开启异步检查 ///
-			//开启了IP访问白名单功能 ///
-			if (whiteListControl_ == eWhiteListCtrl::Open) {
-
-				bool is_ip_allowed = false;
-				{
-					READ_LOCK(white_list_mutex_);
-					std::map<in_addr_t, eApiVisit>::const_iterator it = white_list_.find(conn->peerAddress().ipNetEndian());
-					//在IP访问白名单中 ///
-					is_ip_allowed = ((it != white_list_.end()) && (eApiVisit::Enable == it->second));
-				}
-				//不在IP访问白名单中 ///
-				if (!is_ip_allowed) {
-					//强制关闭 ///
-#if 0
-					//不再发送数据
-					conn->shutdown();
-#elif 0
-					//直接强制关闭连接
-					conn->forceClose();
-#else
-					//HTTP应答包(header/body)
-					muduo::net::HttpResponse rsp(false);
-					setFailedResponse(rsp,
-						muduo::net::HttpResponse::k404NotFound,
-						"HTTP/1.1 500 IP访问限制\r\n\r\n");
-					muduo::net::Buffer buf;
-					rsp.appendToBuffer(&buf);
-					conn->send(&buf);
-
-					//延迟0.2s强制关闭连接
-					conn->forceCloseWithDelay(0.2f);
-#endif
-					return;
-				}
-			}
-#endif
-			//获取HttpContext对象
-			muduo::net::HttpContext* context = boost::any_cast<muduo::net::HttpContext>(entry->getMutableContext());
-			assert(context);
-			assert(context->gotAll());
-
-			const string& connection = context->request().getHeader("Connection");
-			//是否保持HTTP长连接
-			bool close = (connection == "close") ||
-				(context->request().getVersion() == muduo::net::HttpRequest::kHttp10 && connection != "Keep-Alive");
-			//HTTP应答包(header/body)
-			muduo::net::HttpResponse rsp(close);
-			//请求处理回调，但非线程安全的 processHttpRequest
-			{
-				//assert(httpCallback_);
-				//httpCallback_(context->request(), rsp);
-				processHttpRequest(context->request(), rsp, conn->peerAddress(), receiveTime);
-			}
-			//应答消息
-			{
-				muduo::net::Buffer buf;
-				rsp.appendToBuffer(&buf);
-				conn->send(&buf);
-			}
-			//非HTTP长连接则关闭
-			if (rsp.closeConnection()) {
-#if 0
-				//不再发送数据
-				conn->shutdown();
-#elif 0
-				//直接强制关闭连接
-				conn->forceClose();
-#else
-				//延迟0.2s强制关闭连接
-				conn->forceCloseWithDelay(0.2f);
-#endif
-			}
-			//释放HttpContext资源 ///
-			context->reset();
-		}
-		else {
-			//累计未处理请求数 ///
-			numTotalBadReq_.incrementAndGet();
-			//Maybe called ///
-			//LOG_ERROR << __FUNCTION__ << " --- *** " << "TcpConnectionPtr.conn invalid";
-		}
-	}
-	else {
-		//累计未处理请求数 ///
-		numTotalBadReq_.incrementAndGet();
-		//Maybe called ///
-		//LOG_ERROR << __FUNCTION__ << " --- *** " << "entry invalid";
-	}
-	//MY_CATCH()
-}
-
-//解析请求 ///
-//strQuery string req.query()
 bool ApiServer::parseQuery(std::string const& queryStr, HttpParams& params, std::string& errmsg)
 {
 	params.clear();
@@ -746,7 +768,6 @@ bool ApiServer::parseQuery(std::string const& queryStr, HttpParams& params, std:
 	return true;
 }
 
-//请求字符串 ///
 std::string ApiServer::getRequestStr(muduo::net::HttpRequest const& req) {
 	std::string headers;
 	for (std::map<string, string>::const_iterator it = req.headers().begin();
@@ -766,7 +787,6 @@ std::string ApiServer::getRequestStr(muduo::net::HttpRequest const& req) {
 	return ss.str();
 }
 
-//按照占位符来替换 ///
 static void replace(std::string& json, const std::string& placeholder, const std::string& value) {
 	boost::replace_all<std::string>(json, "\"" + placeholder + "\"", value);
 }
