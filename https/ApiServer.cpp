@@ -89,36 +89,106 @@ using namespace boost::gregorian;
 using namespace boost::posix_time;
 using namespace boost::local_time;
 
-ApiServer::Entry::~Entry() {
-	muduo::net::TcpConnectionPtr conn(weakConn_.lock());
-	if (conn) {
-		conn->getLoop()->assertInLoopThread();
-#ifdef _DEBUG_BUCKETS_
-		LOG_WARN << __FUNCTION__ << " 客户端[" << conn->peerAddress().toIpPort() << "] -> 网关服["
-			<< conn->localAddress().toIpPort() << "] timeout closing";
-#endif
-		ContextPtr entryContext(boost::any_cast<ContextPtr>(conn->getContext()));
-		assert(entryContext);
-		LOG_WARN << __FUNCTION__ << " Entry::dtor[" << entryContext->getSession() << "]";
+static inline void onTimeoutExpired(const muduo::net::TcpConnectionPtr& conn, Entry::TypeE ty) {
+	switch (ty) {
+	case Entry::TypeE::HttpTy: {
+		//HTTP应答包(header/body)
+		muduo::net::HttpResponse rsp(true);
+		setFailedResponse(rsp,
+			muduo::net::HttpResponse::k404NotFound,
+			"HTTP/1.1 505 timeout\r\n\r\n");
+		muduo::net::Buffer buf;
+		rsp.appendToBuffer(&buf);
+		//发送完毕，关闭连接
+		conn->send(&buf);
 #if 0
 		//不再发送数据
 		conn->shutdown();
 #elif 0
 		//直接强制关闭连接
 		conn->forceClose();
-#else
-		//HTTP应答包(header/body)
-		muduo::net::HttpResponse rsp(false);
-		setFailedResponse(rsp,
-			muduo::net::HttpResponse::k404NotFound,
-			"HTTP/1.1 505 timeout\r\n\r\n");
-		muduo::net::Buffer buf;
-		rsp.appendToBuffer(&buf);
-		conn->send(&buf);
-
+#elif 0
 		//延迟0.2s强制关闭连接
 		conn->forceCloseWithDelay(0.2f);
 #endif
+		break;
+	}
+	case Entry::TypeE::TcpTy: {
+#if 0
+		//不再发送数据
+		conn->shutdown();
+#elif 1
+		//直接强制关闭连接
+		conn->forceClose();
+#elif 0
+		//延迟0.2s强制关闭连接
+		conn->forceCloseWithDelay(0.2f);
+#endif
+		break;
+	}
+	default: assert(false); break;
+	}
+}
+
+ApiServer::Entry::~Entry() {
+	//触发析构调用销毁对象释放资源，有以下两种可能：
+	//-------------------------------------------------------------------------------------------------------------------------------------
+	//  1.弹出bucket，EntryPtr引用计数递减为0
+	//   (conn有效，此时已经连接超时，因为业务处理队列繁忙以致无法持有EntryPtr，进而锁定同步业务操作)
+	//   (conn失效，此时连接已经关闭，可能是业务处理完毕或其它非法原因导致连接被提前关闭，但是由于Bucket一直持有EntryPtr引用计数而无法触发析构，直到timeout过期)
+	//-------------------------------------------------------------------------------------------------------------------------------------
+	//  2.业务处理完毕，持有EntryPtr业务处理函数退出离开其作用域，EntryPtr引用计数递减为0
+	//   (此时早已连接超时，并已弹出bucket，引用计数递减但不等于0，因为业务处理函数持有EntryPtr，锁定了同步业务操作，直到业务处理完毕，引用计数递减为0触发析构)
+	muduo::net::TcpConnectionPtr conn(weakConn_.lock());
+	if (conn) {
+		conn->getLoop()->assertInLoopThread();
+
+		ContextPtr entryContext(boost::any_cast<ContextPtr>(conn->getContext()));
+		assert(entryContext);
+		//assert(!entryContext->getSession().empty());
+
+		//判断是否锁定了同步业务操作
+		switch (getLocked()) {
+		case true: {
+			//////////////////////////////////////////////////////////////////////////
+			//早已连接超时，业务处理完毕，响应客户端时间(>timeout)
+			//////////////////////////////////////////////////////////////////////////
+			LOG_WARN << __FUNCTION__ << " "
+				<< peerName_ << "[" << conn->peerAddress().toIpPort() << "] -> "
+				<< localName_ << "[" << conn->localAddress().toIpPort() << "] Entry::dtor["
+				<< entryContext->getSession() << "] finished processing";
+			break;
+		}
+		default: {
+			//////////////////////////////////////////////////////////////////////////
+			//已经连接超时，没有业务处理，响应客户端时间(<timeout)
+			//////////////////////////////////////////////////////////////////////////
+			LOG_WARN << __FUNCTION__ << " "
+				<< peerName_ << "[" << conn->peerAddress().toIpPort() << "] -> "
+				<< localName_ << "[" << conn->localAddress().toIpPort() << "] Entry::dtor["
+				<< entryContext->getSession() << "] timeout closing";
+			//连接超时过期处理
+			onTimeoutExpired(conn, ty_);
+			break;
+		}
+		}
+	}
+	else {
+		switch (getLocked()) {
+		case true: {
+			//////////////////////////////////////////////////////////////////////////
+			//业务处理完毕，连接被提前关闭，响应客户端时间(<timeout)
+			//////////////////////////////////////////////////////////////////////////
+			LOG_WARN << __FUNCTION__ << " Entry::dtor - ahead of finished processing";
+			break;
+		}
+		default: {
+			//////////////////////////////////////////////////////////////////////////
+			//其它非法原因，连接被提前关闭，响应客户端时间(<timeout)
+			//////////////////////////////////////////////////////////////////////////
+			break;
+		}
+		}
 	}
 }
 
@@ -419,7 +489,7 @@ void ApiServer::onHttpConnection(const muduo::net::TcpConnectionPtr& conn)
 		EventLoopContextPtr context = boost::any_cast<EventLoopContextPtr>(conn->getLoop()->getContext());
 		assert(context);
 
-		EntryPtr entry(new Entry(muduo::net::WeakTcpConnectionPtr(conn)));
+		EntryPtr entry(new Entry(Entry::TypeE::HttpTy, muduo::net::WeakTcpConnectionPtr(conn), "WEB前端", "HTTP服"));
 			
 		//指定conn上下文信息
 		ContextPtr entryContext(new Context(WeakEntryPtr(entry), muduo::net::HttpContext()));
@@ -455,13 +525,17 @@ void ApiServer::onHttpConnection(const muduo::net::TcpConnectionPtr& conn)
 }
 
 void ApiServer::onWriteComplete(const muduo::net::TcpConnectionPtr& conn) {
-	
 	LOG_WARN << __FUNCTION__;
-
 	conn->getLoop()->assertInLoopThread();
-#if 1
+#if 0
+	//不再发送数据
+	conn->shutdown();
+#elif 1
+	//直接强制关闭连接
+	conn->forceClose();
+#else
 	//延迟0.2s强制关闭连接
-	conn->forceCloseWithDelay(0.2f);
+	conn->forceCloseWithDelay(0.1f);
 #endif
 }
 
@@ -476,7 +550,7 @@ void ApiServer::onHttpMessage(const muduo::net::TcpConnectionPtr& conn,
 		//LOG_ERROR << __FUNCTION__ << " --- *** " << "TcpConnectionPtr.conn max";
 		return;
 	}
-	
+
 	//LOG_ERROR << __FUNCTION__ << " --- *** ";
 	//printf("----------------------------------------------\n");
 	//printf("%.*s\n", buf->readableBytes(), buf->peek());
@@ -488,15 +562,13 @@ void ApiServer::onHttpMessage(const muduo::net::TcpConnectionPtr& conn,
 	assert(entryContext);
 	muduo::net::HttpContext* httpContext = boost::any_cast<muduo::net::HttpContext>(entryContext->getMutableContext());
 	assert(httpContext);
-
 	//解析HTTP数据包
 	if (!httpContext->parseRequest(buf, receiveTime)) {
 		//发生错误
-		LOG_ERROR << __FUNCTION__ << " 解析HTTP发生错误";
 	}
 	else if (httpContext->gotAll()) {
 		//Accept时候判断，socket底层控制，否则开启异步检查
-		if (whiteListControl_ == eWhiteListCtrl::Open) {
+		if (whiteListControl_ == IpVisitCtrlE::kOpen) {
 			std::string ipaddr;
 			{
 				std::string ipaddrs = httpContext->request().getHeader("X-Forwarded-For");
@@ -520,11 +592,11 @@ void ApiServer::onHttpMessage(const muduo::net::TcpConnectionPtr& conn,
 						it != vec.end(); ++it) {
 						if (!it->empty() &&
 							boost::regex_match(*it, boost::regex(
-									"^(1\\d{2}|2[0-4]\\d|25[0-5]|[1-9]\\d|[1-9])\\." \
-									"(1\\d{2}|2[0-4]\\d|25[0-5]|[1-9]\\d|\\d)\\." \
-									"(1\\d{2}|2[0-4]\\d|25[0-5]|[1-9]\\d|\\d)\\." \
-									"(1\\d{2}|2[0-4]\\d|25[0-5]|[1-9]\\d|\\d)$"))) {
-								
+								"^(1\\d{2}|2[0-4]\\d|25[0-5]|[1-9]\\d|[1-9])\\." \
+								"(1\\d{2}|2[0-4]\\d|25[0-5]|[1-9]\\d|\\d)\\." \
+								"(1\\d{2}|2[0-4]\\d|25[0-5]|[1-9]\\d|\\d)\\." \
+								"(1\\d{2}|2[0-4]\\d|25[0-5]|[1-9]\\d|\\d)$"))) {
+
 							if (strncasecmp(it->c_str(), "10.", 3) != 0 &&
 								strncasecmp(it->c_str(), "192.168", 7) != 0 &&
 								strncasecmp(it->c_str(), "172.16.", 7) != 0) {
@@ -540,13 +612,13 @@ void ApiServer::onHttpMessage(const muduo::net::TcpConnectionPtr& conn,
 			bool is_ip_allowed = false;
 			{
 				//管理员挂维护/恢复服务
-				std::map<in_addr_t, eApiVisit>::const_iterator it = admin_list_.find(peerAddr.ipNetEndian());
-				is_ip_allowed = (it != admin_list_.end());
+				std::map<in_addr_t, IpVisitE>::const_iterator it = adminList_.find(peerAddr.ipNetEndian());
+				is_ip_allowed = (it != adminList_.end());
 			}
-			if(!is_ip_allowed) {
-				READ_LOCK(white_list_mutex_);
-				std::map<in_addr_t, eApiVisit>::const_iterator it = white_list_.find(peerAddr.ipNetEndian());
-				is_ip_allowed = ((it != white_list_.end()) && (eApiVisit::Enable == it->second));
+			if (!is_ip_allowed) {
+				READ_LOCK(whiteList_mutex_);
+				std::map<in_addr_t, IpVisitE>::const_iterator it = whiteList_.find(peerAddr.ipNetEndian());
+				is_ip_allowed = ((it != whiteList_.end()) && (IpVisitE::kEnable == it->second));
 			}
 			if (!is_ip_allowed) {
 #if 0
@@ -555,7 +627,7 @@ void ApiServer::onHttpMessage(const muduo::net::TcpConnectionPtr& conn,
 #elif 1
 				//直接强制关闭连接
 				conn->forceClose();
-#else
+#elif 0
 				//HTTP应答包(header/body)
 				muduo::net::HttpResponse rsp(false);
 				setFailedResponse(rsp,
@@ -573,9 +645,8 @@ void ApiServer::onHttpMessage(const muduo::net::TcpConnectionPtr& conn,
 				return;
 			}
 		}
-		
 		EntryPtr entry(entryContext->getWeakEntryPtr().lock());
-		if (likely(entry)) {
+		if (entry) {
 			{
 				EventLoopContextPtr context = boost::any_cast<EventLoopContextPtr>(conn->getLoop()->getContext());
 				assert(context);
@@ -589,11 +660,12 @@ void ApiServer::onHttpMessage(const muduo::net::TcpConnectionPtr& conn,
 				//获取绑定的worker线程
 				int index = entryContext->getWorkerIndex();
 				assert(index >= 0 && index < threadPool_.size());
+
 				//扔给任务消息队列处理
 				threadPool_[index]->run(
 					std::bind(
-						&OrderServer::asyncHttpHandler,
-						this, muduo::net::WeakTcpConnectionPtr(conn), receiveTime));
+						&Gateway::asyncHttpHandler,
+						this, entryContext->getWeakEntryPtr(), receiveTime));
 			}
 			return;
 		}
@@ -610,6 +682,7 @@ void ApiServer::onHttpMessage(const muduo::net::TcpConnectionPtr& conn,
 		"HTTP/1.1 400 Bad Request\r\n\r\n");
 	muduo::net::Buffer buffer;
 	rsp.appendToBuffer(&buffer);
+	//发送完毕，关闭连接
 	conn->send(&buffer);
 	//释放HttpContext资源
 	httpContext->reset();
@@ -619,9 +692,9 @@ void ApiServer::onHttpMessage(const muduo::net::TcpConnectionPtr& conn,
 #elif 0
 	//直接强制关闭连接
 	conn->forceClose();
-#else
+#elif 0
 	//延迟0.2s强制关闭连接
-	//conn->forceCloseWithDelay(0.2f);
+	conn->forceCloseWithDelay(0.2f);
 #endif
 	//累计未处理请求数
 	numTotalBadReq_.incrementAndGet();
@@ -629,89 +702,99 @@ void ApiServer::onHttpMessage(const muduo::net::TcpConnectionPtr& conn,
 
 void ApiServer::asyncHttpHandler(muduo::net::WeakTcpConnectionPtr const& weakConn, muduo::Timestamp receiveTime)
 {
-	//MY_TRY()
-	//LOG_ERROR << __FUNCTION__;
 	//刚开始还在想，会不会出现超时conn被异步关闭释放掉，而业务逻辑又被处理了，却发送不了的尴尬情况，
 	//假如因为超时entry弹出bucket，引用计数减1，处理业务之前这里使用shared_ptr，持有entry引用计数(加1)，
 	//如果持有失败，说明弹出bucket计数减为0，entry被析构释放，conn被关闭掉了，也就不会执行业务逻辑处理，
 	//如果持有成功，即使超时entry弹出bucket，引用计数减1，但并没有减为0，entry也就不会被析构释放，conn也不会被关闭，
 	//直到业务逻辑处理完并发送，entry引用计数减1变为0，析构被调用关闭conn(如果conn还存在的话，业务处理完也会主动关闭conn) ///
-	muduo::net::TcpConnectionPtr conn(weakConn.lock());
-	if (conn) {
+	//
+	//锁定同步业务操作，先锁超时对象entry，再锁conn，避免超时和业务同时处理的情况
+	EntryPtr entry(weakEntry.lock());
+	if (entry) {
+		entry->setLocked();
+		muduo::net::TcpConnectionPtr conn(entry->getWeakConnPtr().lock());
+		if (conn) {
+			//LOG_ERROR << __FUNCTION__ << " bufsz = " << buf->readableBytes();
 #if 0
-		//Accept时候判断，socket底层控制，否则开启异步检查
-		if (whiteListControl_ == eWhiteListCtrl::Open) {
+			//Accept时候判断，socket底层控制，否则开启异步检查
+			if (whiteListControl_ == IpVisitCtrlE::kOpen) {
+				bool is_ip_allowed = false;
+				{
+					READ_LOCK(whiteList_mutex_);
+					std::map<in_addr_t, IpVisitE>::const_iterator it = whiteList_.find(conn->peerAddress().ipNetEndian());
+					is_ip_allowed = ((it != whiteList_.end()) && (IpVisitE::kEnable == it->second));
+				}
+				if (!is_ip_allowed) {
+#if 0
+					//不再发送数据
+					conn->shutdown();
+#elif 0
+					//直接强制关闭连接
+					conn->forceClose();
+#else
+					//HTTP应答包(header/body)
+					muduo::net::HttpResponse rsp(false);
+					setFailedResponse(rsp,
+						muduo::net::HttpResponse::k404NotFound,
+						"HTTP/1.1 500 IP访问限制\r\n\r\n");
+					muduo::net::Buffer buf;
+					rsp.appendToBuffer(&buf);
+					conn->send(&buf);
 
-			bool is_ip_allowed = false;
-			{
-				READ_LOCK(white_list_mutex_);
-				std::map<in_addr_t, eApiVisit>::const_iterator it = white_list_.find(conn->peerAddress().ipNetEndian());
-				is_ip_allowed = ((it != white_list_.end()) && (eApiVisit::Enable == it->second));
+					//延迟0.2s强制关闭连接
+					conn->forceCloseWithDelay(0.2f);
+#endif
+					return;
+				}
 			}
-			if (!is_ip_allowed) {
+#endif
+			ContextPtr entryContext(boost::any_cast<ContextPtr>(conn->getContext()));
+			assert(entryContext);
+			//获取HttpContext对象
+			muduo::net::HttpContext* httpContext = boost::any_cast<muduo::net::HttpContext>(entryContext->getMutableContext());
+			assert(httpContext);
+			assert(httpContext->gotAll());
+			const string& connection = httpContext->request().getHeader("Connection");
+			//是否保持HTTP长连接
+			bool close = (connection == "close") ||
+				(httpContext->request().getVersion() == muduo::net::HttpRequest::kHttp10 && connection != "Keep-Alive");
+			//HTTP应答包(header/body)
+			muduo::net::HttpResponse rsp(close);
+			//请求处理回调，但非线程安全的
+			processHttpRequest(httpContext->request(), rsp, conn->peerAddress(), receiveTime);
+			//应答消息
+			{
+				muduo::net::Buffer buf;
+				rsp.appendToBuffer(&buf);
+				//发送完毕，关闭连接
+				conn->send(&buf);
+			}
+			//非HTTP长连接则关闭
+			if (rsp.closeConnection()) {
 #if 0
 				//不再发送数据
 				conn->shutdown();
 #elif 0
 				//直接强制关闭连接
 				conn->forceClose();
-#else
-				//HTTP应答包(header/body)
-				muduo::net::HttpResponse rsp(false);
-				setFailedResponse(rsp,
-					muduo::net::HttpResponse::k404NotFound,
-					"HTTP/1.1 500 IP访问限制\r\n\r\n");
-				muduo::net::Buffer buf;
-				rsp.appendToBuffer(&buf);
-				conn->send(&buf);
-
+#elif 0
 				//延迟0.2s强制关闭连接
 				conn->forceCloseWithDelay(0.2f);
 #endif
-				return;
 			}
+			//释放HttpContext资源
+			httpContext->reset();
 		}
-#endif
-		ContextPtr entryContext(boost::any_cast<ContextPtr>(conn->getContext()));
-		assert(entryContext);
-		//获取HttpContext对象
-		muduo::net::HttpContext* httpContext = boost::any_cast<muduo::net::HttpContext>(entryContext->getMutableContext());
-		assert(httpContext);
-		assert(httpContext->gotAll());
-		const string& connection = httpContext->request().getHeader("Connection");
-		//是否保持HTTP长连接
-		bool close = false;//(connection == "close") ||
-			//(httpContext->request().getVersion() == muduo::net::HttpRequest::kHttp10 && connection != "Keep-Alive");
-		//HTTP应答包(header/body)
-		muduo::net::HttpResponse rsp(close);
-		//请求处理回调，但非线程安全的
-		processHttpRequest(conn, httpContext->request(), rsp, conn->peerAddress(), receiveTime);
-		//应答消息
-		{
-			muduo::net::Buffer buf;
-			rsp.appendToBuffer(&buf);
-			conn->send(&buf);
+		else {
+			//累计未处理请求数
+			numTotalBadReq_.incrementAndGet();
+			//LOG_ERROR << __FUNCTION__ << " --- *** " << "TcpConnectionPtr.conn invalid";
 		}
-		//非HTTP长连接则关闭
-		if (rsp.closeConnection()) {
-#if 0
-			//不再发送数据
-			conn->shutdown();
-#elif 0
-			//直接强制关闭连接
-			conn->forceClose();
-#else
-			//延迟0.2s强制关闭连接
-			//conn->forceCloseWithDelay(0.2f);
-#endif
-		}
-		//释放HttpContext资源
-		httpContext->reset();
 	}
 	else {
 		//累计未处理请求数
 		numTotalBadReq_.incrementAndGet();
-		LOG_ERROR << __FUNCTION__ << " --- *** " << "TcpConnectionPtr.conn invalid";
+		//LOG_ERROR << __FUNCTION__ << " --- *** " << "entry invalid";
 	}
 }
 
