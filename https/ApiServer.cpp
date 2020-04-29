@@ -89,9 +89,9 @@ using namespace boost::gregorian;
 using namespace boost::posix_time;
 using namespace boost::local_time;
 
-static inline void onTimeoutExpired(const muduo::net::TcpConnectionPtr& conn, Entry::TypeE ty) {
+static inline void onTimeoutExpired(const muduo::net::TcpConnectionPtr& conn, ApiServer::Entry::TypeE ty) {
 	switch (ty) {
-	case Entry::TypeE::HttpTy: {
+	case ApiServer::Entry::TypeE::HttpTy: {
 		//HTTP应答包(header/body)
 		muduo::net::HttpResponse rsp(true);
 		setFailedResponse(rsp,
@@ -113,7 +113,7 @@ static inline void onTimeoutExpired(const muduo::net::TcpConnectionPtr& conn, En
 #endif
 		break;
 	}
-	case Entry::TypeE::TcpTy: {
+	case ApiServer::Entry::TypeE::TcpTy: {
 #if 0
 		//不再发送数据
 		conn->shutdown();
