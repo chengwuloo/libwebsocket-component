@@ -526,21 +526,6 @@ void ApiServer::onHttpConnection(const muduo::net::TcpConnectionPtr& conn)
 	}
 }
 
-void ApiServer::onWriteComplete(const muduo::net::TcpConnectionPtr& conn) {
-	LOG_WARN << __FUNCTION__;
-	conn->getLoop()->assertInLoopThread();
-#if 0
-	//不再发送数据
-	conn->shutdown();
-#elif 1
-	//直接强制关闭连接
-	conn->forceClose();
-#else
-	//延迟0.2s强制关闭连接
-	conn->forceCloseWithDelay(0.1f);
-#endif
-}
-
 void ApiServer::onHttpMessage(const muduo::net::TcpConnectionPtr& conn,
 	muduo::net::Buffer* buf,
 	muduo::Timestamp receiveTime)
@@ -702,7 +687,7 @@ void ApiServer::onHttpMessage(const muduo::net::TcpConnectionPtr& conn,
 	numTotalBadReq_.incrementAndGet();
 }
 
-void ApiServer::asyncHttpHandler(muduo::net::WeakTcpConnectionPtr const& weakConn, muduo::Timestamp receiveTime)
+void ApiServer::asyncHttpHandler(WeakEntryPtr const& weakEntry, muduo::Timestamp receiveTime)
 {
 	//刚开始还在想，会不会出现超时conn被异步关闭释放掉，而业务逻辑又被处理了，却发送不了的尴尬情况，
 	//假如因为超时entry弹出bucket，引用计数减1，处理业务之前这里使用shared_ptr，持有entry引用计数(加1)，
@@ -798,6 +783,21 @@ void ApiServer::asyncHttpHandler(muduo::net::WeakTcpConnectionPtr const& weakCon
 		numTotalBadReq_.incrementAndGet();
 		//LOG_ERROR << __FUNCTION__ << " --- *** " << "entry invalid";
 	}
+}
+
+void ApiServer::onWriteComplete(const muduo::net::TcpConnectionPtr& conn) {
+	LOG_WARN << __FUNCTION__;
+	conn->getLoop()->assertInLoopThread();
+#if 0
+	//不再发送数据
+	conn->shutdown();
+#elif 1
+	//直接强制关闭连接
+	conn->forceClose();
+#else
+	//延迟0.2s强制关闭连接
+	conn->forceCloseWithDelay(0.1f);
+#endif
 }
 
 bool ApiServer::parseQuery(std::string const& queryStr, HttpParams& params, std::string& errmsg)
