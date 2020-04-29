@@ -293,17 +293,18 @@ static int64_t rate100(std::string const& s) {
 		std::string prefix = s.substr(0, npos);
 		std::string sufix = s.substr(npos + 1, -1);
 		std::string x;
-		if (!sufix.empty()) {
-			if (sufix.length() >= 2) {
-				x = prefix + sufix.substr(0, 2);
-			}
-			else {
-				x = prefix + sufix.substr(0, 1) + "0";
-			}
+		assert(!sufix.empty());
+		if (sufix.length() >= 2) {
+			x = prefix + sufix.substr(0, 2);
 		}
-		return atoll(x.c_str());
+		else {
+			x = prefix + sufix.substr(0, 1) + "0";
+		}
+		//带小数点，整数位限制9+2位
+		return x.length() <= 11 ? atoll(x.c_str()) : 0;
 	}
-	return atoll(s.c_str()) * 100;
+	//不带小数点，整数位限制9+2位
+	return s.length() <= 9 ? (atoll(s.c_str()) * 100) : 0;
 }
 
 //判断是否数字组成的字符串
@@ -1523,7 +1524,8 @@ std::string ApiServer::OrderProcess(std::string const& reqStr, muduo::Timestamp 
 				(score = atoll(scoreKey->second.c_str())) <= 0) {
 #else
 			if (scoreKey == params.end() || scoreKey->second.empty() || !IsDigitStr(scoreKey->second) ||
-				(score = floors(scoreKey->second.c_str())) <= 0 || NotScore(score)) {
+				(score = floors(scoreKey->second.c_str())) <= 0 || NotScore(score) ||
+				(scoreI64 = rate100(scoreKey->second)) <= 0) {
 #endif
 				// 传输参数错误
 				errcode = eApiErrorCode::GameHandleParamsError;
@@ -1759,7 +1761,8 @@ std::string ApiServer::OrderProcess(std::string const& reqStr, muduo::Timestamp 
 				(score = atoll(scoreKey->second.c_str())) <= 0) {
 #else
 			if (scoreKey == decryptParams.end() || scoreKey->second.empty() || !IsDigitStr(scoreKey->second) ||
-				(score = floors(scoreKey->second.c_str())) <= 0 || NotScore(score)) {
+				(score = floors(scoreKey->second.c_str())) <= 0 || NotScore(score) ||
+				(scoreI64 = rate100(scoreKey->second)) <= 0) {
 #endif
 				// 传输参数错误
 				errcode = eApiErrorCode::GameHandleParamsError;
