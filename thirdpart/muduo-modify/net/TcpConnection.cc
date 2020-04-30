@@ -74,8 +74,6 @@ TcpConnection::TcpConnection(EventLoop* loop,
 
 TcpConnection::~TcpConnection()
 {
-    //openSSL support ///
-    ssl::SSL_free(ssl_);
 	//////////////////////////////////////////////////////////////////////////
     //释放conn连接对象sockfd资源流程 ///
     //TcpConnection::handleClose ->
@@ -725,6 +723,8 @@ void TcpConnection::handleWrite()
 void TcpConnection::handleClose()
 {
   loop_->assertInLoopThread();
+  //openSSL support ///
+  ssl::SSL_free(ssl_);
   //LOG_TRACE << "fd = " << channel_->fd() << " state = " << stateToString();
   assert(state_ == kConnected || state_ == kDisconnecting);
   // we don't close fd, leave it to dtor, so we can find leaks easily.
