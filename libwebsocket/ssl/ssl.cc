@@ -25,13 +25,41 @@ extern "C" {
 
 #include <libwebsocket/ssl.h>
 
+#define atom_incr(i) __sync_add_and_fetch(&i, 1)
+#define atom_decr(i) __sync_add_and_fetch(&i, -1)
+#define atom_get(i)  __sync_val_compare_and_swap(&i, 0, 0)
+
+//#define MEMORYLEAK_DETECT
+
 namespace muduo {
 	namespace net {
 		namespace ssl {
-			
-			//SSL_free 释放SSL
-			/*inline*/ void SSL_free(SSL*& ssl) {
+
+#ifdef MEMORYLEAK_DETECT
+			static volatile int32_t s_c_;
+#endif
+			std::mutex s_mutex_;
+
+			//@@ GuardLock
+			class GuardLock {
+			public:
+				GuardLock(std::mutex& lock):lock_(lock) {
+					lock_.lock();
+				}
+				~GuardLock() {
+					lock_.unlock();
+				}
+			private:
+				std::mutex& lock_;
+			};
+
+			static inline void SSL_free_(SSL*& ssl) {
 				if (ssl) {
+#ifdef MEMORYLEAK_DETECT
+					//atomic decr
+					atom_decr(s_c_);
+					printf("SSL_free c = %d\n", atom_get(s_c_));
+#endif
 					//shutdown：SSL_shutdown
 					::SSL_shutdown(ssl);
 					//free：SSL_free
@@ -40,8 +68,13 @@ namespace muduo {
 				}
 			}
 
-			//SSL_handshake SSL握手建链
-			/*inline*/ bool SSL_handshake(SSL_CTX* ctx, SSL*& ssl, int sockfd, int& saveErrno) {
+			//SSL_free
+			void SSL_free(SSL*& ssl) {
+				GuardLock lock(s_mutex_);
+				SSL_free_(ssl);
+			}
+
+			static inline bool SSL_handshake_(SSL_CTX* ctx, SSL*& ssl, int sockfd, int& saveErrno) {
 				if (ctx) {
 #ifdef LIBWEBSOCKET_DEBUG
 					printf("-----------------------------------------------------------------------------\n");
@@ -56,7 +89,7 @@ namespace muduo {
 					BIO* bio = ::BIO_new_socket(sockfd, BIO_NOCLOSE);
 					if (!bio) {
 						printf("BIO_new_socket failed\n");
-						muduo::net::ssl::SSL_free(ssl);
+						muduo::net::ssl::SSL_free_(ssl);
 						return false;
 					}
 					//set the BIO：SSL_set_bio
@@ -69,7 +102,7 @@ namespace muduo {
 						switch (saveErrno) {
 						case SSL_ERROR_SSL:
 							printf("SSL_accept SSL_ERROR_SSL\n");
-							muduo::net::ssl::SSL_free(ssl);
+							muduo::net::ssl::SSL_free_(ssl);
 							break;
 						case SSL_ERROR_WANT_READ:
 							printf("SSL_accept SSL_ERROR_WANT_READ\n");
@@ -79,11 +112,11 @@ namespace muduo {
 							break;
 						case SSL_ERROR_WANT_X509_LOOKUP:
 							printf("SSL_accept SSL_ERROR_WANT_X509_LOOKUP\n");
-							muduo::net::ssl::SSL_free(ssl);
+							muduo::net::ssl::SSL_free_(ssl);
 							break;
 						case SSL_ERROR_SYSCALL:
 							printf("SSL_accept SSL_ERROR_SYSCALL\n");
-							muduo::net::ssl::SSL_free(ssl);
+							muduo::net::ssl::SSL_free_(ssl);
 							break;
 						case SSL_ERROR_ZERO_RETURN:
 							printf("SSL_accept SSL_ERROR_ZERO_RETURN\n");
@@ -96,7 +129,7 @@ namespace muduo {
 							break;
 						default:
 							printf("SSL_accept failed\n");
-							muduo::net::ssl::SSL_free(ssl);
+							muduo::net::ssl::SSL_free_(ssl);
 							break;
 						}
 						return false;
@@ -110,8 +143,12 @@ namespace muduo {
 						//create the SSL：SSL_new
 						if ((ssl = ::SSL_new(ctx)) == NULL) {
 							printf("SSL_new failed\n");
-							return NULL;
+							return false;
 						}
+#ifdef MEMORYLEAK_DETECT
+						//atomic incr
+						atom_incr(s_c_);
+#endif
 #if 0
 						//SSL_set_mode
 						SSL_set_mode(ssl, SSL_MODE_ACCEPT_MOVING_WRITE_BUFFER);
@@ -119,7 +156,7 @@ namespace muduo {
 						//SSL_set_fd
 						if (::SSL_set_fd(ssl, sockfd) == 0) {
 							printf("SSL_set_fd failed\n");
-							muduo::net::ssl::SSL_free(ssl);
+							muduo::net::ssl::SSL_free_(ssl);
 							return false;
 						}
 #if 1
@@ -135,8 +172,8 @@ namespace muduo {
 					BIO* bio = ::BIO_new_fd(2, BIO_NOCLOSE);
 					if (!bio) {
 						printf("BIO_new_fd failed\n");
-						muduo::net::ssl::SSL_free(ssl);
-						return NULL;
+						muduo::net::ssl::SSL_free_(ssl);
+						return false;
 					}
 #endif
 					int rc;
@@ -149,7 +186,7 @@ namespace muduo {
 #ifdef LIBWEBSOCKET_DEBUG
 							printf("SSL_do_handshake SSL_ERROR_SSL\n");
 #endif
-							muduo::net::ssl::SSL_free(ssl);
+							muduo::net::ssl::SSL_free_(ssl);
 							break;
 							//SSL需要在非阻塞socket可读时读入数据
 						case SSL_ERROR_WANT_READ:
@@ -167,13 +204,13 @@ namespace muduo {
 #ifdef LIBWEBSOCKET_DEBUG
 							printf("SSL_do_handshake SSL_ERROR_WANT_X509_LOOKUP\n");
 #endif
-							muduo::net::ssl::SSL_free(ssl);
+							muduo::net::ssl::SSL_free_(ssl);
 							break;
 						case SSL_ERROR_SYSCALL:
 #ifdef LIBWEBSOCKET_DEBUG
 							printf("SSL_do_handshake SSL_ERROR_SYSCALL\n");
 #endif
-							muduo::net::ssl::SSL_free(ssl);
+							muduo::net::ssl::SSL_free_(ssl);
 							break;
 						case SSL_ERROR_ZERO_RETURN:
 #ifdef LIBWEBSOCKET_DEBUG
@@ -198,7 +235,7 @@ namespace muduo {
 #ifdef LIBWEBSOCKET_DEBUG
 							printf("SSL_do_handshake failed\n");
 #endif
-							muduo::net::ssl::SSL_free(ssl);
+							muduo::net::ssl::SSL_free_(ssl);
 							break;
 						}
 						return false;
@@ -213,6 +250,12 @@ namespace muduo {
 				}
 				assert(false);
 				return false;
+			}
+
+			//SSL_handshake
+			bool SSL_handshake(SSL_CTX* ctx, SSL*& ssl, int sockfd, int& saveErrno) {
+				GuardLock lock(s_mutex_);
+				return SSL_handshake_(ctx, ssl, sockfd, saveErrno);
 			}
 
 			static inline void* my_zeroing_malloc(size_t howmuch) {
