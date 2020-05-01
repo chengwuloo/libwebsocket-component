@@ -25,10 +25,12 @@
 #include "muduo/net/Callbacks.h"
 #include "muduo/net/TimerId.h"
 
-#if defined(NONDEBUG)
+//#define NDEBUG
+
+#if defined(NDEBUG)
 #define QueueInLoop(loop, fn) \
 	loop->queueInLoop(fn)
-#define RunInLoop(polling, fn) \
+#define RunInLoop(loop, fn) \
 	loop->runInLoop(fn)
 #else
 #define QueueInLoop(loop, fn) \
@@ -54,18 +56,18 @@ class EventLoop : noncopyable
 {
  public:
   typedef std::function<void()> Functor;
-#if defined(NONDEBUG)
+#if defined(NDEBUG)
   typedef std::vector<Functor> FunctorList;
 #else
-  struct FunctorData
+  struct FuncArg
   {
-	  FunctorData(Functor const& func, std::string const& name)
+      FuncArg(Functor const& func, std::string const& name)
 		  : func_(std::move(func)), name_(name)
 	  {}
 	  Functor const func_;
 	  std::string const name_;
-};
-  typedef std::vector<FunctorData> FunctorList;
+  };
+  typedef std::vector<FuncArg> FunctorList;
 #endif
 
   EventLoop();
@@ -90,19 +92,19 @@ class EventLoop : noncopyable
   Timestamp pollReturnTime() const { return pollReturnTime_; }
 
   int64_t iteration() const { return iteration_; }
-#if defined(NONDEBUG)
+#if defined(NDEBUG)
   /// Runs callback immediately in the loop thread.
   /// It wakes up the loop, and run the cb.
   /// If in the same loop thread, cb is run within the function.
   /// Safe to call from other threads.
-  void runInLoop(Functor cb);
+  void runInLoop(Functor const& cb);
   /// Queues callback in the loop thread.
   /// Runs after finish pooling.
   /// Safe to call from other threads.
-  void queueInLoop(Functor cb);
+  void queueInLoop(Functor const& cb);
 #else
-  void runInLoop(Functor /*const&*/ cb, std::string const& name);
-  void queueInLoop(Functor /*const&*/ cb, std::string const& name);
+  void runInLoop(Functor const& cb, std::string const& name);
+  void queueInLoop(Functor const& cb, std::string const& name);
 #endif
   size_t queueSize() const;
 

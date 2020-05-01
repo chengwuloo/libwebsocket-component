@@ -150,8 +150,8 @@ void EventLoop::quit()
   }
 }
 
-#if defined(NONDEBUG)
-void EventLoop::runInLoop(Functor cb)
+#if defined(NDEBUG)
+void EventLoop::runInLoop(Functor const& cb)
 {
   if (isInLoopThread())
   {
@@ -159,15 +159,15 @@ void EventLoop::runInLoop(Functor cb)
   }
   else
   {
-    queueInLoop(std::move(cb));
+    queueInLoop(cb/*std::move(cb)*/);
   }
 }
 
-void EventLoop::queueInLoop(Functor cb)
+void EventLoop::queueInLoop(Functor const& cb)
 {
   {
   MutexLockGuard lock(mutex_);
-  pendingFunctors_.push_back(std::move(cb));
+  pendingFunctors_.emplace_back(std::move(cb));
   }
 
   if (!isInLoopThread() || callingPendingFunctors_)
@@ -176,20 +176,19 @@ void EventLoop::queueInLoop(Functor cb)
   }
 }
 #else
-void EventLoop::runInLoop(Functor /*const&*/ cb, std::string const& name) {
+void EventLoop::runInLoop(Functor const& cb, std::string const& name) {
 	if (isInLoopThread()) {
 		cb();
 	}
 	else {
-        queueInLoop(std::move(cb), name);
+        queueInLoop(cb, name);
 	}
 }
 
-void EventLoop::queueInLoop(Functor /*const&*/ cb, std::string const& name) {
+void EventLoop::queueInLoop(Functor const& cb, std::string const& name) {
 	{
         MutexLockGuard lock(mutex_);
-        FunctorData fn(cb, name);
-        pendingFunctors_.emplace_back(std::move(fn));
+        pendingFunctors_.emplace_back(FuncArg(cb, name));
 	}
 	if (!isInLoopThread() || callingPendingFunctors_) {
 		wakeup();
@@ -287,18 +286,17 @@ void EventLoop::doPendingFunctors()
   MutexLockGuard lock(mutex_);
   functors.swap(pendingFunctors_);
   }
-#if defined(NONDEBUG)
+#if defined(NDEBUG)
   for (const Functor& functor : functors)
   {
     functor();
   }
 #else
-  for (const FunctorData& functor : functors)
+  for (const FuncArg& functor : functors)
   {
-	//std::ostringstream os;
-    std::stringstream ss;
-	ss << "Polling::doPendingFunctors[ " << threadId_ << " ] " << functor.name_.c_str();
-    LOG_WARN << ss.str();
+    //std::stringstream ss;
+	//ss << "Polling::doPendingFunctors[ " << threadId_ << " ] " << functor.name_.c_str();
+    //LOG_WARN << ss.str();
     functor.func_();
   }
 #endif

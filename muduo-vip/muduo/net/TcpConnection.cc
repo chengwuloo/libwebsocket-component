@@ -131,16 +131,23 @@ void TcpConnection::send(const StringPiece& message)
   {
     if (loop_->isInLoopThread())
     {
-      sendInLoop(message);
+      sendInLoop(message.data(), message.size()/*message*/);
     }
     else
     {
+#if 1
       void (TcpConnection::*fp)(const StringPiece& message) = &TcpConnection::sendInLoop;
-      RunInLoop(loop_,
+      QueueInLoop(loop_,
           std::bind(fp,
                     this,     // FIXME
                     message.as_string()));
                     //std::forward<string>(message)));
+#else
+        std::string msg(message.data(), message.size());
+        QueueInLoop(loop_,
+			std::bind(&TcpConnection::sendInLoop_,
+				this, msg));
+#endif
     }
   }
 }
@@ -157,18 +164,29 @@ void TcpConnection::send(Buffer* buf)
     }
     else
     {
+#if 1
       void (TcpConnection::*fp)(const StringPiece& message) = &TcpConnection::sendInLoop;
-      RunInLoop(loop_,
+      QueueInLoop(loop_,
           std::bind(fp,
                     this,     // FIXME
                     buf->retrieveAllAsString()));
                     //std::forward<string>(message)));
+#else
+      std::string msg(buf->peek(), buf->readableBytes());
+      QueueInLoop(loop_,
+         std::bind(&TcpConnection::sendInLoop_,
+                    this, msg));
+#endif
     }
   }
 }
 
 void TcpConnection::sendInLoop(const StringPiece& message)
 {
+  sendInLoop(message.data(), message.size());
+}
+
+void TcpConnection::sendInLoop_(const std::string& message) {
   sendInLoop(message.data(), message.size());
 }
 
