@@ -118,14 +118,14 @@ TimerId TimerQueue::addTimer(TimerCallback cb,
                              double interval)
 {
   Timer* timer = new Timer(std::move(cb), when, interval);
-  loop_->runInLoop(
+  RunInLoop(loop_,
       std::bind(&TimerQueue::addTimerInLoop, this, timer));
   return TimerId(timer, timer->sequence());
 }
 
 void TimerQueue::cancel(TimerId timerId)
 {
-  loop_->runInLoop(
+    RunInLoop(loop_,
       std::bind(&TimerQueue::cancelInLoop, this, timerId));
 }
 

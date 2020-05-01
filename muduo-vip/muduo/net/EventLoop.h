@@ -25,6 +25,18 @@
 #include "muduo/net/Callbacks.h"
 #include "muduo/net/TimerId.h"
 
+#if defined(NONDEBUG)
+#define QueueInLoop(loop, fn) \
+	loop->queueInLoop(fn)
+#define RunInLoop(polling, fn) \
+	loop->runInLoop(fn)
+#else
+#define QueueInLoop(loop, fn) \
+	loop->queueInLoop(fn, #fn)
+#define RunInLoop(loop, fn) \
+	loop->runInLoop(fn, #fn)
+#endif
+
 namespace muduo
 {
 namespace net
@@ -42,6 +54,19 @@ class EventLoop : noncopyable
 {
  public:
   typedef std::function<void()> Functor;
+#if defined(NONDEBUG)
+  typedef std::vector<Functor> FunctorList;
+#else
+  struct FunctorData
+  {
+	  FunctorData(Functor const& func, std::string const& name)
+		  : func_(std::move(func)), name_(name)
+	  {}
+	  Functor const func_;
+	  std::string const name_;
+};
+  typedef std::vector<FunctorData> FunctorList;
+#endif
 
   EventLoop();
   ~EventLoop();  // force out-line dtor, for std::unique_ptr members.
@@ -65,7 +90,7 @@ class EventLoop : noncopyable
   Timestamp pollReturnTime() const { return pollReturnTime_; }
 
   int64_t iteration() const { return iteration_; }
-
+#if defined(NONDEBUG)
   /// Runs callback immediately in the loop thread.
   /// It wakes up the loop, and run the cb.
   /// If in the same loop thread, cb is run within the function.
@@ -75,7 +100,10 @@ class EventLoop : noncopyable
   /// Runs after finish pooling.
   /// Safe to call from other threads.
   void queueInLoop(Functor cb);
-
+#else
+  void runInLoop(Functor /*const&*/ cb, std::string const& name);
+  void queueInLoop(Functor /*const&*/ cb, std::string const& name);
+#endif
   size_t queueSize() const;
 
   // timers
@@ -162,7 +190,7 @@ class EventLoop : noncopyable
   Channel* currentActiveChannel_;
 
   mutable MutexLock mutex_;
-  std::vector<Functor> pendingFunctors_ GUARDED_BY(mutex_);
+  FunctorList/*std::vector<Functor>*/ pendingFunctors_ GUARDED_BY(mutex_);
 };
 
 }  // namespace net

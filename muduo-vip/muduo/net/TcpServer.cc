@@ -47,7 +47,7 @@ TcpServer::~TcpServer()
   {
     TcpConnectionPtr conn(item.second);
     item.second.reset();
-    conn->getLoop()->runInLoop(
+    RunInLoop(conn->getLoop(),
       std::bind(&TcpConnection::connectDestroyed, conn));
   }
 }
@@ -70,7 +70,7 @@ void TcpServer::start(bool et)
       acceptor_->setConditionCallback(conditionCallback_);
     }
     enable_et_ = et;
-    loop_->runInLoop(
+    RunInLoop(loop_,
         std::bind(&Acceptor::listen, get_pointer(acceptor_), enable_et_));
   }
 }
@@ -104,14 +104,14 @@ void TcpServer::newConnection(int sockfd, const InetAddress& peerAddr)
 
   conn->setCloseCallback(
       std::bind(&TcpServer::removeConnection, this, _1)); // FIXME: unsafe
-  ioLoop->runInLoop(std::bind(&TcpConnection::connectEstablished, conn));
+  RunInLoop(ioLoop, std::bind(&TcpConnection::connectEstablished, conn));
 }
 
 void TcpServer::removeConnection(const TcpConnectionPtr& conn)
 {
   conn->getLoop()->assertInLoopThread();
   // FIXME: unsafe
-  loop_->runInLoop(std::bind(&TcpServer::removeConnectionInLoop, this, conn));
+  RunInLoop(loop_, std::bind(&TcpServer::removeConnectionInLoop, this, conn));
 }
 
 void TcpServer::removeConnectionInLoop(const TcpConnectionPtr& conn)
@@ -132,7 +132,7 @@ void TcpServer::removeConnectionInLoop(const TcpConnectionPtr& conn)
   (void)n;
   assert(n == 1);
   EventLoop* ioLoop = conn->getLoop();
-  ioLoop->queueInLoop(
+  QueueInLoop(ioLoop,
       std::bind(&TcpConnection::connectDestroyed, conn));
 }
 

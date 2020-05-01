@@ -40,7 +40,7 @@ namespace detail
 void removeConnection(const TcpConnectionPtr& conn)
 {
 	EventLoop* ioLoop = conn->getLoop();
-    ioLoop->queueInLoop(std::bind(&TcpConnection::connectDestroyed, conn));
+    QueueInLoop(ioLoop, std::bind(&TcpConnection::connectDestroyed, conn));
 }
 
 void removeConnector(const ConnectorPtr& connector)
@@ -107,7 +107,7 @@ TcpClient::~TcpClient()
 {
   LOG_INFO << "TcpClient::~TcpClient[" << name_
            << "] - connector " << get_pointer(connector_);
-  loop_->runInLoop(
+  RunInLoop(loop_,
       std::bind(&detail::removeAllInLoop, loop_, connection_, connector_));
 //  TcpConnectionPtr conn;
 //   bool unique = false;
@@ -147,12 +147,12 @@ void TcpClient::connect()
 
 void TcpClient::reconnect() {
 	connect_ = true;
-	loop_->runInLoop(
+	RunInLoop(loop_,
 		std::bind(&Connector::restart, get_pointer(connector_)));
 }
 
 void TcpClient::disconnect() {
-	loop_->runInLoop(
+	RunInLoop(loop_,
 		std::bind(&TcpClient::disconnectInLoop, this));
 }
 
@@ -203,14 +203,14 @@ void TcpClient::newConnection(int sockfd)
   conn->setCloseCallback(
       std::bind(&TcpClient::removeConnection, this, _1)); // FIXME: unsafe
   //conn->connectEstablished();
-  ioLoop->runInLoop(std::bind(&TcpConnection::connectEstablished, conn));
+  RunInLoop(ioLoop, std::bind(&TcpConnection::connectEstablished, conn));
 }
 
 void TcpClient::removeConnection(const TcpConnectionPtr& conn)
 {
   conn->getLoop()->assertInLoopThread();
   // FIXME: unsafe
-  loop_->runInLoop(std::bind(&TcpClient::removeConnectionInLoop, this, conn));
+  RunInLoop(loop_, std::bind(&TcpClient::removeConnectionInLoop, this, conn));
 }
 
 void TcpClient::removeConnectionInLoop(const TcpConnectionPtr& conn)
@@ -224,7 +224,7 @@ void TcpClient::removeConnectionInLoop(const TcpConnectionPtr& conn)
     connection_.reset();
   }
   EventLoop* ioLoop = conn->getLoop();
-  /*loop_*/ioLoop->queueInLoop(
+  QueueInLoop(/*loop_*/ioLoop,
       std::bind(&TcpConnection::connectDestroyed, conn));
   if (retry_ && connect_)
   {

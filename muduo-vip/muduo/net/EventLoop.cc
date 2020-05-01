@@ -20,6 +20,7 @@
 #include <signal.h>
 #include <sys/eventfd.h>
 #include <unistd.h>
+#include <sstream>
 
 using namespace muduo;
 using namespace muduo::net;
@@ -149,6 +150,7 @@ void EventLoop::quit()
   }
 }
 
+#if defined(NONDEBUG)
 void EventLoop::runInLoop(Functor cb)
 {
   if (isInLoopThread())
@@ -173,6 +175,27 @@ void EventLoop::queueInLoop(Functor cb)
     wakeup();
   }
 }
+#else
+void EventLoop::runInLoop(Functor /*const&*/ cb, std::string const& name) {
+	if (isInLoopThread()) {
+		cb();
+	}
+	else {
+        queueInLoop(std::move(cb), name);
+	}
+}
+
+void EventLoop::queueInLoop(Functor /*const&*/ cb, std::string const& name) {
+	{
+        MutexLockGuard lock(mutex_);
+        FunctorData fn(cb, name);
+        pendingFunctors_.emplace_back(std::move(fn));
+	}
+	if (!isInLoopThread() || callingPendingFunctors_) {
+		wakeup();
+	}
+}
+#endif
 
 size_t EventLoop::queueSize() const
 {
@@ -257,18 +280,28 @@ void EventLoop::handleRead()
 
 void EventLoop::doPendingFunctors()
 {
-  std::vector<Functor> functors;
+  FunctorList/*std::vector<Functor>*/ functors;
   callingPendingFunctors_ = true;
 
   {
   MutexLockGuard lock(mutex_);
   functors.swap(pendingFunctors_);
   }
-
+#if defined(NONDEBUG)
   for (const Functor& functor : functors)
   {
     functor();
   }
+#else
+  for (const FunctorData& functor : functors)
+  {
+	//std::ostringstream os;
+    std::stringstream ss;
+	ss << "Polling::doPendingFunctors[ " << threadId_ << " ] " << functor.name_.c_str();
+    LOG_WARN << ss.str();
+    functor.func_();
+  }
+#endif
   callingPendingFunctors_ = false;
 }
 

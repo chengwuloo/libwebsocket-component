@@ -41,7 +41,7 @@ void Connector::start()
 {
   LOG_WARN << __FUNCTION__;
   connect_ = true;
-  loop_->runInLoop(std::bind(&Connector::startInLoop, this)); // FIXME: unsafe
+  RunInLoop(loop_, std::bind(&Connector::startInLoop, this)); // FIXME: unsafe
 }
 
 void Connector::startInLoop()
@@ -62,7 +62,7 @@ void Connector::stop()
 {
   LOG_WARN << __FUNCTION__;
   connect_ = false;
-  loop_->runInLoop/*queueInLoop*/(std::bind(&Connector::stopInLoop, this)); // FIXME: unsafe
+  RunInLoop/*QueueInLoop*/(loop_, std::bind(&Connector::stopInLoop, this)); // FIXME: unsafe
   // FIXME: cancel timer
 }
 
@@ -155,7 +155,7 @@ int Connector::removeAndResetChannel()
   channel_->remove();
   int sockfd = channel_->fd();
   // Can't reset channel_ here, because we are inside Channel::handleEvent
-  loop_->queueInLoop(std::bind(&Connector::resetChannel, this)); // FIXME: unsafe
+  QueueInLoop(loop_, std::bind(&Connector::resetChannel, this)); // FIXME: unsafe
   return sockfd;
 }
 
