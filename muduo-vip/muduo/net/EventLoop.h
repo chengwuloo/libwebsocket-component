@@ -25,7 +25,7 @@
 #include "muduo/net/Callbacks.h"
 #include "muduo/net/TimerId.h"
 
-//#define NDEBUG
+#define NDEBUG
 
 #if defined(NDEBUG)
 #define QueueInLoop(loop, fn) \
